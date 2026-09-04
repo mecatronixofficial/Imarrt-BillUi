@@ -1,0 +1,15 @@
+{
+  "extends": "next/core-web-vitals",
+  "overrides": [
+    {
+      "files": [
+        "src/app/security/page.tsx",
+        "src/app/settings/(preferences)/print/page.tsx",
+        "src/components/settings/PrintPreview.tsx"
+      ],
+      "rules": {
+        "@next/next/no-img-element": "off"
+      }
+    }
+  ]
+}
