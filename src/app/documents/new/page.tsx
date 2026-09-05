@@ -10,6 +10,7 @@ import { api, getAllPages, getApiError } from '@/lib/api';
 import { DOCUMENT_CONFIG, DOCUMENT_TYPES, isDocumentType } from '@/lib/documents';
 import { formatCurrency } from '@/lib/format';
 import type { BusinessDocument, BusinessDocumentType, Party, Invoice, Item, Supplier } from '@/types';
+import { useEmbeddedForm } from '@/components/EmbeddedFormContext';
 
 type LineDraft = {
   itemId?: string;
@@ -25,15 +26,16 @@ const emptyLine = (): LineDraft => ({ description: '', hsnSac: '', quantity: 1, 
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function NewDocumentPage() {
-  return <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>}><DocumentComposer /></Suspense>;
+  const { embedded = false, initialType, initialPartyId } = useEmbeddedForm();
+  return <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>}><DocumentComposer embedded={embedded} initialType={initialType} initialPartyId={initialPartyId} /></Suspense>;
 }
 
-function DocumentComposer() {
+function DocumentComposer({ embedded, initialType, initialPartyId }: { embedded: boolean; initialType?: BusinessDocumentType; initialPartyId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedType = searchParams.get('type');
-  const requestedPartyId = searchParams.get('partyId');
-  const [type, setType] = useState<BusinessDocumentType>(isDocumentType(requestedType) ? requestedType : 'QUOTATION');
+  const requestedPartyId = initialPartyId || searchParams.get('partyId');
+  const [type, setType] = useState<BusinessDocumentType>(initialType ?? (isDocumentType(requestedType) ? requestedType : 'QUOTATION'));
   const [parties, setParties] = useState<Party[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [catalog, setCatalog] = useState<Item[]>([]);
@@ -187,14 +189,14 @@ function DocumentComposer() {
 
   return (
     <>
-      <PageHeader title={`New ${config.label.toLowerCase()}`} description={config.description} action={<Link href="/documents" className="btn-secondary inline-flex items-center gap-2"><ArrowLeft size={15} /> Documents</Link>} />
+      {!embedded && <PageHeader title={`New ${config.label.toLowerCase()}`} description={config.description} action={<Link href="/documents" className="btn-secondary inline-flex items-center gap-2"><ArrowLeft size={15} /> Documents</Link>} />}
 
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+      {!embedded && <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {DOCUMENT_TYPES.map((documentType) => {
           const item = DOCUMENT_CONFIG[documentType];
           return <button type="button" key={documentType} onClick={() => setType(documentType)} className={`whitespace-nowrap rounded-xl border px-3.5 py-2 text-xs font-semibold transition ${type === documentType ? `${item.soft} ${item.accent} ${item.border} ring-2 ring-slate-100` : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>{item.label}</button>;
         })}
-      </div>
+      </div>}
 
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 

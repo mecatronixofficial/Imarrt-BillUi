@@ -20,12 +20,16 @@ import {
   Settings,
   UserRound,
   Users,
+  X,
 } from 'lucide-react';
 import Modal from '@/components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
 import { api, getAllPages, getApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Party, PartyLedger, PartyTransaction } from '@/types';
+import NewInvoicePage from '@/app/invoices/new/page';
+import NewDocumentPage from '@/app/documents/new/page';
+import { EmbeddedFormProvider } from '@/components/EmbeddedFormContext';
 
 const GST_TYPE_LABELS: Record<NonNullable<Party['gstType']>, string> = {
   REGISTERED_REGULAR: 'Registered - Regular',
@@ -54,6 +58,7 @@ export default function PartiesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingParty, setEditingParty] = useState<Party | null>(null);
   const [formTab, setFormTab] = useState<'profile' | 'credit'>('profile');
+  const [activeForm, setActiveForm] = useState<'sale' | 'expense' | null>(null);
 
   const loadParties = useCallback(async (preferredId?: string) => {
     setLoading(true);
@@ -64,7 +69,7 @@ export default function PartiesPage() {
       setSelectedPartyId((current) => {
         if (preferredId && data.some((party) => party.id === preferredId)) return preferredId;
         if (current && data.some((party) => party.id === current)) return current;
-        return data[0]?.id ?? '';
+        return '';
       });
     } catch (loadError: unknown) {
       setError(getApiError(loadError, 'Could not load parties.'));
@@ -160,21 +165,32 @@ export default function PartiesPage() {
 
   return (
     <>
-      <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col bg-slate-100 lg:min-h-dvh">
-        <header className="flex min-h-16 items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 sm:px-5">
-          <div><h1 className="text-xl font-extrabold tracking-tight text-slate-950">Parties</h1><p className="text-[11px] text-slate-400">Party accounts and transactions</p></div>
+      <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col bg-[#eef3f8] lg:min-h-dvh">
+        <header className="flex min-h-[76px] flex-col justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:px-6">
+          <div><div className="flex items-center gap-2.5"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-200"><Users size={18} /></span><div><h1 className="text-xl font-semibold tracking-tight text-slate-950">Parties</h1><p className="text-[11px] text-slate-400">Customers, suppliers and account activity</p></div></div></div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <Link href={selectedParty ? `/invoices/new?partyId=${encodeURIComponent(selectedParty.id)}` : '/invoices/new'} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-blue-50 px-3.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"><Plus size={15} /> Add Sale</Link>
-            <Link href={selectedParty ? `/documents/new?type=PURCHASE_INVOICE&partyId=${encodeURIComponent(selectedParty.id)}` : '/documents/new?type=PURCHASE_INVOICE'} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-slate-100 px-3.5 text-xs font-bold text-slate-700 transition hover:bg-slate-200"><Plus size={15} /> Add Expense</Link>
-            <button type="button" onClick={openAddParty} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} /> Add Party</button>
+            <button type="button" onClick={() => setActiveForm('sale')} className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${activeForm === 'sale' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}><Plus size={15} /> Add Sale</button>
+            <button type="button" onClick={() => setActiveForm('expense')} className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${activeForm === 'expense' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}><Plus size={15} /> Add Expense</button>
+            <button type="button" onClick={() => { setActiveForm(null); openAddParty(); }} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} /> Add Party</button>
             <span className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
             <button type="button" disabled={!selectedParty} onClick={() => openPartySettings('credit')} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-35" aria-label="Party settings"><Settings size={17} /></button>
             <button type="button" className="flex h-8 w-7 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" aria-label="More options"><MoreVertical size={18} /></button>
           </div>
         </header>
 
-        <section className="grid min-h-0 flex-1 gap-1 p-1 lg:grid-cols-[315px_minmax(0,1fr)]">
-          <aside className="flex min-h-[360px] flex-col overflow-hidden rounded-md bg-white">
+        {activeForm ? <section className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-5">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div><h2 className="text-base font-bold text-slate-900">{activeForm === 'sale' ? 'Add Sale' : 'Add Expense'}</h2><p className="text-xs text-slate-500">{selectedParty ? `For ${selectedParty.name}` : 'Select the party or supplier in the form'}</p></div>
+              <button type="button" onClick={() => setActiveForm(null)} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" aria-label="Close form"><X size={18} /></button>
+            </div>
+            <EmbeddedFormProvider value={{ embedded: true, initialPartyId: selectedParty?.id, initialType: activeForm === 'expense' ? 'PURCHASE_INVOICE' : undefined }}>
+              {activeForm === 'sale' ? <NewInvoicePage /> : <NewDocumentPage />}
+            </EmbeddedFormProvider>
+          </div>
+        </section> : <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+          <PartyRegisterTable parties={filteredParties} selectedId={selectedPartyId} search={search} onSearch={setSearch} onSelect={setSelectedPartyId} loading={loading} error={error} onRetry={() => loadParties()} />
+          <aside className="hidden">
             <div className="p-3">
               <div className="relative"><Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="h-10 w-full rounded-full border border-slate-300 bg-white pl-10 pr-3 text-xs outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Search Party Name" aria-label="Search parties" /></div>
             </div>
@@ -189,9 +205,9 @@ export default function PartiesPage() {
             <div className="m-2 mt-auto flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2"><p className="text-[11px] font-bold text-slate-700">{filteredParties.length} parties</p><p className="text-[10px] text-slate-400">Name, phone, email or GSTIN</p></div>
           </aside>
 
-          <main className="flex min-w-0 flex-col gap-1">
-            {!selectedParty ? <div className="flex-1 rounded-md bg-white"><EmptyState icon={Users} title="Select a party" description="Choose a party from the left to view details and transactions." /></div> : <>
-              <section className="rounded-md bg-white p-3.5 sm:p-4">
+          <main className="flex min-w-0 flex-col gap-3">
+            {!selectedParty ? <section className="flex min-h-[280px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-3.5 py-3"><h3 className="text-sm font-bold text-slate-950">Transactions</h3><p className="text-[10px] text-slate-400">Select a party from the register to view its complete account activity</p></div><EmptyState icon={Users} title="Select a party" description="Click a party name above to view all transactions and account details." /></section> : <>
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5"><h2 className="truncate text-base font-extrabold text-slate-950">{selectedParty.name}</h2><button type="button" onClick={() => openPartySettings('profile')} className="text-blue-600 hover:text-blue-800" aria-label="Edit party"><Pencil size={15} /></button></div>
@@ -210,13 +226,13 @@ export default function PartiesPage() {
                 {ledger && <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-4"><MiniTotal label="Receivable" value={ledger.summary.balanceDue} /><MiniTotal label="Total Sales" value={ledger.summary.totalBilled} /><MiniTotal label="Received" value={ledger.summary.totalReceived} /><MiniTotal label="Credit Available" value={ledger.summary.creditAvailable} /></div>}
               </section>
 
-              <section className="flex min-h-[360px] flex-1 flex-col overflow-hidden rounded-md bg-white">
+              <section className="flex min-h-[360px] flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-200 px-3.5 py-3"><div><h3 className="text-sm font-bold text-slate-950">Transactions</h3><p className="text-[10px] text-slate-400">Invoices, payments and running balance</p></div><div className="flex items-center gap-0.5"><button type="button" onClick={() => window.print()} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" aria-label="Print transactions"><Printer size={16} /></button><button type="button" disabled={!ledger?.transactions.length} onClick={exportTransactions} className="flex h-8 w-8 items-center justify-center rounded-full text-blue-600 hover:bg-blue-50 disabled:opacity-30" aria-label="Export transactions"><FileSpreadsheet size={16} /></button></div></div>
                 {detailLoading && !ledger ? <LoadingState label="Loading party account..." /> : detailError ? <ErrorState message={detailError} onRetry={() => loadLedger(selectedParty.id)} /> : ledger?.transactions.length ? <div className="overflow-x-auto"><table className="w-full min-w-[650px] table-fixed text-xs"><thead className="bg-slate-50 text-left text-[11px] font-bold text-slate-600"><tr><th className="w-[18%] border-r border-slate-200 px-3 py-2.5">Type</th><th className="w-[24%] border-r border-slate-200 px-3 py-2.5">Number</th><th className="w-[18%] border-r border-slate-200 px-3 py-2.5">Date</th><th className="w-[20%] border-r border-slate-200 px-3 py-2.5 text-right">Total</th><th className="w-[20%] px-3 py-2.5 text-right">Balance</th></tr></thead><tbody>{ledger.transactions.map((transaction) => <TransactionRow key={transaction.id} transaction={transaction} />)}</tbody></table></div> : <div className="flex flex-1 items-center justify-center px-5 py-10 text-center"><div><FileText className="mx-auto text-slate-300" size={26} /><p className="mt-2 text-xs font-bold text-slate-600">No transactions yet</p><p className="mt-1 text-[11px] text-slate-400">Invoices and payments will appear here.</p></div></div>}
               </section>
             </>}
           </main>
-        </section>
+        </section>}
       </div>
 
       {showForm && (
@@ -234,7 +250,22 @@ export default function PartiesPage() {
   );
 }
 
-function PartyField({ icon: Icon, label, value }: { icon: typeof Phone; label: string; value?: string | null }) { return <div className="flex min-w-0 items-start gap-2"><Icon size={13} className="mt-0.5 shrink-0 text-slate-400" /><div className="min-w-0"><p className="text-[10px] text-slate-400">{label}</p><p className="mt-0.5 whitespace-pre-line break-words text-xs font-medium leading-4 text-slate-800">{value || 'Not provided'}</p></div></div>; }
+function PartyRegisterTable({ parties, selectedId, search, onSearch, onSelect, loading, error, onRetry }: { parties: Party[]; selectedId: string; search: string; onSearch: (value: string) => void; onSelect: (id: string) => void; loading: boolean; error: string; onRetry: () => void }) {
+  return <section className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
+    <div className="flex flex-col gap-3 border-b border-slate-300 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 className="text-sm font-semibold text-slate-900">Party Register</h2><p className="text-[10px] text-slate-500">{parties.length} records shown · select a row to open its account</p></div>
+      <div className="relative w-full sm:w-80"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => onSearch(event.target.value)} className="h-9 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Search name, phone, email or GSTIN" /></div>
+    </div>
+    {loading ? <LoadingState label="Loading parties..." /> : error ? <ErrorState message={error} onRetry={onRetry} /> : parties.length === 0 ? <EmptyState icon={Users} title="No parties found" description={search ? 'Try a different search.' : 'Add your first party to start billing.'} /> : <div className="overflow-x-auto">
+      <table className="w-full min-w-[920px] border-collapse text-xs">
+        <thead className="bg-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-600"><tr><th className="w-11 border-r border-slate-300 px-2 py-3 text-center">#</th><th className="border-r border-slate-300 px-3 py-3">Party Name</th><th className="border-r border-slate-300 px-3 py-3">Phone</th><th className="border-r border-slate-300 px-3 py-3">Email</th><th className="border-r border-slate-300 px-3 py-3">GSTIN</th><th className="border-r border-slate-300 px-3 py-3 text-right">Total Sales</th><th className="border-r border-slate-300 px-3 py-3 text-right">Received</th><th className="px-3 py-3 text-right">Balance</th></tr></thead>
+        <tbody>{parties.map((party, index) => { const balance = Number(party.balanceDue ?? 0); return <tr key={party.id} onClick={() => onSelect(party.id)} className={`cursor-pointer border-t border-slate-200 transition ${party.id === selectedId ? 'bg-blue-50 outline outline-1 -outline-offset-1 outline-blue-400' : index % 2 ? 'bg-slate-50/70 hover:bg-blue-50/40' : 'bg-white hover:bg-blue-50/40'}`}><td className="border-r border-slate-200 px-2 py-3 text-center text-slate-400">{index + 1}</td><td className="border-r border-slate-200 px-3 py-3 font-semibold text-slate-900">{party.name}</td><td className="border-r border-slate-200 px-3 py-3 text-slate-600">{party.phone || '—'}</td><td className="border-r border-slate-200 px-3 py-3 text-slate-600">{party.email || '—'}</td><td className="border-r border-slate-200 px-3 py-3 font-mono text-[11px] text-slate-600">{party.gstin || '—'}</td><td className="border-r border-slate-200 px-3 py-3 text-right">{formatCurrency(party.totalBilled ?? 0)}</td><td className="border-r border-slate-200 px-3 py-3 text-right text-emerald-700">{formatCurrency(party.totalReceived ?? 0)}</td><td className={`px-3 py-3 text-right font-semibold ${balance > 0 ? 'text-red-600' : balance < 0 ? 'text-emerald-700' : 'text-slate-500'}`}>{formatCurrency(Math.abs(balance))}{balance < 0 ? ' Cr' : balance > 0 ? ' Dr' : ''}</td></tr>; })}</tbody>
+      </table>
+    </div>}
+  </section>;
+}
+
+function PartyField({ icon: Icon, label, value }: { icon: typeof Phone; label: string; value?: string | null }) { return <div className="flex min-w-0 items-start gap-2 rounded-lg bg-slate-50 px-3 py-2.5"><Icon size={14} className="mt-0.5 shrink-0 text-blue-500" /><div className="min-w-0"><p className="text-[9px] uppercase tracking-wide text-slate-400">{label}</p><p className="mt-0.5 whitespace-pre-line break-words text-xs leading-4 text-slate-800">{value || 'Not provided'}</p></div></div>; }
 
 function ContactAction({ children, label, disabled, onClick, className }: { children: React.ReactNode; label: string; disabled: boolean; onClick: () => void; className: string }) { return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className={`inline-flex h-8 w-8 items-center justify-center transition hover:scale-110 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100 ${className}`}>{children}</button>; }
 

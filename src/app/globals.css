@@ -13,8 +13,15 @@ body {
   min-height: 100%;
   margin: 0;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
   background-color: #f8fafc;
   color: #0f172a;
+}
+
+body :where(h1, h2, h3, h4, h5, h6, p, span, strong, small, label, a, button, input, select, textarea, th, td) {
+  font-weight: 600;
 }
 
 button,
@@ -70,6 +77,127 @@ button,
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+.sale-input {
+  @apply h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100;
+}
+
+.sale-textarea {
+  @apply resize-none rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100;
+}
+
+.sale-cell {
+  @apply border-0 bg-transparent px-2 py-1.5 text-sm outline-none focus:bg-white focus:ring-1 focus:ring-blue-400;
+}
+
+.attachment-btn {
+  @apply flex h-12 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white text-sm text-slate-500 transition hover:border-blue-300 hover:text-blue-600;
+}
+
+.sale-page > footer {
+  position: relative;
+  z-index: 30;
+  flex-shrink: 0;
+  box-shadow: 0 -4px 16px rgb(15 23 42 / 8%);
+}
+
+.sale-page table {
+  min-width: 0;
+  table-layout: fixed;
+  border: 1px solid #cbd5e1;
+  border-collapse: collapse;
+}
+
+.sale-page table thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 1px 0 #cbd5e1;
+}
+
+.sale-page table th {
+  height: 42px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 11px;
+  letter-spacing: 0.025em;
+}
+
+.sale-page table td {
+  height: 50px;
+  border: 1px solid #dbe2ea;
+  background: #fff;
+}
+
+.sale-page table tbody tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+.sale-page table th:first-child,
+.sale-page table td:first-child {
+  width: 38px;
+  padding-inline: 4px;
+  text-align: center;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.sale-page table th:nth-child(2) { width: 28%; }
+.sale-page table th:nth-child(3) { width: 7%; }
+.sale-page table th:nth-child(4) { width: 8%; }
+.sale-page table th:nth-child(5) { width: 12%; }
+.sale-page table th:nth-child(6) { width: 10%; }
+.sale-page table th:nth-child(7) { width: 9%; }
+.sale-page table th:nth-child(8) { width: 14%; }
+.sale-page table th:last-child { width: 38px; }
+
+.sale-page table input:focus,
+.sale-page table select:focus {
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+.sale-page table th:first-child,
+.sale-page table td:first-child {
+  width: 2.5rem;
+  padding-inline: 0.25rem;
+  text-align: center;
+}
+
+@media (max-width: 639px) {
+  .sale-page header {
+    align-items: flex-start;
+    padding-inline: 0.75rem;
+  }
+
+  .sale-page table th:nth-child(4),
+  .sale-page table td:nth-child(4),
+  .sale-page table th:nth-child(6),
+  .sale-page table td:nth-child(6),
+  .sale-page table th:nth-child(7),
+  .sale-page table td:nth-child(7) {
+    display: none;
+  }
+
+  .sale-page table th,
+  .sale-page table td {
+    padding: 0.4rem;
+    overflow: hidden;
+  }
+
+  .sale-page table input,
+  .sale-page table select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sale-page > footer button {
+    min-width: 0;
+    flex: 1;
+    padding-inline: 0.75rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

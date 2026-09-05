@@ -58,6 +58,7 @@ export default function InvoicesPage() {
                 <tr>
                   <th className="px-5 py-3 font-semibold">Invoice</th>
                   <th className="px-5 py-3 font-semibold">Party</th>
+                  <th className="px-5 py-3 font-semibold">Company</th>
                   <th className="px-5 py-3 font-semibold">Issue date</th>
                   <th className="px-5 py-3 font-semibold">Status</th>
                   <th className="px-5 py-3 text-right font-semibold">Total</th>
@@ -75,6 +76,7 @@ export default function InvoicesPage() {
                         </Link>
                       </td>
                       <td className="px-5 py-3 text-slate-700">{invoice.party?.name ?? 'Unknown party'}</td>
+                      <td className="px-5 py-3 text-slate-600">{invoice.business?.name ?? 'Selected company'}</td>
                       <td className="whitespace-nowrap px-5 py-3 text-slate-600">{formatDate(invoice.issueDate)}</td>
                       <td className="px-5 py-3"><StatusBadge status={invoice.status} /></td>
                       <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-slate-800">{formatCurrency(invoice.grandTotal)}</td>
