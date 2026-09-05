@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowDownLeft, ArrowUpRight, Boxes, FileSpreadsheet, FileText, MoreVertical, Package, Pencil, Plus, Printer, Search } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Boxes, FileSpreadsheet, FileText, MoreVertical, Package, Pencil, Plus, Printer, Search, X } from 'lucide-react';
 import Modal from '@/components/Modal';
 import StatusBadge from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
 import { api, getAllPages, getApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { BusinessDocument, Invoice, Item } from '@/types';
+import NewInvoicePage from '@/app/invoices/new/page';
+import NewDocumentPage from '@/app/documents/new/page';
+import { EmbeddedFormProvider } from '@/components/EmbeddedFormContext';
 
 type ItemTransaction = {
   id: string;
@@ -35,6 +38,7 @@ export default function ItemsPage() {
   const [transactionError, setTransactionError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
+  const [activeForm, setActiveForm] = useState<'sale' | 'purchase' | null>(null);
   const sourcesRef = useRef<TransactionSources | null>(null);
 
   const loadItems = useCallback(async (preferredId?: string) => {
@@ -42,7 +46,7 @@ export default function ItemsPage() {
     try {
       const { data } = await getAllPages<Item>('/items');
       setItems(data);
-      setSelectedItemId((current) => preferredId && data.some((item) => item.id === preferredId) ? preferredId : current && data.some((item) => item.id === current) ? current : data[0]?.id ?? '');
+      setSelectedItemId((current) => preferredId && data.some((item) => item.id === preferredId) ? preferredId : current && data.some((item) => item.id === current) ? current : '');
     } catch (loadError: unknown) { setError(getApiError(loadError, 'Could not load items.')); }
     finally { setLoading(false); }
   }, []);
@@ -107,25 +111,28 @@ export default function ItemsPage() {
         <header className="flex min-h-16 items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 sm:px-5">
           <div><h1 className="text-xl font-extrabold tracking-tight text-slate-950">Items</h1><p className="text-[11px] text-slate-400">Inventory details and stock transactions</p></div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <Link href="/invoices/new" className="inline-flex h-9 items-center gap-1.5 rounded-full bg-blue-50 px-3.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"><Plus size={15} />Add Sale</Link>
-            <Link href="/documents/new?type=PURCHASE_INVOICE" className="inline-flex h-9 items-center gap-1.5 rounded-full bg-slate-100 px-3.5 text-xs font-bold text-slate-700 transition hover:bg-slate-200"><Plus size={15} />Add Purchase</Link>
+            <button type="button" onClick={() => setActiveForm('sale')} className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${activeForm === 'sale' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}><Plus size={15} />Add Sale</button>
+            <button type="button" onClick={() => setActiveForm('purchase')} className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${activeForm === 'purchase' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}><Plus size={15} />Add Purchase</button>
             <button type="button" onClick={openAddItem} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />Add Item</button>
             <button type="button" className="flex h-8 w-7 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" aria-label="More options"><MoreVertical size={18} /></button>
           </div>
         </header>
 
-        <section className="grid min-h-0 flex-1 gap-1 p-1 lg:grid-cols-[315px_minmax(0,1fr)]">
-          <aside className="flex min-h-[360px] flex-col overflow-hidden rounded-md bg-white">
-            <div className="p-3"><div className="relative"><Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="h-10 w-full rounded-full border border-slate-300 bg-white pl-10 pr-3 text-xs outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Search Item Name" aria-label="Search items" /></div></div>
-            <div className="grid grid-cols-[minmax(0,1fr)_110px] border-y border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-600"><span className="px-3 py-2.5">Item Name</span><span className="border-l border-slate-200 px-3 py-2.5 text-right">Quantity</span></div>
-            <div className="max-h-[330px] flex-1 overflow-y-auto lg:max-h-none">
-              {loading ? <LoadingState label="Loading items..." /> : error ? <ErrorState message={error} onRetry={() => loadItems()} /> : items.length === 0 ? <EmptyState icon={Package} title="No items yet" description="Add products or services to start billing." /> : filteredItems.length === 0 ? <div className="px-5 py-12 text-center text-sm text-slate-500">No item matches your search.</div> : filteredItems.map((item) => { const active = item.id === selectedItemId; const lowStock = Number(item.stockQty) <= 5; return <button key={item.id} type="button" onClick={() => setSelectedItemId(item.id)} className={`grid w-full grid-cols-[minmax(0,1fr)_110px] border-l-[3px] text-left transition ${active ? 'border-blue-600 bg-blue-50' : 'border-b border-l-transparent border-b-slate-100 hover:bg-slate-50'}`}><span className="truncate px-3 py-3 text-xs font-bold text-slate-900">{item.name}</span><span className={`border-l border-slate-200/70 px-2.5 py-3 text-right text-xs font-semibold ${lowStock ? 'text-amber-700' : 'text-slate-600'}`}>{Number(item.stockQty).toLocaleString('en-IN')} {item.unit}</span></button>; })}
+        {activeForm ? <section className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-5">
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div><h2 className="text-base font-bold text-slate-900">{activeForm === 'sale' ? 'Add Sale' : 'Add Purchase'}</h2><p className="text-xs text-slate-500">Complete the form without leaving Items</p></div>
+              <button type="button" onClick={() => setActiveForm(null)} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" aria-label="Close form"><X size={18} /></button>
             </div>
-            <div className="m-2 mt-auto flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2"><p className="text-[11px] font-bold text-slate-700">{filteredItems.length} items</p><p className="text-[10px] text-slate-400">Name, SKU or description</p></div>
-          </aside>
+            <EmbeddedFormProvider value={{ embedded: true, initialType: activeForm === 'purchase' ? 'PURCHASE_INVOICE' : undefined }}>
+              {activeForm === 'sale' ? <NewInvoicePage /> : <NewDocumentPage />}
+            </EmbeddedFormProvider>
+          </div>
+        </section> : <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+          <ItemRegisterTable items={filteredItems} selectedId={selectedItemId} search={search} onSearch={setSearch} onSelect={setSelectedItemId} loading={loading} error={error} onRetry={() => loadItems()} />
 
-          <main className="flex min-w-0 flex-col gap-1">
-            {!selectedItem ? <div className="flex-1 rounded-md bg-white"><EmptyState icon={Boxes} title="Select an item" description="Choose an item from the left to view details and stock transactions." /></div> : <>
+          <main className="flex min-w-0 flex-col gap-3">
+            {!selectedItem ? <section className="flex min-h-[280px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-3.5 py-3"><h3 className="text-sm font-bold text-slate-950">Item Transactions</h3><p className="text-[10px] text-slate-400">Select an item from the register to view its complete stock activity</p></div><EmptyState icon={Boxes} title="Select an item" description="Click an item name above to view all sales, purchases and stock details." /></section> : <>
               <section className="rounded-md bg-white p-3.5 sm:p-4">
                 <div className="flex items-center justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-1.5"><h2 className="truncate text-base font-extrabold text-slate-950">{selectedItem.name}</h2><button type="button" onClick={openEditItem} className="text-blue-600 hover:text-blue-800" aria-label="Edit item"><Pencil size={15} /></button></div><p className="mt-1 text-[11px] text-slate-400">{selectedItem.description || 'No description added'}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${Number(selectedItem.stockQty) <= 5 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{Number(selectedItem.stockQty) <= 5 ? 'Low stock' : 'In stock'}</span></div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><ItemField label="SKU" value={selectedItem.sku || 'Not provided'} /><ItemField label="Sale price" value={formatCurrency(selectedItem.salePrice)} /><ItemField label="Tax rate" value={`${Number(selectedItem.taxRate).toFixed(2)}%`} /><ItemField label="Unit" value={selectedItem.unit} /></div>
@@ -138,12 +145,27 @@ export default function ItemsPage() {
               </section>
             </>}
           </main>
-        </section>
+        </section>}
       </div>
 
       {showForm && <ItemFormModal item={editingItem} onClose={() => setShowForm(false)} onSaved={(savedItem) => { setShowForm(false); sourcesRef.current = null; void loadItems(savedItem.id); }} />}
     </>
   );
+}
+
+function ItemRegisterTable({ items, selectedId, search, onSearch, onSelect, loading, error, onRetry }: { items: Item[]; selectedId: string; search: string; onSearch: (value: string) => void; onSelect: (id: string) => void; loading: boolean; error: string; onRetry: () => void }) {
+  return <section className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
+    <div className="flex flex-col gap-3 border-b border-slate-300 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 className="text-sm font-semibold text-slate-900">Item Register</h2><p className="text-[10px] text-slate-500">{items.length} records shown · select a row to view its transactions</p></div>
+      <div className="relative w-full sm:w-80"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => onSearch(event.target.value)} className="h-9 w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Search name, SKU or description" aria-label="Search items" /></div>
+    </div>
+    {loading ? <LoadingState label="Loading items..." /> : error ? <ErrorState message={error} onRetry={onRetry} /> : items.length === 0 ? <EmptyState icon={Package} title="No items found" description={search ? 'Try a different search.' : 'Add your first item to start billing.'} /> : <div className="overflow-x-auto">
+      <table className="w-full min-w-[920px] border-collapse text-xs">
+        <thead className="bg-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-600"><tr><th className="w-11 border-r border-slate-300 px-2 py-3 text-center">#</th><th className="border-r border-slate-300 px-3 py-3">Item Name</th><th className="border-r border-slate-300 px-3 py-3">SKU</th><th className="border-r border-slate-300 px-3 py-3">Unit</th><th className="border-r border-slate-300 px-3 py-3 text-right">Sale Price</th><th className="border-r border-slate-300 px-3 py-3 text-right">Tax</th><th className="border-r border-slate-300 px-3 py-3 text-right">Stock</th><th className="px-3 py-3 text-right">Stock Value</th></tr></thead>
+        <tbody>{items.map((item, index) => { const stock = Number(item.stockQty); const lowStock = stock <= 5; return <tr key={item.id} onClick={() => onSelect(item.id)} className={`cursor-pointer border-t border-slate-200 transition ${item.id === selectedId ? 'bg-blue-50 outline outline-1 -outline-offset-1 outline-blue-400' : index % 2 ? 'bg-slate-50/70 hover:bg-blue-50/40' : 'bg-white hover:bg-blue-50/40'}`}><td className="border-r border-slate-200 px-2 py-3 text-center text-slate-400">{index + 1}</td><td className="border-r border-slate-200 px-3 py-3 font-semibold text-slate-900">{item.name}</td><td className="border-r border-slate-200 px-3 py-3 font-mono text-[11px] text-slate-600">{item.sku || '—'}</td><td className="border-r border-slate-200 px-3 py-3 text-slate-600">{item.unit}</td><td className="border-r border-slate-200 px-3 py-3 text-right">{formatCurrency(item.salePrice)}</td><td className="border-r border-slate-200 px-3 py-3 text-right text-slate-600">{Number(item.taxRate).toFixed(2)}%</td><td className={`border-r border-slate-200 px-3 py-3 text-right font-semibold ${lowStock ? 'text-amber-700' : 'text-slate-700'}`}>{stock.toLocaleString('en-IN')} {item.unit}</td><td className="px-3 py-3 text-right font-semibold text-slate-900">{formatCurrency(stock * Number(item.salePrice))}</td></tr>; })}</tbody>
+      </table>
+    </div>}
+  </section>;
 }
 
 function ItemField({ label, value }: { label: string; value: string }) { return <div className="min-w-0"><p className="text-[10px] text-slate-400">{label}</p><p className="mt-0.5 truncate text-xs font-semibold text-slate-800">{value}</p></div>; }

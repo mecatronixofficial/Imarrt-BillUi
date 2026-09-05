@@ -1,249 +1,123 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Mail, MessageCircle, Plus, Send, Trash2 } from 'lucide-react';
-import PageHeader from '@/components/PageHeader';
+import { CalendarDays, FilePlus2, ImagePlus, Loader2, Paperclip, Plus, Share2, Trash2, X } from 'lucide-react';
 import { api, getAllPages, getApiError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
-import type { Party, Item } from '@/types';
+import type { Invoice, Item, Party } from '@/types';
+import { useEmbeddedForm } from '@/components/EmbeddedFormContext';
 
-type LineDraft = {
-  itemId?: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  taxRate: number;
-};
-
-const emptyLine = (): LineDraft => ({ description: '', quantity: 1, unitPrice: 0, taxRate: 0 });
+type LineDraft = { itemId?: string; description: string; quantity: number; unit: string; unitPrice: number; discountPercent: number; taxRate: number };
+const emptyLine = (): LineDraft => ({ description: '', quantity: 1, unit: 'pcs', unitPrice: 0, discountPercent: 0, taxRate: 0 });
+const today = () => new Date().toISOString().slice(0, 10);
 
 export default function NewInvoicePage() {
   const router = useRouter();
+  const { embedded = false, initialPartyId = '' } = useEmbeddedForm();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [parties, setParties] = useState<Party[]>([]);
   const [catalog, setCatalog] = useState<Item[]>([]);
   const [partyId, setPartyId] = useState('');
+  const [saleMode, setSaleMode] = useState<'CREDIT' | 'CASH'>('CREDIT');
+  const [invoiceDate, setInvoiceDate] = useState(today());
+  const [invoiceNumber, setInvoiceNumber] = useState('Loading...');
   const [dueDate, setDueDate] = useState('');
-  const [discount, setDiscount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [stateOfSupply, setStateOfSupply] = useState('');
+  const [billingName, setBillingName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [billingAddress, setBillingAddress] = useState('');
+  const [shippingAddress, setShippingAddress] = useState('');
+  const [terms, setTerms] = useState('');
   const [notes, setNotes] = useState('');
-  const [deliveryMode, setDeliveryMode] = useState<'PARTY_DEFAULT' | 'MANUAL' | 'AUTOMATIC'>('PARTY_DEFAULT');
-  const [deliveryChannels, setDeliveryChannels] = useState<Array<'EMAIL' | 'WHATSAPP'>>(['EMAIL', 'WHATSAPP']);
-  const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
-  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [roundOff, setRoundOff] = useState(true);
+  const [lines, setLines] = useState<LineDraft[]>([emptyLine(), emptyLine()]);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<'SAVE' | 'SHARE' | ''>('');
   const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
-
-    async function loadOptions() {
-      setLoadingOptions(true);
-      try {
-        const [partiesResponse, itemsResponse] = await Promise.all([
-          getAllPages<Party>('/parties'),
-          getAllPages<Item>('/items'),
-        ]);
-        if (!active) return;
-        setParties(partiesResponse.data);
-        setCatalog(itemsResponse.data);
-        const requestedPartyId = new URLSearchParams(window.location.search).get('partyId');
-        if (requestedPartyId && partiesResponse.data.some((party) => party.id === requestedPartyId)) {
-          setPartyId(requestedPartyId);
-        }
-      } catch (loadError: unknown) {
-        if (active) setError(getApiError(loadError, 'Could not load parties and items.'));
-      } finally {
-        if (active) setLoadingOptions(false);
+    Promise.all([getAllPages<Party>('/parties'), getAllPages<Item>('/items')]).then(([partyResponse, itemResponse]) => {
+      if (!active) return;
+      setParties(partyResponse.data); setCatalog(itemResponse.data);
+      const requested = initialPartyId || new URLSearchParams(window.location.search).get('partyId') || '';
+      const requestedParty = partyResponse.data.find(({ id }) => id === requested);
+      if (requestedParty) {
+        setPartyId(requestedParty.id); setBillingName(requestedParty.name); setPhone(requestedParty.phone ?? '');
+        setBillingAddress(requestedParty.billingAddr ?? ''); setShippingAddress(requestedParty.shippingAddr || requestedParty.billingAddr || '');
       }
-    }
+    }).catch((loadError) => setError(getApiError(loadError, 'Could not load customers and items.'))).finally(() => setLoading(false));
+    return () => { active = false; };
+  }, [initialPartyId]);
 
-    void loadOptions();
-    return () => {
-      active = false;
-    };
+  useEffect(() => {
+    let active = true;
+    void api.get<{ invoiceNumber: string }>('/invoices/next-number')
+      .then(({ data }) => { if (active) setInvoiceNumber(data.invoiceNumber); })
+      .catch(() => { if (active) setInvoiceNumber('Generated on save'); });
+    return () => { active = false; };
   }, []);
 
-  function updateLine(index: number, patch: Partial<LineDraft>) {
-    setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)));
+  function selectParty(id: string, source = parties) {
+    setPartyId(id); const party = source.find((entry) => entry.id === id);
+    setBillingName(party?.name ?? ''); setPhone(party?.phone ?? ''); setBillingAddress(party?.billingAddr ?? ''); setShippingAddress(party?.shippingAddr || party?.billingAddr || '');
   }
-
-  function pickCatalogItem(index: number, itemId: string) {
-    if (!itemId) {
-      updateLine(index, { itemId: undefined });
-      return;
-    }
-    const item = catalog.find(({ id }) => id === itemId);
-    if (!item) return;
-    updateLine(index, {
-      itemId: item.id,
-      description: item.name,
-      unitPrice: Number(item.salePrice),
-      taxRate: Number(item.taxRate),
-    });
-  }
-
+  function updateLine(index: number, patch: Partial<LineDraft>) { setLines((current) => current.map((line, i) => i === index ? { ...line, ...patch } : line)); }
+  function pickItem(index: number, itemId: string) { const item = catalog.find(({ id }) => id === itemId); if (!item) return updateLine(index, { itemId: undefined }); updateLine(index, { itemId, description: item.name, unit: item.unit, unitPrice: Number(item.salePrice), taxRate: Number(item.taxRate) }); }
   const totals = useMemo(() => {
-    const subTotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
-    const taxTotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice * (line.taxRate / 100), 0);
-    return { subTotal, taxTotal, grandTotal: Math.max(0, subTotal + taxTotal - discount) };
-  }, [discount, lines]);
+    const quantity = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+    const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
+    const discount = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice * line.discountPercent / 100, 0);
+    const tax = lines.reduce((sum, line) => { const taxable = line.quantity * line.unitPrice * (1 - line.discountPercent / 100); return sum + taxable * line.taxRate / 100; }, 0);
+    const raw = subtotal - discount + tax; const total = roundOff ? Math.round(raw) : raw;
+    return { quantity, subtotal, discount, tax, roundAdjustment: total - raw, total };
+  }, [lines, roundOff]);
+
   const selectedParty = parties.find((party) => party.id === partyId);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (saving) return;
-    setError('');
-
-    if (!partyId) {
-      setError('Please select a party.');
-      return;
-    }
-    if (deliveryMode === 'AUTOMATIC' && deliveryChannels.length === 0) {
-      setError('Select email, WhatsApp, or both for automatic delivery.');
-      return;
-    }
-    if (lines.some((line) => !line.description.trim() || line.quantity <= 0 || line.unitPrice < 0)) {
-      setError('Please complete every line item with valid values.');
-      return;
-    }
-    if (discount > totals.subTotal + totals.taxTotal) {
-      setError('Discount cannot be greater than the invoice total.');
-      return;
-    }
-
-    setSaving(true);
+  async function submit(action: 'SAVE' | 'SHARE') {
+    if (saving) return; setError('');
+    const validLines = lines.filter((line) => line.description.trim() && line.quantity > 0);
+    if (!partyId) return setError('Please select a customer.');
+    if (!validLines.length) return setError('Add at least one item.');
+    setSaving(action);
     try {
-      const { data } = await api.post<{ id: string }>('/invoices', {
-        partyId,
-        dueDate: dueDate || undefined,
-        discount,
-        notes: notes.trim() || undefined,
-        deliveryMode: deliveryMode === 'PARTY_DEFAULT' ? undefined : deliveryMode,
-        deliveryChannels: deliveryMode === 'AUTOMATIC' ? deliveryChannels : undefined,
-        items: lines.map((line) => ({ ...line, description: line.description.trim() })),
-      });
+      const { data } = await api.post<{ id: string }>('/invoices', { partyId, issueDate: invoiceDate, dueDate: dueDate || undefined, discount: totals.discount, notes: [terms, notes].filter(Boolean).join('\n\n') || undefined, deliveryMode: 'MANUAL', items: validLines.map((line) => ({ itemId: line.itemId, description: line.description.trim(), quantity: line.quantity, unitPrice: line.unitPrice, taxRate: line.taxRate })) });
+      if (saleMode === 'CASH') {
+        const { data: savedInvoice } = await api.get<Invoice>(`/invoices/${data.id}`);
+        await api.post(`/invoices/${data.id}/payments`, { amount: Number(savedInvoice.grandTotal), method: paymentMethod.toUpperCase().replaceAll(' ', '_') });
+      }
+      if (action === 'SHARE') await api.post(`/invoices/${data.id}/deliver`, { channels: ['WHATSAPP'] }).catch(() => undefined);
       router.push(`/invoices/${data.id}`);
-    } catch (saveError: unknown) {
-      setError(getApiError(saveError, 'Could not create invoice.'));
-    } finally {
-      setSaving(false);
-    }
+    } catch (saveError) { setError(getApiError(saveError, 'Could not save the sale invoice.')); setSaving(''); }
   }
 
-  return (
-    <>
-      <PageHeader
-        title="New invoice"
-        description="Create a professional invoice for your party."
-        action={
-          <Link href="/invoices" className="btn-secondary inline-flex items-center gap-2">
-            <ArrowLeft aria-hidden="true" size={15} /> Back
-          </Link>
-        }
-      />
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && <div role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-
-        <section className="card grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
-          <div>
-            <label htmlFor="invoice-party" className="label">Party *</label>
-            <select id="invoice-party" required disabled={loadingOptions} className="input-field" value={partyId} onChange={(event) => setPartyId(event.target.value)}>
-              <option value="">{loadingOptions ? 'Loading parties...' : 'Select party'}</option>
-              {parties.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}
-            </select>
-            {!loadingOptions && parties.length === 0 && <p className="mt-1.5 text-xs text-amber-600">Add a party before creating an invoice.</p>}
-          </div>
-          <div>
-            <label htmlFor="invoice-due-date" className="label">Due date</label>
-            <input id="invoice-due-date" type="date" className="input-field" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
-          </div>
-          <div>
-            <label htmlFor="invoice-discount" className="label">Discount</label>
-            <input id="invoice-discount" type="number" min="0" step="0.01" className="input-field" value={discount} onChange={(event) => setDiscount(Math.max(0, Number(event.target.value)))} />
-          </div>
-        </section>
-
-        <section className="card p-4">
-          <div className="flex items-start gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><Send size={17} /></span><div><h2 className="text-sm font-bold text-slate-900">Invoice delivery</h2><p className="mt-0.5 text-xs text-slate-500">Send automatically after generation or keep manual control.</p></div></div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <button type="button" onClick={() => setDeliveryMode('PARTY_DEFAULT')} className={`rounded-xl border p-3 text-left transition ${deliveryMode === 'PARTY_DEFAULT' ? 'border-blue-300 bg-blue-50 ring-2 ring-blue-100' : 'border-slate-200 hover:bg-slate-50'}`}><p className="text-xs font-bold text-slate-800">Party default</p><p className="mt-1 text-[10px] leading-4 text-slate-500">{selectedParty ? `${selectedParty.invoiceDeliveryMode === 'AUTOMATIC' ? 'Auto' : 'Manual'} · ${(selectedParty.invoiceDeliveryChannel || 'BOTH').toLowerCase()}` : 'Select a party'}</p></button>
-            <button type="button" onClick={() => setDeliveryMode('MANUAL')} className={`rounded-xl border p-3 text-left transition ${deliveryMode === 'MANUAL' ? 'border-slate-400 bg-slate-50 ring-2 ring-slate-100' : 'border-slate-200 hover:bg-slate-50'}`}><p className="text-xs font-bold text-slate-800">Manual send</p><p className="mt-1 text-[10px] leading-4 text-slate-500">Create first, then choose WhatsApp, email, share, or PDF.</p></button>
-            <button type="button" onClick={() => setDeliveryMode('AUTOMATIC')} className={`rounded-xl border p-3 text-left transition ${deliveryMode === 'AUTOMATIC' ? 'border-emerald-300 bg-emerald-50 ring-2 ring-emerald-100' : 'border-slate-200 hover:bg-slate-50'}`}><p className="text-xs font-bold text-slate-800">Send automatically</p><p className="mt-1 text-[10px] leading-4 text-slate-500">Generate the PDF and deliver immediately.</p></button>
-          </div>
-          {deliveryMode === 'AUTOMATIC' && <div className="mt-3 flex flex-wrap gap-2 rounded-xl bg-slate-50 p-3"><button type="button" onClick={() => setDeliveryChannels((current) => current.includes('EMAIL') ? current.filter((channel) => channel !== 'EMAIL') : [...current, 'EMAIL'])} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${deliveryChannels.includes('EMAIL') ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-400'}`}><Mail size={14} /> Email {selectedParty?.email ? `· ${selectedParty.email}` : '· missing'}</button><button type="button" onClick={() => setDeliveryChannels((current) => current.includes('WHATSAPP') ? current.filter((channel) => channel !== 'WHATSAPP') : [...current, 'WHATSAPP'])} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${deliveryChannels.includes('WHATSAPP') ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}><MessageCircle size={14} /> WhatsApp · {selectedParty?.whatsappNumber || selectedParty?.phone || 'missing'}</button></div>}
-        </section>
-
-        <section className="card p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Line items</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Add products, services, quantity, and tax.</p>
-            </div>
-            <button type="button" onClick={() => setLines((current) => [...current, emptyLine()])} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs">
-              <Plus aria-hidden="true" size={14} /> Add line
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {lines.map((line, index) => (
-              <div key={index} className="grid grid-cols-12 items-end gap-2 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-                <div className="col-span-12 sm:col-span-4">
-                  <label htmlFor={`line-item-${index}`} className="label">Item / description</label>
-                  <select id={`line-item-${index}`} className="input-field mb-2" value={line.itemId ?? ''} onChange={(event) => pickCatalogItem(index, event.target.value)}>
-                    <option value="">Custom item</option>
-                    {catalog.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                  <input aria-label={`Description for line ${index + 1}`} required className="input-field" placeholder="Description" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
-                </div>
-                <div className="col-span-4 sm:col-span-2">
-                  <label htmlFor={`line-qty-${index}`} className="label">Quantity</label>
-                  <input id={`line-qty-${index}`} required type="number" min="0.01" step="0.01" className="input-field" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
-                </div>
-                <div className="col-span-4 sm:col-span-2">
-                  <label htmlFor={`line-price-${index}`} className="label">Unit price</label>
-                  <input id={`line-price-${index}`} required type="number" min="0" step="0.01" className="input-field" value={line.unitPrice} onChange={(event) => updateLine(index, { unitPrice: Number(event.target.value) })} />
-                </div>
-                <div className="col-span-4 sm:col-span-2">
-                  <label htmlFor={`line-tax-${index}`} className="label">Tax %</label>
-                  <input id={`line-tax-${index}`} type="number" min="0" max="100" step="0.01" className="input-field" value={line.taxRate} onChange={(event) => updateLine(index, { taxRate: Number(event.target.value) })} />
-                </div>
-                <div className="col-span-10 text-right text-sm font-bold text-slate-800 sm:col-span-1 sm:pb-2">
-                  {formatCurrency(line.quantity * line.unitPrice * (1 + line.taxRate / 100))}
-                </div>
-                <div className="col-span-2 flex justify-end sm:col-span-1 sm:pb-1">
-                  <button type="button" disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((_, lineIndex) => lineIndex !== index))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30" aria-label={`Remove line ${index + 1}`}>
-                    <Trash2 aria-hidden="true" size={16} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <section className="card p-4">
-            <label htmlFor="invoice-notes" className="label">Notes</label>
-            <textarea id="invoice-notes" className="input-field resize-none" rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Payment terms or a thank-you note" />
-          </section>
-          <section className="card p-4">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span>{formatCurrency(totals.subTotal)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Tax</span><span>{formatCurrency(totals.taxTotal)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Discount</span><span>-{formatCurrency(discount)}</span></div>
-              <div className="mt-2 flex justify-between border-t border-slate-100 pt-3 text-lg font-bold text-slate-950"><span>Total</span><span>{formatCurrency(totals.grandTotal)}</span></div>
-            </div>
-          </section>
+  return <div className={`sale-page ${embedded ? 'min-h-[720px]' : '-m-4 h-[calc(100dvh-3.5rem)] sm:-m-5 lg:-m-6 xl:-m-8'} flex max-w-[100vw] flex-col overflow-hidden bg-[#f4f4f4] text-slate-800`}>
+    <header className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
+      <div className="flex flex-wrap items-center gap-4"><h1 className="text-xl font-semibold">Sale</h1><span className="hidden h-7 w-px bg-slate-200 sm:block" /><div className="flex items-center gap-2 text-sm"><button type="button" onClick={() => setSaleMode('CREDIT')} className={saleMode === 'CREDIT' ? 'text-blue-600' : 'text-slate-500'}>Credit</button><button type="button" onClick={() => setSaleMode((value) => value === 'CREDIT' ? 'CASH' : 'CREDIT')} className={`relative h-7 w-14 rounded-full transition ${saleMode === 'CASH' ? 'bg-emerald-200' : 'bg-blue-100'}`}><span className={`absolute top-1 h-5 w-5 rounded-full shadow transition ${saleMode === 'CASH' ? 'left-8 bg-emerald-500' : 'left-1 bg-blue-500'}`} /></button><button type="button" onClick={() => setSaleMode('CASH')} className={saleMode === 'CASH' ? 'text-emerald-600' : 'text-slate-700'}>Cash</button></div></div>
+    </header>
+    <main className="scrollbar-hide min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      {error && <div className="m-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      <section className="grid gap-5 border-b border-slate-200 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:p-7">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <Field label="Customer *"><select disabled={loading} value={partyId} onChange={(e) => selectParty(e.target.value)} className="sale-input"><option value="">{loading ? 'Loading...' : 'Select customer'}</option>{parties.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select>{selectedParty && <span className="mt-1 block text-[10px] text-red-500">BAL: {formatCurrency(selectedParty.balanceDue ?? 0)}</span>}</Field>
+          <Field label="Billing Name (Optional)"><input className="sale-input" value={billingName} onChange={(e) => setBillingName(e.target.value)} /></Field>
+          <Field label="Phone No."><input className="sale-input" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+          <textarea rows={4} className="sale-textarea" placeholder="Billing Address" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)} />
+          <textarea rows={4} className="sale-textarea" placeholder="Shipping Address" value={shippingAddress} onChange={(e) => setShippingAddress(e.target.value)} />
         </div>
-
-        <div className="flex justify-end">
-          <button type="submit" disabled={saving || loadingOptions || parties.length === 0} className="btn-primary inline-flex min-w-36 items-center justify-center gap-2">
-            {saving && <Loader2 aria-hidden="true" size={16} className="animate-spin" />}
-            {saving ? 'Creating...' : 'Create invoice'}
-          </button>
-        </div>
-      </form>
-    </>
-  );
+        <div className="space-y-4 rounded-lg bg-white/60 p-4"><div className="flex items-center justify-between border-b border-slate-200 pb-3 text-sm"><span className="text-slate-500">Invoice Number</span><span className="font-mono text-xs text-slate-800">{invoiceNumber}</span></div><Field label="Invoice Date"><div className="relative"><input type="date" className="sale-input pr-10" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} /><CalendarDays size={17} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-blue-500" /></div></Field><Field label="Due Date"><input type="date" className="sale-input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></Field><Field label="State of supply"><select className="sale-input" value={stateOfSupply} onChange={(e) => setStateOfSupply(e.target.value)}><option value="">Select state</option><option>Tamil Nadu</option><option>Karnataka</option><option>Kerala</option><option>Andhra Pradesh</option><option>Maharashtra</option><option>Delhi</option><option>Other</option></select></Field></div>
+      </section>
+      <section className="overflow-x-auto bg-white"><table className="w-full min-w-[1050px] border-collapse text-sm"><thead><tr className="text-left text-xs uppercase text-slate-700"><Th>#</Th><Th>Item</Th><Th>Qty</Th><Th>Unit</Th><Th>Price / Unit</Th><Th>Discount %</Th><Th>Tax %</Th><Th className="text-right">Amount</Th><Th /></tr></thead><tbody>{lines.map((line, index) => { const base = line.quantity * line.unitPrice * (1 - line.discountPercent / 100); const amount = base * (1 + line.taxRate / 100); return <tr key={index} className="bg-slate-50/80"><Td>{index + 1}</Td><Td><select className="sale-cell w-full" value={line.itemId ?? ''} onChange={(e) => pickItem(index, e.target.value)}><option value="">Select / custom item</option>{catalog.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input className="sale-cell w-full" placeholder="Description" value={line.description} onChange={(e) => updateLine(index, { description: e.target.value })} /></Td><Td><input type="number" min="0" className="sale-cell w-20" value={line.quantity} onChange={(e) => updateLine(index, { quantity: Number(e.target.value) })} /></Td><Td><input className="sale-cell w-20" value={line.unit} onChange={(e) => updateLine(index, { unit: e.target.value })} /></Td><Td><input type="number" min="0" className="sale-cell w-28" value={line.unitPrice} onChange={(e) => updateLine(index, { unitPrice: Number(e.target.value) })} /></Td><Td><input type="number" min="0" max="100" className="sale-cell w-20" value={line.discountPercent} onChange={(e) => updateLine(index, { discountPercent: Number(e.target.value) })} /></Td><Td><input type="number" min="0" max="100" className="sale-cell w-20" value={line.taxRate} onChange={(e) => updateLine(index, { taxRate: Number(e.target.value) })} /></Td><Td className="text-right font-semibold">{formatCurrency(amount)}</Td><Td><button type="button" disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((_, i) => i !== index))} className="text-slate-400 hover:text-red-500"><Trash2 size={15} /></button></Td></tr>; })}</tbody><tfoot><tr><td /><td className="p-2"><button type="button" onClick={() => setLines((current) => [...current, emptyLine()])} className="inline-flex items-center gap-1 rounded border border-blue-400 px-3 py-2 text-xs text-blue-600"><Plus size={14} /> Add Row</button></td><td className="border border-slate-200 p-3 font-semibold">{totals.quantity}</td><td colSpan={2} className="border border-slate-200 p-3 text-right font-semibold">Total</td><td className="border border-slate-200 p-3 text-right">{formatCurrency(totals.discount)}</td><td className="border border-slate-200 p-3 text-right">{formatCurrency(totals.tax)}</td><td className="border border-slate-200 p-3 text-right font-semibold">{formatCurrency(totals.total)}</td><td /></tr></tfoot></table></section>
+      <section className="grid gap-6 p-6 lg:grid-cols-[1fr_250px_1fr]"><div className="rounded-lg border border-slate-200 bg-white p-5"><h2 className="text-lg">Terms & Conditions</h2><textarea rows={4} className="sale-textarea mt-4 w-full" placeholder="Enter terms and conditions" value={terms} onChange={(e) => setTerms(e.target.value)} /></div><div className="space-y-3"><button type="button" onClick={() => fileRef.current?.click()} className="attachment-btn"><FilePlus2 size={18} /> Add Document</button><button type="button" onClick={() => fileRef.current?.click()} className="attachment-btn"><ImagePlus size={18} /> Add Image</button><input ref={fileRef} hidden multiple type="file" onChange={(e) => setAttachments(Array.from(e.target.files ?? []))} />{attachments.map((file, i) => <div key={`${file.name}-${i}`} className="flex items-center gap-2 text-xs text-slate-500"><Paperclip size={13} /><span className="truncate">{file.name}</span><button onClick={() => setAttachments((a) => a.filter((_, x) => x !== i))}><X size={13} /></button></div>)}</div><div><label className="flex items-center justify-end gap-3"><input type="checkbox" checked={roundOff} onChange={(e) => setRoundOff(e.target.checked)} className="h-5 w-5 accent-blue-500" /> Round Off <span className="w-24 rounded border bg-white px-3 py-2 text-right">{totals.roundAdjustment.toFixed(2)}</span></label><div className="mt-5 flex items-center justify-end gap-5 text-lg"><span>Total</span><strong className="min-w-52 rounded border bg-white px-4 py-3 text-right">{formatCurrency(totals.total)}</strong></div><textarea className="sale-textarea mt-5 w-full" rows={2} placeholder="Additional description / notes" value={notes} onChange={(e) => setNotes(e.target.value)} /></div></section>
+    </main>
+    <footer className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4"><button type="button" disabled={Boolean(saving)} onClick={() => void submit('SHARE')} className="inline-flex min-w-32 items-center justify-center gap-2 rounded-lg border border-blue-500 px-5 py-3 text-blue-600"><Share2 size={16} />{saving === 'SHARE' ? 'Sharing...' : 'Share'}</button><button type="button" disabled={Boolean(saving)} onClick={() => void submit('SAVE')} className="inline-flex min-w-44 items-center justify-center gap-2 rounded-lg bg-blue-500 px-7 py-3 text-white shadow-md hover:bg-blue-600">{saving === 'SAVE' && <Loader2 size={16} className="animate-spin" />}{saving === 'SAVE' ? 'Saving...' : 'Save'}</button></footer>
+  </div>;
 }
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="mb-1 block text-xs text-slate-500">{label}</span>{children}</label>; }
+function Th({ children, className = '' }: { children?: React.ReactNode; className?: string }) { return <th className={`border border-slate-200 bg-white px-3 py-3 ${className}`}>{children}</th>; }
+function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) { return <td className={`border border-slate-200 p-2 ${className}`}>{children}</td>; }

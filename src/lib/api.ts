@@ -11,7 +11,7 @@ if (typeof window !== 'undefined') {
 
 export const api = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 45000,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -90,14 +90,14 @@ async function collectAllPages<T>(
 
 const refreshClient = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 45000,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
 const sessionClient = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 45000,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });

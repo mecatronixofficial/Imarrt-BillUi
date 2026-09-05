@@ -8,6 +8,7 @@ import { getCurrentUser } from '@/lib/api';
 import type { SessionUser } from '@/lib/api';
 import Sidebar from './Sidebar';
 import CommandMenu from './CommandMenu';
+import CompanyCornerPicker from './CompanyCornerPicker';
 
 const PAGE_TITLES: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -91,13 +92,6 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
     );
   }
 
-  const initials = user?.name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase() || 'U';
-
   return (
     <div className="flex min-h-screen min-h-dvh bg-slate-50">
       <a href="#main-content" className="skip-link">Skip to main content</a>
@@ -153,13 +147,7 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
               <Plus aria-hidden="true" size={15} />
               <span className="hidden xl:inline">New invoice</span>
             </Link>
-            <div className="flex min-w-0 items-center gap-2 border-l border-slate-200 pl-3" title={user?.email}>
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">{initials}</span>
-              <span className="hidden min-w-0 2xl:block">
-                <span className="block max-w-32 truncate text-xs font-semibold text-slate-700">{user?.name}</span>
-                <span className="block text-[10px] text-slate-400">{user?.role.toLowerCase().replace('_', ' ')}</span>
-              </span>
-            </div>
+            <div className="border-l border-slate-200 pl-3"><CompanyCornerPicker compact /></div>
           </div>
         </header>
 

@@ -87,7 +87,7 @@ export default function DashboardPage() {
   const insights = useMemo(() => calculateInsights(data), [data]);
 
   return (
-    <>
+    <div>
       <HeroHeader />
 
       {loading ? (
@@ -121,7 +121,7 @@ export default function DashboardPage() {
           </section>
         </>
       )}
-    </>
+    </div>
   );
 }
 
