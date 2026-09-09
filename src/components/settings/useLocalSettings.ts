@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { getActiveBusinessId } from '@/lib/api';
 
 /**
  * Persists a settings object to localStorage under the given key.
@@ -10,11 +11,15 @@ import { useEffect, useRef, useState } from 'react';
 export function useLocalSettings<T extends Record<string, unknown>>(key: string, defaults: T) {
   const [value, setValue] = useState<T>(defaults);
   const [loaded, setLoaded] = useState(false);
-  const storageKey = useRef(`imart:settings:${key}`).current;
+  const storageKey = useMemo(() => {
+    const businessId = typeof window === 'undefined' ? 'default' : getActiveBusinessId() ?? 'default';
+    return `imart:settings:${businessId}:${key}`;
+  }, [key]);
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(storageKey);
+      const legacyKey = `imart:settings:${key}`;
+      const stored = localStorage.getItem(storageKey) ?? localStorage.getItem(legacyKey);
       if (stored) setValue({ ...defaults, ...(JSON.parse(stored) as Partial<T>) });
     } catch {
       // ignore malformed local storage
@@ -25,8 +30,17 @@ export function useLocalSettings<T extends Record<string, unknown>>(key: string,
   }, [storageKey]);
 
   useEffect(() => {
+    function syncSettings(event: StorageEvent) {
+      if (event.key !== storageKey || !event.newValue) return;
+      try { setValue({ ...defaults, ...(JSON.parse(event.newValue) as Partial<T>) }); } catch { /* Ignore invalid external values. */ }
+    }
+    window.addEventListener('storage', syncSettings);
+    return () => window.removeEventListener('storage', syncSettings);
+  }, [defaults, storageKey]);
+
+  useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(storageKey, JSON.stringify(value));
+    try { localStorage.setItem(storageKey, JSON.stringify(value)); } catch { /* Storage may be unavailable or full. */ }
   }, [loaded, storageKey, value]);
 
   function update<K extends keyof T>(field: K, fieldValue: T[K]) {

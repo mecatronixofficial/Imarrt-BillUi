@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowUpRight,
+  CalendarDays,
+  CheckCircle2,
   FileText,
   Filter,
   IndianRupee,
@@ -24,6 +26,9 @@ import { DOCUMENT_CONFIG, DOCUMENT_STATUS_OPTIONS, DOCUMENT_TYPES } from '@/lib/
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { BusinessDocument, BusinessDocumentStatus, BusinessDocumentType } from '@/types';
 
+type DateFilter = 'ALL' | '30_DAYS' | 'THIS_YEAR';
+type SortOption = 'NEWEST' | 'OLDEST' | 'VALUE_HIGH' | 'VALUE_LOW';
+
 const TYPE_ICONS = {
   QUOTATION: FileText,
   PROFORMA_INVOICE: ReceiptText,
@@ -38,6 +43,8 @@ export default function DocumentsPage() {
   const [type, setType] = useState<'ALL' | BusinessDocumentType>('ALL');
   const [status, setStatus] = useState<'ALL' | BusinessDocumentStatus>('ALL');
   const [query, setQuery] = useState('');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('ALL');
+  const [sort, setSort] = useState<SortOption>('NEWEST');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -76,26 +83,33 @@ export default function DocumentsPage() {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
     return documents.filter((document) => {
       if (type !== 'ALL' && document.type !== type) return false;
       if (status !== 'ALL' && document.status !== status) return false;
+      const issuedAt = new Date(document.issueDate);
+      if (dateFilter === '30_DAYS' && issuedAt < thirtyDaysAgo) return false;
+      if (dateFilter === 'THIS_YEAR' && issuedAt < startOfYear) return false;
       if (!term) return true;
-      return [document.documentNumber, document.party?.name, document.supplier?.name, DOCUMENT_CONFIG[document.type].label]
+      return [document.documentNumber, document.party?.name, document.supplier?.name, document.referenceNumber, DOCUMENT_CONFIG[document.type].label]
         .some((value) => value?.toLowerCase().includes(term));
-    });
-  }, [documents, query, status, type]);
+    }).sort((a, b) => sort === 'OLDEST' ? new Date(a.issueDate).getTime() - new Date(b.issueDate).getTime() : sort === 'VALUE_HIGH' ? Number(b.grandTotal) - Number(a.grandTotal) : sort === 'VALUE_LOW' ? Number(a.grandTotal) - Number(b.grandTotal) : new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime());
+  }, [dateFilter, documents, query, sort, status, type]);
 
   const summary = useMemo(() => ({
     total: documents.length,
     drafts: documents.filter((document) => document.status === 'DRAFT').length,
-    active: documents.filter((document) => document.status === 'ISSUED' || document.status === 'ACCEPTED').length,
+    accepted: documents.filter((document) => document.status === 'ACCEPTED').length,
     value: documents.reduce((total, document) => total + (Number(document.grandTotal) || 0), 0),
   }), [documents]);
 
-  const hasFilters = type !== 'ALL' || status !== 'ALL' || query.trim().length > 0;
+  const hasFilters = type !== 'ALL' || status !== 'ALL' || dateFilter !== 'ALL' || query.trim().length > 0;
   function clearFilters() {
     setType('ALL');
     setStatus('ALL');
+    setDateFilter('ALL');
     setQuery('');
   }
 
@@ -116,7 +130,7 @@ export default function DocumentsPage() {
                   const config = DOCUMENT_CONFIG[documentType];
                   const Icon = TYPE_ICONS[documentType];
                   return (
-                    <Link key={documentType} href={`/documents/new?type=${documentType}`} className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition hover:bg-slate-50" onClick={() => setShowCreateMenu(false)}>
+                    <Link key={documentType} href={config.createPath} className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition hover:bg-slate-50" onClick={() => setShowCreateMenu(false)}>
                       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${config.soft} ${config.accent}`}><Icon size={17} /></span>
                       <span className="min-w-0"><span className="block text-xs font-bold text-slate-800">{config.label}</span><span className="mt-0.5 block truncate text-[10px] text-slate-500">{config.description}</span></span>
                     </Link>
@@ -137,10 +151,10 @@ export default function DocumentsPage() {
           <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Drafts</p><p className="mt-1 text-xl font-extrabold text-slate-950">{summary.drafts}</p></div>
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><ReceiptText aria-hidden="true" size={19} /></span>
         </button>
-        <div className="card flex items-center justify-between gap-3 p-3.5">
-          <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Issued / accepted</p><p className="mt-1 text-xl font-extrabold text-slate-950">{summary.active}</p></div>
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><ArrowUpRight aria-hidden="true" size={19} /></span>
-        </div>
+        <button type="button" onClick={() => setStatus(status === 'ACCEPTED' ? 'ALL' : 'ACCEPTED')} className={`card flex items-center justify-between gap-3 p-3.5 text-left transition hover:border-emerald-200 ${status === 'ACCEPTED' ? 'ring-2 ring-emerald-100' : ''}`}>
+          <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Accepted</p><p className="mt-1 text-xl font-extrabold text-slate-950">{summary.accepted}</p></div>
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><CheckCircle2 aria-hidden="true" size={19} /></span>
+        </button>
         <div className="card flex items-center justify-between gap-3 p-3.5">
           <div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Document value</p><p className="mt-1 truncate text-xl font-extrabold text-slate-950">{formatCurrency(summary.value)}</p></div>
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-700"><IndianRupee aria-hidden="true" size={19} /></span>
@@ -186,6 +200,11 @@ export default function DocumentsPage() {
                 {DOCUMENT_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </div>
+            <div className="relative sm:w-40">
+              <CalendarDays aria-hidden="true" size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <select aria-label="Filter by date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilter)} className="input-field pl-8"><option value="ALL">Any date</option><option value="30_DAYS">Last 30 days</option><option value="THIS_YEAR">This year</option></select>
+            </div>
+            <select aria-label="Sort documents" value={sort} onChange={(event) => setSort(event.target.value as SortOption)} className="input-field sm:w-40"><option value="NEWEST">Newest first</option><option value="OLDEST">Oldest first</option><option value="VALUE_HIGH">Value: high to low</option><option value="VALUE_LOW">Value: low to high</option></select>
             {hasFilters && <button type="button" onClick={clearFilters} className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"><X aria-hidden="true" size={14} />Clear</button>}
           </div>
         </div>
@@ -198,10 +217,10 @@ export default function DocumentsPage() {
           <EmptyState icon={FileText} title="No documents found" description={documents.length ? 'Try changing your filters or search.' : 'Create a quotation, purchase invoice, challan, or adjustment note.'} />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1040px] text-sm">
               <caption className="sr-only">Business document register</caption>
               <thead className="bg-slate-50/80 text-left text-[10px] uppercase tracking-wider text-slate-400">
-                <tr><th className="px-5 py-3 font-semibold">Document</th><th className="px-5 py-3 font-semibold">Party / Supplier</th><th className="px-5 py-3 font-semibold">Issue date</th><th className="px-5 py-3 font-semibold">Status</th><th className="px-5 py-3 text-right font-semibold">Total</th><th className="w-12" /></tr>
+                <tr><th className="px-5 py-3 font-semibold">Document</th><th className="px-5 py-3 font-semibold">Party / Supplier</th><th className="px-5 py-3 font-semibold">Issue date</th><th className="px-5 py-3 font-semibold">Reference</th><th className="px-5 py-3 font-semibold">Status</th><th className="px-5 py-3 text-right font-semibold">Total</th><th className="w-12" /></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((document) => {
@@ -212,6 +231,7 @@ export default function DocumentsPage() {
                       <td className="px-5 py-3.5"><Link href={`/documents/${document.id}`} className="flex items-center gap-3"><span className={`flex h-9 w-9 items-center justify-center rounded-lg ${config.soft} ${config.accent}`}><Icon size={16} /></span><span><span className="block font-bold text-slate-800 group-hover:text-blue-700">{document.documentNumber}</span><span className="mt-0.5 block text-[10px] font-medium text-slate-400">{config.label}</span></span></Link></td>
                       <td className="px-5 py-3.5"><p className="font-semibold text-slate-700">{document.party?.name || document.supplier?.name || '\u2014'}</p><p className="mt-0.5 text-[10px] text-slate-400">{document.supplier ? 'Supplier' : document.party ? 'Party' : 'Not assigned'}</p></td>
                       <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{formatDate(document.issueDate)}</td>
+                      <td className="max-w-44 truncate px-5 py-3.5 text-slate-500" title={document.referenceNumber || undefined}>{document.referenceNumber || '—'}</td>
                       <td className="px-5 py-3.5"><StatusBadge status={document.status} /></td>
                       <td className="whitespace-nowrap px-5 py-3.5 text-right font-bold text-slate-900">{formatCurrency(document.grandTotal)}</td>
                       <td className="pr-4 text-right"><Link href={`/documents/${document.id}`} aria-label={`Open ${document.documentNumber}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"><ArrowUpRight size={15} /></Link></td>

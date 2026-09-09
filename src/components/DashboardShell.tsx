@@ -3,28 +3,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Menu, PanelLeftOpen, Plus, ReceiptText } from 'lucide-react';
+import { ChevronRight, Menu, PanelLeftOpen, Plus, ReceiptText } from 'lucide-react';
 import { getCurrentUser } from '@/lib/api';
 import type { SessionUser } from '@/lib/api';
 import Sidebar from './Sidebar';
 import CommandMenu from './CommandMenu';
 import CompanyCornerPicker from './CompanyCornerPicker';
 
-const PAGE_TITLES: Record<string, string> = {
-  dashboard: 'Dashboard',
-  parties: 'Parties',
-  items: 'Items',
-  invoices: 'Invoices',
-  sales: 'Sales',
-  purchases: 'Purchases',
-  documents: 'Documents',
-  production: 'Production',
-  reports: 'Reports',
-  settings: 'Settings',
-  security: 'Security',
-  team: 'Team',
-  businesses: 'Businesses',
-  'cash-banks': 'Cash & Banks',
+const PAGE_META: Record<string, { title: string; section: string }> = {
+  '/dashboard': { title: 'Dashboard', section: 'Overview' },
+  '/parties': { title: 'Parties', section: 'Sales' },
+  '/items': { title: 'Items', section: 'Inventory' },
+  '/invoices/new': { title: 'New invoice', section: 'Sales' },
+  '/invoices': { title: 'Invoices', section: 'Sales' },
+  '/sales/payment-in': { title: 'Payment in', section: 'Sales' },
+  '/sales': { title: 'Sales', section: 'Sales' },
+  '/purchases/payment-out': { title: 'Payment out', section: 'Purchases' },
+  '/purchases': { title: 'Purchases', section: 'Purchases' },
+  '/documents': { title: 'Documents', section: 'Transactions' },
+  '/production': { title: 'Production', section: 'Operations' },
+  '/reports': { title: 'Reports', section: 'Analytics' },
+  '/settings': { title: 'Settings', section: 'Administration' },
+  '/security': { title: 'Security', section: 'Administration' },
+  '/team': { title: 'Team', section: 'Administration' },
+  '/businesses': { title: 'Companies & branches', section: 'Workspace' },
+  '/cash-banks': { title: 'Cash & Banks', section: 'Finance' },
 };
 
 export default function DashboardShell({ children, contentClassName = '' }: { children: React.ReactNode; contentClassName?: string }) {
@@ -34,9 +37,11 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
   const [checked, setChecked] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(false);
-  const pageTitle = useMemo(() => {
+  const pageMeta = useMemo(() => {
+    const match = Object.keys(PAGE_META).sort((a, b) => b.length - a.length).find((route) => pathname === route || pathname.startsWith(`${route}/`));
+    if (match) return PAGE_META[match];
     const section = pathname.split('/').filter(Boolean)[0] ?? 'dashboard';
-    return PAGE_TITLES[section] ?? section.replaceAll('-', ' ');
+    return { title: section.replaceAll('-', ' '), section: 'Workspace' };
   }, [pathname]);
 
   useEffect(() => {
@@ -73,6 +78,10 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
       document.body.style.overflow = '';
     };
   }, [menuOpen]);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const hideSidebar = useCallback(() => {
@@ -118,14 +127,14 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
       )}
 
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl sm:px-5 lg:hidden">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-slate-200/80 bg-white/90 px-3 backdrop-blur-xl sm:px-5 lg:hidden">
           <div className="flex items-center gap-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-md shadow-blue-200">
               <ReceiptText aria-hidden="true" size={17} />
             </span>
-            <span className="text-sm font-extrabold tracking-tight text-slate-900">iMart Billing</span>
+            <span className="hidden text-sm font-extrabold tracking-tight text-slate-900 min-[380px]:inline">iMart Billing</span>
           </div>
-          <button
+          <div className="flex items-center gap-2"><CommandMenu compact /><Link href="/invoices/new" className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm transition hover:bg-blue-700" aria-label="Create invoice"><Plus aria-hidden="true" size={17} /></Link><button
             type="button"
             onClick={() => setMenuOpen(true)}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -133,13 +142,13 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
             aria-expanded={menuOpen}
           >
             <Menu aria-hidden="true" size={20} />
-          </button>
+          </button></div>
         </header>
 
         <header className="sticky top-0 z-30 hidden h-14 items-center justify-between gap-5 border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur-xl lg:flex">
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold capitalize text-slate-900">{pageTitle}</p>
-            <p className="text-[10px] font-medium text-slate-400">iMart workspace</p>
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400"><span>{pageMeta.section}</span><ChevronRight aria-hidden="true" size={11} /><span className="truncate text-slate-500">{pageMeta.title}</span></div>
+            <p className="mt-0.5 truncate text-sm font-extrabold capitalize text-slate-900">{pageMeta.title}</p>
           </div>
           <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
             <CommandMenu />

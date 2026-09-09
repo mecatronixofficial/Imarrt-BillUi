@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   ArrowRight,
   Boxes,
@@ -52,6 +53,7 @@ const COST_CATEGORIES: ProductionCostCategory[] = [
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
 
 export default function ProductionPage() {
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -77,13 +79,14 @@ export default function ProductionPage() {
       setOrders(production);
       setParties(partyData);
       setSuppliers(supplierData);
-      setSelectedId((current) => production.some(({ id }) => id === current) ? current : production[0]?.id ?? '');
+      const requestedOrderId = searchParams.get('orderId');
+      setSelectedId((current) => requestedOrderId && production.some(({ id }) => id === requestedOrderId) ? requestedOrderId : production.some(({ id }) => id === current) ? current : production[0]?.id ?? '');
     } catch (loadError: unknown) {
       setError(getApiError(loadError, 'Could not load production workspace.'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     void loadData();

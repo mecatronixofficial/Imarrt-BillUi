@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 type ModalProps = {
@@ -16,6 +17,12 @@ export default function Modal({ title, children, onClose, size = 'md', className
   const titleId = useId();
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -56,7 +63,9 @@ export default function Modal({ title, children, onClose, size = 'md', className
     };
   }, [initialFocusRef]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div className={`fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/55 backdrop-blur-sm ${size === 'full' ? 'p-0' : 'px-4 py-5'}`} onMouseDown={onClose}>
       <section
         ref={dialogRef}
@@ -74,6 +83,7 @@ export default function Modal({ title, children, onClose, size = 'md', className
         </div>
         <div className={size === 'full' ? 'mx-auto max-w-6xl' : ''}>{children}</div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

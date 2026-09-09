@@ -6,6 +6,8 @@ export type DocumentConfig = {
   plural: string;
   shortLabel: string;
   description: string;
+  createPath: string;
+  registerPath: string;
   accent: string;
   soft: string;
   border: string;
@@ -15,31 +17,37 @@ export const DOCUMENT_CONFIG: Record<BusinessDocumentType, DocumentConfig> = {
   QUOTATION: {
     type: 'QUOTATION', label: 'Quotation', plural: 'Quotations', shortLabel: 'Quote',
     description: 'Send a professional price proposal before the sale is confirmed.',
+    createPath: '/sales/quotations/new', registerPath: '/sales/quotations',
     accent: 'text-blue-700', soft: 'bg-blue-50', border: 'border-blue-200',
   },
   PROFORMA_INVOICE: {
     type: 'PROFORMA_INVOICE', label: 'Proforma invoice', plural: 'Proforma invoices', shortLabel: 'Proforma',
     description: 'Request approval or advance payment before issuing the final invoice.',
+    createPath: '/sales/proforma/new', registerPath: '/sales/proforma',
     accent: 'text-indigo-700', soft: 'bg-indigo-50', border: 'border-indigo-200',
   },
   PURCHASE_INVOICE: {
     type: 'PURCHASE_INVOICE', label: 'Purchase invoice', plural: 'Purchase invoices', shortLabel: 'Purchase',
     description: 'Record supplier bills, input tax, purchase cost, and incoming stock.',
+    createPath: '/purchases/bills/new', registerPath: '/purchases/bills',
     accent: 'text-violet-700', soft: 'bg-violet-50', border: 'border-violet-200',
   },
   DELIVERY_CHALLAN: {
     type: 'DELIVERY_CHALLAN', label: 'Delivery challan', plural: 'Delivery challans', shortLabel: 'Challan',
     description: 'Track goods dispatched for delivery, job work, samples, or transfer.',
+    createPath: '/sales/delivery-challans/new', registerPath: '/sales/delivery-challans',
     accent: 'text-cyan-700', soft: 'bg-cyan-50', border: 'border-cyan-200',
   },
   CREDIT_NOTE: {
     type: 'CREDIT_NOTE', label: 'Credit note', plural: 'Credit notes', shortLabel: 'Credit note',
     description: 'Reduce an invoice for returns, discounts, or billing corrections.',
+    createPath: '/sales/returns/new', registerPath: '/sales/returns',
     accent: 'text-emerald-700', soft: 'bg-emerald-50', border: 'border-emerald-200',
   },
   DEBIT_NOTE: {
     type: 'DEBIT_NOTE', label: 'Debit note', plural: 'Debit notes', shortLabel: 'Debit note',
     description: 'Record an additional charge or adjustment against an invoice.',
+    createPath: '/purchases/returns/new', registerPath: '/purchases/returns',
     accent: 'text-amber-700', soft: 'bg-amber-50', border: 'border-amber-200',
   },
 };

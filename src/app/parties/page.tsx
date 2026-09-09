@@ -20,15 +20,14 @@ import {
   Settings,
   UserRound,
   Users,
-  X,
 } from 'lucide-react';
 import Modal from '@/components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
 import { api, getAllPages, getApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Party, PartyLedger, PartyTransaction } from '@/types';
-import NewInvoicePage from '@/app/invoices/new/page';
-import NewDocumentPage from '@/app/documents/new/page';
+import InvoiceModal from '@/components/invoices/InvoiceModal';
+import DocumentModal from '@/components/documents/DocumentModal';
 import { EmbeddedFormProvider } from '@/components/EmbeddedFormContext';
 
 const GST_TYPE_LABELS: Record<NonNullable<Party['gstType']>, string> = {
@@ -178,17 +177,7 @@ export default function PartiesPage() {
           </div>
         </header>
 
-        {activeForm ? <section className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-5">
-          <div className="mx-auto max-w-6xl">
-            <div className="mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
-              <div><h2 className="text-base font-bold text-slate-900">{activeForm === 'sale' ? 'Add Sale' : 'Add Expense'}</h2><p className="text-xs text-slate-500">{selectedParty ? `For ${selectedParty.name}` : 'Select the party or supplier in the form'}</p></div>
-              <button type="button" onClick={() => setActiveForm(null)} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" aria-label="Close form"><X size={18} /></button>
-            </div>
-            <EmbeddedFormProvider value={{ embedded: true, initialPartyId: selectedParty?.id, initialType: activeForm === 'expense' ? 'PURCHASE_INVOICE' : undefined }}>
-              {activeForm === 'sale' ? <NewInvoicePage /> : <NewDocumentPage />}
-            </EmbeddedFormProvider>
-          </div>
-        </section> : <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+        <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
           <PartyRegisterTable parties={filteredParties} selectedId={selectedPartyId} search={search} onSearch={setSearch} onSelect={setSelectedPartyId} loading={loading} error={error} onRetry={() => loadParties()} />
           <aside className="hidden">
             <div className="p-3">
@@ -232,8 +221,18 @@ export default function PartiesPage() {
               </section>
             </>}
           </main>
-        </section>}
+        </section>
       </div>
+
+      {activeForm && (
+        <EmbeddedFormProvider value={{ initialPartyId: selectedParty?.id }}>
+          {activeForm === 'sale' ? (
+            <InvoiceModal onClose={() => setActiveForm(null)} />
+          ) : (
+            <DocumentModal type="PURCHASE_INVOICE" onClose={() => setActiveForm(null)} />
+          )}
+        </EmbeddedFormProvider>
+      )}
 
       {showForm && (
         <PartyFormModal
@@ -299,6 +298,9 @@ function createForm(party: Party | null): PartyFormState {
 function PartyFormModal({ party, initialTab, onClose, onSaved }: { party: Party | null; initialTab: 'profile' | 'credit'; onClose: () => void; onSaved: (party: Party) => void }) {
   const [tab, setTab] = useState(initialTab);
   const [form, setForm] = useState<PartyFormState>(() => createForm(party));
+  const [hasDifferentWhatsApp, setHasDifferentWhatsApp] = useState(
+    () => Boolean(party?.whatsappNumber && party.whatsappNumber.trim() !== (party.phone ?? '').trim()),
+  );
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const registered = isRegisteredGstType(form.gstType);
@@ -317,7 +319,8 @@ function PartyFormModal({ party, initialTab, onClose, onSaved }: { party: Party 
       const payload = {
         ...form,
         name: form.name.trim(), email: form.email.trim().toLowerCase() || undefined,
-        phone: form.phone.trim() || undefined, whatsappNumber: form.whatsappNumber.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+        whatsappNumber: (hasDifferentWhatsApp ? form.whatsappNumber : form.phone).trim() || undefined,
         gstin: registered ? form.gstin.trim().toUpperCase() : undefined, billingAddr: form.billingAddr.trim() || undefined,
         shippingAddr: form.shippingAddr.trim() || undefined, notes: form.notes.trim() || undefined,
         creditLimit: Math.max(0, Number(form.creditLimit) || 0), openingBalance: Math.max(0, Number(form.openingBalance) || 0),
@@ -338,8 +341,8 @@ function PartyFormModal({ party, initialTab, onClose, onSaved }: { party: Party 
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div><label htmlFor="party-name" className="label">Party name *</label><input id="party-name" required autoFocus className="input-field" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Business or customer name" /></div>
-          <div><label htmlFor="party-phone" className="label">Phone number</label><input id="party-phone" type="tel" autoComplete="tel" className="input-field" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
-          <div><label htmlFor="party-whatsapp" className="label">WhatsApp number</label><input id="party-whatsapp" type="tel" className="input-field" value={form.whatsappNumber} onChange={(event) => setForm({ ...form, whatsappNumber: event.target.value })} placeholder="Country code" /></div>
+          <div><label htmlFor="party-phone" className="label">Phone number</label><input id="party-phone" type="tel" autoComplete="tel" className="input-field" value={form.phone} onChange={(event) => { const phone = event.target.value; setForm({ ...form, phone, whatsappNumber: hasDifferentWhatsApp ? form.whatsappNumber : phone }); }} /></div>
+          <div><label htmlFor="party-whatsapp" className="label">WhatsApp number</label><input id="party-whatsapp" type="tel" autoComplete="tel" disabled={!hasDifferentWhatsApp} className="input-field disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" value={hasDifferentWhatsApp ? form.whatsappNumber : form.phone} onChange={(event) => setForm({ ...form, whatsappNumber: event.target.value })} placeholder={hasDifferentWhatsApp ? 'Enter WhatsApp number' : 'Same as phone number'} /><label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[10px] font-semibold text-slate-600"><input type="checkbox" checked={hasDifferentWhatsApp} onChange={(event) => { const different = event.target.checked; setHasDifferentWhatsApp(different); setForm({ ...form, whatsappNumber: different ? (form.whatsappNumber === form.phone ? '' : form.whatsappNumber) : form.phone }); }} /><span>WhatsApp number is different</span></label></div>
           <div><label htmlFor="party-email" className="label">Email</label><input id="party-email" type="email" autoComplete="email" className="input-field" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>
           <label className="flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[10px] leading-4 text-emerald-800 md:col-span-2 xl:col-span-4"><input type="checkbox" className="mt-0.5" checked={form.whatsappOptIn} onChange={(event) => setForm({ ...form, whatsappOptIn: event.target.checked })} /><span><strong>WhatsApp consent recorded.</strong> Required for automatic delivery.</span></label>
         </div>

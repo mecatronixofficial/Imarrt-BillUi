@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Building2, Check, FileCheck2, MapPin, Plus, ReceiptText } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { Building2, Check, FileCheck2, GitBranch, LayoutDashboard, MapPin, Plus, ReceiptText, ShieldCheck, Users } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import Modal from '@/components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
@@ -26,7 +27,9 @@ export default function BusinessesPage() {
   const [showForm, setShowForm] = useState(false);
   const [showBranchForm, setShowBranchForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [switching, setSwitching] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   const loadBusinesses = useCallback(async () => {
     setLoading(true);
@@ -60,25 +63,48 @@ export default function BusinessesPage() {
     void loadBusinesses();
   }, [loadBusinesses]);
 
-  function selectBusiness(businessId: string) {
+  const activeBusiness = useMemo(() => businesses.find(({ id }) => id === activeId), [businesses, activeId]);
+  const totals = useMemo(() => ({
+    branches: businesses.reduce((sum, business) => sum + (business._count?.branches ?? 0), 0),
+    invoices: businesses.reduce((sum, business) => sum + (business._count?.invoices ?? 0), 0),
+    members: businesses.reduce((sum, business) => sum + (business._count?.members ?? 0), 0),
+  }), [businesses]);
+
+  async function selectBusiness(businessId: string) {
+    if (businessId === activeId || switching) return;
+    setSwitching(true);
+    setError('');
+    setNotice('');
     setActiveBusinessId(businessId);
-    window.location.href = '/dashboard';
+    setActiveId(businessId);
+    try {
+      const { data } = await getAllPages<Branch>('/branches');
+      setBranches(data);
+      const selected = data.find(({ isActive }) => isActive)?.id ?? '';
+      if (selected) setActiveBranchId(selected, businessId);
+      setSelectedBranchId(selected);
+      setNotice('Company selected. Choose a branch or open the dashboard.');
+    } catch (switchError) {
+      setError(getApiError(switchError, 'Could not load branches for this company.'));
+    } finally {
+      setSwitching(false);
+    }
   }
 
   function selectBranch(branchId: string) {
     setActiveBranchId(branchId, activeId);
     setSelectedBranchId(branchId);
-    window.location.href = '/dashboard';
+    setNotice(branchId === 'all' ? 'All-branches reporting view selected.' : 'Branch selected successfully.');
   }
 
   return (
     <>
       <PageHeader
-        title="Company & branches"
-        description="Parties and items are shared company-wide. Transactions, production, and reports follow the selected branch."
+        title="Companies & branches"
+        description="Choose the workspace where billing, inventory, production, and reports should operate."
         action={canCreate ? (
-          <button type="button" onClick={() => businesses.length ? setShowBranchForm(true) : setShowForm(true)} className="btn-primary inline-flex items-center gap-2">
-            <Plus aria-hidden="true" size={16} /> {businesses.length ? 'Add branch' : 'Add company'}
+          <button type="button" onClick={() => setShowForm(true)} className="btn-primary inline-flex items-center gap-2">
+            <Plus aria-hidden="true" size={16} /> Add company
           </button>
         ) : undefined}
       />
@@ -99,15 +125,25 @@ export default function BusinessesPage() {
           )}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-5">
+          {notice && <div role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700"><Check aria-hidden="true" size={15} />{notice}</div>}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric icon={Building2} label="Companies" value={businesses.length} tone="blue" />
+            <Metric icon={GitBranch} label="Branches" value={totals.branches || branches.length} tone="violet" />
+            <Metric icon={ReceiptText} label="Invoices" value={totals.invoices} tone="amber" />
+            <Metric icon={Users} label="Team members" value={totals.members} tone="emerald" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {businesses.map((business) => {
             const active = business.id === activeId;
             return (
               <button
                 type="button"
                 key={business.id}
-                onClick={() => selectBusiness(business.id)}
-                className={`card group relative p-5 text-left transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md ${active ? 'border-blue-300 ring-2 ring-blue-100' : ''}`}
+                disabled={switching}
+                aria-pressed={active}
+                onClick={() => void selectBusiness(business.id)}
+                className={`card group relative p-5 text-left transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md disabled:cursor-wait ${active ? 'border-blue-300 ring-2 ring-blue-100' : ''}`}
               >
                 {active && (
                   <span className="absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white">
@@ -128,20 +164,26 @@ export default function BusinessesPage() {
               </button>
             );
           })}
+          </div>
         </div>
       )}
 
       {!loading && !error && businesses.length > 0 && (
-        <section className="mt-6">
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div><h2 className="text-base font-bold text-slate-900">Branches</h2><p className="mt-0.5 text-xs text-slate-500">Choose where operational records should be created and reported.</p></div>
-            <button type="button" onClick={() => selectBranch('all')} className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${activeBranchId === 'all' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>All branches view</button>
+        <section className="card mt-6 overflow-hidden">
+          <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0"><div className="flex items-center gap-2"><h2 className="truncate text-lg font-extrabold text-slate-950">{activeBusiness?.name}</h2><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${activeBusiness?.gstRegistered ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700'}`}>{activeBusiness?.gstRegistered ? 'GST registered' : 'Non-GST'}</span></div><p className="mt-1 text-xs text-slate-500">{activeBusiness?.legalName || activeBusiness?.address || 'Company workspace'}</p></div>
+            <div className="flex shrink-0 flex-wrap gap-2">{canCreate && <button type="button" onClick={() => setShowBranchForm(true)} className="btn-secondary inline-flex items-center gap-2 text-xs"><Plus aria-hidden="true" size={14} />Add branch</button>}<Link href="/dashboard" className="btn-primary inline-flex items-center gap-2 text-xs"><LayoutDashboard aria-hidden="true" size={14} />Open dashboard</Link></div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 border-b border-slate-100 bg-slate-50/60 px-5 py-4 sm:grid-cols-3"><CompanyFact label="GSTIN" value={activeBusiness?.gstin || 'Not applicable'} /><CompanyFact label="Contact" value={activeBusiness?.phone || activeBusiness?.email || 'Not provided'} /><CompanyFact label="Status" value={activeBusiness?.isActive ? 'Active workspace' : 'Inactive'} /></div>
+          <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div><h3 className="text-sm font-extrabold text-slate-900">Branches</h3><p className="mt-1 text-xs text-slate-500">Choose where operational records should be created and reported.</p></div>
+            <button type="button" onClick={() => selectBranch('all')} aria-pressed={activeBranchId === 'all'} className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${activeBranchId === 'all' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>All branches view</button>
+          </div>
+          <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2 xl:grid-cols-3">
             {branches.map((branch) => {
               const active = branch.id === activeBranchId;
               return (
-                <button key={branch.id} type="button" disabled={!branch.isActive} onClick={() => selectBranch(branch.id)} className={`card flex items-start gap-3 p-4 text-left transition hover:border-blue-200 ${active ? 'border-blue-300 ring-2 ring-blue-100' : ''} disabled:cursor-not-allowed disabled:opacity-60`}>
+                <button key={branch.id} type="button" disabled={!branch.isActive} aria-pressed={active} onClick={() => selectBranch(branch.id)} className={`rounded-xl border bg-white flex items-start gap-3 p-4 text-left transition hover:border-blue-200 ${active ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200'} disabled:cursor-not-allowed disabled:opacity-60`}>
                   <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${active ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}><MapPin aria-hidden="true" size={18} /></span>
                   <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-bold text-slate-900">{branch.name}</span><span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">{branch.code}</span></span><span className="mt-1 block truncate text-xs text-slate-500">{branch.address || 'No branch address'}</span>{branch._count && <span className="mt-2 block text-[10px] text-slate-400">{branch._count.invoices} invoices · {branch._count.documents} documents · {branch._count.productionOrders} production orders</span>}</span>
                   {active && <Check aria-hidden="true" size={16} className="shrink-0 text-blue-600" />}
@@ -151,6 +193,8 @@ export default function BusinessesPage() {
           </div>
         </section>
       )}
+
+      {!loading && !error && businesses.length > 0 && <div className="mt-4 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-xs leading-5 text-blue-800"><ShieldCheck aria-hidden="true" size={17} className="mt-0.5 shrink-0" /><p><strong>Workspace separation:</strong> parties and items stay shared company-wide, while invoices, documents, production, and reports follow the selected branch.</p></div>}
 
       {showForm && (
         <BusinessFormModal
@@ -175,6 +219,15 @@ export default function BusinessesPage() {
       )}
     </>
   );
+}
+
+function Metric({ icon: Icon, label, value, tone }: { icon: typeof Building2; label: string; value: number; tone: 'blue' | 'violet' | 'amber' | 'emerald' }) {
+  const colors = { blue: 'bg-blue-50 text-blue-600', violet: 'bg-violet-50 text-violet-600', amber: 'bg-amber-50 text-amber-600', emerald: 'bg-emerald-50 text-emerald-600' };
+  return <div className="card p-4"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${colors[tone]}`}><Icon aria-hidden="true" size={18} /></span><p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-1 text-xl font-extrabold text-slate-950">{value.toLocaleString('en-IN')}</p></div>;
+}
+
+function CompanyFact({ label, value }: { label: string; value: string }) {
+  return <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-1 truncate text-xs font-bold text-slate-700" title={value}>{value}</p></div>;
 }
 
 function BusinessFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: (business: Business) => void }) {
@@ -235,7 +288,7 @@ function BusinessFormModal({ onClose, onSaved }: { onClose: () => void; onSaved:
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_90px]">
             <div>
               <label htmlFor="business-gstin" className="label">GSTIN *</label>
-              <input id="business-gstin" required minLength={15} maxLength={15} className="input-field uppercase" value={form.gstin} onChange={(event) => setForm({ ...form, gstin: event.target.value })} placeholder="22AAAAA0000A1Z5" />
+              <input id="business-gstin" required minLength={15} maxLength={15} pattern="[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]" className="input-field uppercase" value={form.gstin} onChange={(event) => { const gstin = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); setForm({ ...form, gstin, stateCode: gstin.length >= 2 && /^\d{2}/.test(gstin) ? gstin.slice(0, 2) : form.stateCode }); }} placeholder="22AAAAA0000A1Z5" />
             </div>
             <div>
               <label htmlFor="business-state" className="label">State code</label>

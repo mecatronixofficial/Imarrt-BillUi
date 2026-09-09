@@ -1,5 +1,5 @@
-import ProductionCostRegister from '@/components/purchases/ProductionCostRegister';
+import PaymentOutRegister from '@/components/purchases/PaymentOutRegister';
 
 export default function PaymentOutPage() {
-  return <ProductionCostRegister mode="payment-out" />;
+  return <PaymentOutRegister />;
 }

@@ -21,7 +21,25 @@ const pageCache = new Map<string, { expiresAt: number; response: AxiosResponse<u
 const pageRequests = new Map<string, Promise<AxiosResponse<unknown[]>>>();
 let pageCacheVersion = 0;
 
+/**
+ * Parties and items are workspace-wide master data shared by every company.
+ * A party ledger is deliberately excluded because its transactions belong to
+ * the currently selected company and branch.
+ */
+function isSharedMasterRequest(url: string) {
+  const path = url.split('?')[0];
+  if (path === '/items' || path.startsWith('/items/')) return true;
+  if (path === '/parties') return true;
+  return /^\/parties\/[^/]+$/.test(path);
+}
+
 function getPageCacheKey(url: string, config: AxiosRequestConfig) {
+  if (isSharedMasterRequest(url)) {
+    // Party totals are calculated from the active company's transactions, so
+    // master records are shared but each company's derived view is cached apart.
+    const businessId = typeof window === 'undefined' ? '' : getActiveBusinessId() ?? '';
+    return `${businessId}:shared:${url}:${JSON.stringify(config.params ?? {})}`;
+  }
   const businessId = typeof window === 'undefined' ? '' : getActiveBusinessId() ?? '';
   const branchId = typeof window === 'undefined' ? '' : getActiveBranchId(businessId) ?? '';
   return `${businessId}:${branchId}:${url}:${JSON.stringify(config.params ?? {})}`;
@@ -112,6 +130,12 @@ let branchRequest: Promise<string | null> | null = null;
 const ACTIVE_BUSINESS_KEY = 'activeBusinessId';
 const ACTIVE_BRANCH_PREFIX = 'activeBranchId:';
 
+function getPageScopedBusinessId() {
+  if (typeof window === 'undefined') return null;
+  const isDocumentDetail = /^\/(invoices|documents)\/[^/]+\/?$/.test(window.location.pathname);
+  return isDocumentDetail ? new URLSearchParams(window.location.search).get('companyId') : null;
+}
+
 api.interceptors.request.use(async (config) => {
   if (typeof window === 'undefined') return config;
 
@@ -132,7 +156,8 @@ api.interceptors.request.use(async (config) => {
   const isUnscoped = url.startsWith('/auth/') || url === '/businesses' || url.startsWith('/businesses/');
   if (isUnscoped) return config;
 
-  let businessId = getActiveBusinessId();
+  const requestedBusinessId = config.headers.get('X-Business-Id')?.toString() || getPageScopedBusinessId() || undefined;
+  let businessId = requestedBusinessId || getActiveBusinessId();
   if (!businessId) {
     businessRequest ??= collectAllPages<Business>(refreshClient, '/businesses')
       .then(({ data }) => {
@@ -151,26 +176,38 @@ api.interceptors.request.use(async (config) => {
     throw new axios.Cancel('No business selected');
   }
 
+  // The API requires a business for authorization, even for shared masters.
+  // Send the company header but omit the branch header so these records remain
+  // common across the company's branches.
+  if (isSharedMasterRequest(url)) {
+    config.headers['X-Business-Id'] = businessId;
+    return config;
+  }
+
   const isCompanyScoped = url === '/branches' || url.startsWith('/branches/');
   if (isCompanyScoped) {
     config.headers['X-Business-Id'] = businessId;
     return config;
   }
 
-  let branchId = getActiveBranchId(businessId);
-  if (!branchId) {
-    branchRequest ??= collectAllPages<Branch>(refreshClient, '/branches', {
+  let branchId = config.headers.get('X-Branch-Id')?.toString() || getActiveBranchId(businessId);
+  if (!branchId || (requestedBusinessId && branchId === 'all')) {
+    const resolveBranch = () => collectAllPages<Branch>(refreshClient, '/branches', {
       headers: { 'X-Business-Id': businessId },
     })
       .then(({ data }) => {
         const firstBranch = data.find(({ isActive }) => isActive)?.id ?? null;
-        if (firstBranch) setActiveBranchId(firstBranch, businessId);
+        if (firstBranch && !requestedBusinessId) setActiveBranchId(firstBranch, businessId);
         return firstBranch;
-      })
-      .finally(() => {
+      });
+    if (requestedBusinessId) {
+      branchId = await resolveBranch();
+    } else {
+      branchRequest ??= resolveBranch().finally(() => {
         branchRequest = null;
       });
-    branchId = await branchRequest;
+      branchId = await branchRequest;
+    }
   }
 
   if (!branchId) {

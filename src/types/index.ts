@@ -140,6 +140,21 @@ export interface PaymentRecord {
   createdAt: string;
 }
 
+export interface PaymentInRecord extends PaymentRecord {
+  invoice: Pick<Invoice, 'id' | 'invoiceNumber' | 'grandTotal' | 'amountPaid'> & { party: Pick<Party, 'id' | 'name'> };
+}
+
+export interface ProductionPayment {
+  id: string;
+  costId: string;
+  amount: string;
+  method: string;
+  reference?: string;
+  paidAt: string;
+  createdAt: string;
+  cost: ProductionCost & { order: Pick<ProductionOrder, 'id' | 'orderNumber'> };
+}
+
 export type InvoiceDeliveryChannel = 'EMAIL' | 'WHATSAPP';
 export type InvoiceDeliveryStatus = 'PENDING' | 'SENT' | 'FAILED';
 

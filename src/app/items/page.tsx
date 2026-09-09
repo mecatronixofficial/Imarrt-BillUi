@@ -2,16 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowDownLeft, ArrowUpRight, Boxes, FileSpreadsheet, FileText, MoreVertical, Package, Pencil, Plus, Printer, Search, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Boxes, FileSpreadsheet, FileText, MoreVertical, Package, Pencil, Plus, Printer, Search } from 'lucide-react';
 import Modal from '@/components/Modal';
 import StatusBadge from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
 import { api, getAllPages, getApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { BusinessDocument, Invoice, Item } from '@/types';
-import NewInvoicePage from '@/app/invoices/new/page';
-import NewDocumentPage from '@/app/documents/new/page';
-import { EmbeddedFormProvider } from '@/components/EmbeddedFormContext';
+import InvoiceModal from '@/components/invoices/InvoiceModal';
+import DocumentModal from '@/components/documents/DocumentModal';
 
 type ItemTransaction = {
   id: string;
@@ -38,7 +37,7 @@ export default function ItemsPage() {
   const [transactionError, setTransactionError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
-  const [activeForm, setActiveForm] = useState<'sale' | 'purchase' | null>(null);
+  const [activeForm, setActiveForm] = useState<'sale' | 'expense' | null>(null);
   const sourcesRef = useRef<TransactionSources | null>(null);
 
   const loadItems = useCallback(async (preferredId?: string) => {
@@ -112,23 +111,13 @@ export default function ItemsPage() {
           <div><h1 className="text-xl font-extrabold tracking-tight text-slate-950">Items</h1><p className="text-[11px] text-slate-400">Inventory details and stock transactions</p></div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             <button type="button" onClick={() => setActiveForm('sale')} className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${activeForm === 'sale' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}><Plus size={15} />Add Sale</button>
-            <button type="button" onClick={() => setActiveForm('purchase')} className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${activeForm === 'purchase' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}><Plus size={15} />Add Purchase</button>
+            <button type="button" onClick={() => setActiveForm('expense')} className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${activeForm === 'expense' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}><Plus size={15} />Add Expense</button>
             <button type="button" onClick={openAddItem} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />Add Item</button>
             <button type="button" className="flex h-8 w-7 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" aria-label="More options"><MoreVertical size={18} /></button>
           </div>
         </header>
 
-        {activeForm ? <section className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-5">
-          <div className="mx-auto max-w-7xl">
-            <div className="mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
-              <div><h2 className="text-base font-bold text-slate-900">{activeForm === 'sale' ? 'Add Sale' : 'Add Purchase'}</h2><p className="text-xs text-slate-500">Complete the form without leaving Items</p></div>
-              <button type="button" onClick={() => setActiveForm(null)} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" aria-label="Close form"><X size={18} /></button>
-            </div>
-            <EmbeddedFormProvider value={{ embedded: true, initialType: activeForm === 'purchase' ? 'PURCHASE_INVOICE' : undefined }}>
-              {activeForm === 'sale' ? <NewInvoicePage /> : <NewDocumentPage />}
-            </EmbeddedFormProvider>
-          </div>
-        </section> : <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+        <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
           <ItemRegisterTable items={filteredItems} selectedId={selectedItemId} search={search} onSearch={setSearch} onSelect={setSelectedItemId} loading={loading} error={error} onRetry={() => loadItems()} />
 
           <main className="flex min-w-0 flex-col gap-3">
@@ -145,8 +134,11 @@ export default function ItemsPage() {
               </section>
             </>}
           </main>
-        </section>}
+        </section>
       </div>
+
+      {activeForm === 'sale' && <InvoiceModal onClose={() => setActiveForm(null)} />}
+      {activeForm === 'expense' && <DocumentModal type="PURCHASE_INVOICE" onClose={() => setActiveForm(null)} />}
 
       {showForm && <ItemFormModal item={editingItem} onClose={() => setShowForm(false)} onSaved={(savedItem) => { setShowForm(false); sourcesRef.current = null; void loadItems(savedItem.id); }} />}
     </>

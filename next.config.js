@@ -2,9 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  experimental: {
-    optimizePackageImports: ['lucide-react'],
-  },
+
   // Security headers at the edge, in addition to backend helmet()
   async headers() {
     return [
