@@ -33,6 +33,7 @@ next-env.d.ts
 .vercel/
 .turbo/
 .cache/
+.superdesign/tmp/
 
 # Editor and OS files
 .vscode/

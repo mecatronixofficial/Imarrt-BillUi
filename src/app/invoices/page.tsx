@@ -34,15 +34,69 @@ export default function InvoicesPage() {
 
   return (
     <>
-      <PageHeader
-        title="Sale Invoices"
-        description="Review customer sale invoices, payment status, and outstanding balances."
-        action={
-          <Link href="/invoices/new" className="btn-primary inline-flex items-center gap-2">
-            <Plus aria-hidden="true" size={16} /> Add sale invoice
-          </Link>
-        }
-      />
+     <div className="mb-5 overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-cyan-50 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+  <div className="relative flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+    {/* Background decoration */}
+    <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-blue-200/40 blur-3xl" />
+
+    <div className="pointer-events-none absolute -bottom-20 left-1/3 h-40 w-40 rounded-full bg-cyan-200/30 blur-3xl" />
+
+    {/* Left */}
+    <div className="relative">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="h-5 w-1 rounded-full bg-blue-600" />
+
+        <span className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-blue-600">
+          Sales Management
+        </span>
+      </div>
+
+      <h1 className="text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
+        Sale Invoices
+      </h1>
+
+      <p className="mt-1 max-w-2xl text-[11px] leading-5 text-slate-500">
+        Review customer sale invoices, payment status, and outstanding balances.
+      </p>
+    </div>
+
+    {/* Button */}
+    <div className="relative">
+      <Link
+        href="/invoices/new"
+        className="
+          group
+          inline-flex
+          h-10
+          items-center
+          gap-2
+          rounded-xl
+          bg-blue-600
+          px-4
+          text-[11px]
+          font-extrabold
+          text-white
+          shadow-[0_8px_20px_rgba(37,99,235,0.22)]
+          transition-all
+          duration-300
+          hover:-translate-y-0.5
+          hover:bg-blue-700
+          hover:shadow-[0_12px_26px_rgba(37,99,235,0.30)]
+        "
+      >
+        <Plus
+          size={15}
+          className="transition-transform duration-300 group-hover:rotate-90"
+        />
+
+        Add Sale Invoice
+      </Link>
+    </div>
+  </div>
+
+  <div className="h-[3px] bg-gradient-to-r from-blue-600 via-cyan-500 to-transparent" />
+</div>
+      
 
       <section className="card overflow-hidden">
         {loading ? (

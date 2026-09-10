@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "/sales": {
+      "targetKind": "existing-ui",
+      "projectId": "404386c6-a959-45c6-9049-5850ebe3fb51",
+      "baselineDraftId": "7f10246e-8135-4f84-bcf2-2f5e291c5b97",
+      "activeDraftId": "7f10246e-8135-4f84-bcf2-2f5e291c5b97",
+      "designSystemPath": ".superdesign/design-system.md",
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "src/app/sales/page.tsx",
+        "src/components/AppFrame.tsx",
+        "src/components/DashboardShell.tsx",
+        "src/components/Sidebar.tsx",
+        "src/components/PageHeader.tsx",
+        "src/components/ContentState.tsx",
+        "src/app/globals.css",
+        "tailwind.config.ts"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "43257e08650de84f9f1f6513543bec1fee04942d9ab6166378c913497ef29b1f",
+        "src/app/sales/page.tsx": "08a9f1fd3fa515d714966e94f28feb382c228aa3275fc674814986e8c6e6cffb",
+        "src/components/AppFrame.tsx": "d6aed870539283e0476ab97c15b97fa5d46ef423f9674db7f0f42cf00e1aac8d",
+        "src/components/DashboardShell.tsx": "497108c468a80fa262874aa3284ede9d34d54ee89fe2605cfb94e22c9bfb5be3",
+        "src/components/Sidebar.tsx": "5fd768108d65ad36fbe68f16849904132bc5f347dd0a86658179a1ed3ceae7bc",
+        "src/components/PageHeader.tsx": "0f9d27029d98fb9c18d22e387b02ba87c229b84aed98c6dd6c8db596bb042dbe",
+        "src/components/ContentState.tsx": "fca352f8fe66d1ed7728865a2d67239fb6c95a338bdfb29e7ac5c40edf814887",
+        "src/app/globals.css": "0a75a57cfc0d9da37d30fb68b2151e7856e50775d76100ddb45751546242ab1f",
+        "tailwind.config.ts": "80f3c8e0e3fe6e8822a6b7a9ac41fb3f1868a6b25fc5f18950825c0b67a2b0ab"
+      },
+      "components": [
+        {
+          "name": "Sidebar",
+          "id": "eabbb1b4-e38a-4f9e-b5e0-be9671b9a509",
+          "sourcePath": "src/components/Sidebar.tsx"
+        }
+      ],
+      "drafts": {
+        "7f10246e-8135-4f84-bcf2-2f5e291c5b97": {
+          "title": "iMart Billing — Sales Command Center",
+          "visualDirection": "premium sales command center matching the home dashboard",
+          "currentVersion": 2
+        }
+      },
+      "updatedAt": "2026-09-10T11:10:00.000Z"
+    }
+  }
+}
