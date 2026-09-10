@@ -1,16 +1,35 @@
-# Vyapar Clone Design System
+# iMart Billing Design System
 
 ## Product context
 
-A desktop-first billing and business-management application for invoices, payments, parties, inventory, purchases, reports, production, teams, and business settings. The command menu is a high-frequency keyboard-accessible launcher used from the persistent app shell.
+A desktop-first billing and business-management application for invoices, payments, parties, inventory, purchases, reports, production, teams, and business settings. The persistent dark sidebar and compact top bar frame every operational workspace.
 
 ## Visual language
 
 - Keep the existing Inter/system sans typography and slate/white/blue palette.
-- Favor crisp, compact operational UI over decorative dashboard styling.
+- Favor crisp, compact operational UI with premium dashboard hierarchy.
 - Use white elevated surfaces, slate-200 separators, slate-950 headings, slate-500 secondary copy, and blue-600 selection/action states.
-- Use 8–16px radii, subtle borders, restrained shadows, and no gradients.
+- Use 8–16px radii, subtle borders, and restrained shadows.
+- Dashboard hero panels may use the established slate-950 to blue-950 treatment with subtle blue radial lighting. Keep gradients limited to these high-level summary surfaces.
 - Icons remain Lucide outline icons at 16–20px.
+
+## Dashboard patterns
+
+- Begin major dashboard pages with a compact dark hero summarizing the workspace, reporting period, and primary actions.
+- Follow with four KPI cards using blue, emerald, amber, or violet semantic accents.
+- Use dense white operational panels for charts, recent activity, status distribution, shortcuts, and ranked lists.
+- Charts should be clear and lightweight, with labels visible without hover-only interactions.
+- Search controls use a white rounded input with a leading Search icon and immediate filtering.
+- Preserve strong mobile behavior: stack panels, keep actions reachable, and allow tables to scroll only when necessary.
+
+## Sales dashboard requirements
+
+- The `/sales` route is the sales command center reached by selecting Sale in the sidebar.
+- Provide prominent global sales search across invoice number, customer, workflow name, and status.
+- Include net sales, amount collected, outstanding receivables, and active orders/quotations.
+- Surface a six-month sales trend, payment status breakdown, top customers, recent invoices, and overdue/collection attention items.
+- Keep direct shortcuts for invoices, quotations, proforma invoices, payment-in, sale orders, delivery challans, and returns.
+- Include clear links to the full Reports workspace and invoice creation.
 
 ## Command-menu requirements
 

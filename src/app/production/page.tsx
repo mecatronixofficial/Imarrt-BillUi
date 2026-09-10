@@ -46,6 +46,19 @@ const STAGE_META: Record<ProductionStageType, { label: string; shortLabel: strin
   PACKING: { label: 'Packing', shortLabel: 'Pack', icon: PackageCheck, accent: 'text-emerald-600 bg-emerald-50' },
 };
 
+const PRODUCTION_PIPELINE: ProductionStageType[] = ['CUTTING', 'STITCHING', 'PRINT_EMBROIDERY', 'PACKING'];
+
+function sortProductionStages(stages: ProductionStage[]) {
+  return [...stages].sort(
+    (left, right) => PRODUCTION_PIPELINE.indexOf(left.type) - PRODUCTION_PIPELINE.indexOf(right.type),
+  );
+}
+
+function getNextProductionStage(stages: ProductionStage[], currentType: ProductionStageType) {
+  const nextType = PRODUCTION_PIPELINE[PRODUCTION_PIPELINE.indexOf(currentType) + 1];
+  return nextType ? stages.find((stage) => stage.type === nextType) : undefined;
+}
+
 const COST_CATEGORIES: ProductionCostCategory[] = [
   'FABRIC', 'COLLAR_RIB', 'ACCESSORIES', 'LABELS', 'TAGS', 'POLY_BAGS', 'BUTTONS', 'CARTONS', 'TRANSPORT', 'OTHER',
 ];
@@ -133,102 +146,567 @@ export default function ProductionPage() {
   }
 
   return (
-    <>
-      <PageHeader
-        title="Production"
-        description="Track every garment order from master details to final making cost and profit."
-        action={
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setShowSupplierForm(true)} className="btn-secondary inline-flex items-center gap-2">
-              <Building2 aria-hidden="true" size={16} /> Add supplier
+  <>
+    <div className="min-h-screen bg-slate-50/70">
+      {/* ============================================================ */}
+      {/* PREMIUM PRODUCTION HEADER                                    */}
+      {/* ============================================================ */}
+
+      <section className="relative mb-5 overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-cyan-50 shadow-[0_10px_35px_rgba(15,23,42,0.05)]">
+        {/* Background Effects */}
+        <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-blue-200/40 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 left-1/3 h-40 w-40 rounded-full bg-cyan-100/50 blur-3xl" />
+
+        <div className="relative flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+          {/* Heading */}
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <span className="h-5 w-1 rounded-full bg-blue-600" />
+
+              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">
+                Production Management
+              </span>
+            </div>
+
+            <h1 className="text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
+              Production
+            </h1>
+
+            <p className="mt-1 max-w-2xl text-[11px] leading-5 text-slate-500">
+              Track every garment order from cutting and stitching
+              through printing, packing, final making cost and profit.
+            </p>
+          </div>
+
+          {/* Header Actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Supplier */}
+            <button
+              type="button"
+              onClick={() => setShowSupplierForm(true)}
+              className="
+                group
+                inline-flex
+                h-10
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                border
+                border-slate-200
+                bg-white
+                px-4
+                text-[10px]
+                font-extrabold
+                text-slate-700
+                shadow-sm
+                transition-all
+                duration-300
+                hover:-translate-y-0.5
+                hover:border-blue-200
+                hover:bg-blue-50
+                hover:text-blue-700
+                hover:shadow-md
+              "
+            >
+              <Building2
+                aria-hidden="true"
+                size={14}
+                className="transition-transform duration-300 group-hover:scale-110"
+              />
+
+              Add Supplier
             </button>
-            <button type="button" onClick={() => setShowOrderForm(true)} className="btn-primary inline-flex items-center gap-2">
-              <Plus aria-hidden="true" size={16} /> New order
+
+            {/* New Order */}
+            <button
+              type="button"
+              onClick={() => setShowOrderForm(true)}
+              className="
+                group
+                inline-flex
+                h-10
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                bg-blue-600
+                px-4
+                text-[10px]
+                font-extrabold
+                text-white
+                shadow-[0_8px_20px_rgba(37,99,235,0.22)]
+                transition-all
+                duration-300
+                hover:-translate-y-0.5
+                hover:bg-blue-700
+                hover:shadow-[0_12px_28px_rgba(37,99,235,0.30)]
+              "
+            >
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/15 transition-transform duration-300 group-hover:rotate-90">
+                <Plus
+                  aria-hidden="true"
+                  size={13}
+                />
+              </span>
+
+              New Order
             </button>
           </div>
-        }
-      />
+        </div>
 
-      <section className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <MetricCard icon={Factory} label="Active orders" value={String(stats.active)} tone="blue" />
-        <MetricCard icon={Boxes} label="Pieces in production" value={stats.pieces.toLocaleString('en-IN')} tone="violet" />
-        <MetricCard icon={IndianRupee} label="Total making cost" value={formatCurrency(stats.cost)} tone="amber" />
-        <MetricCard icon={TrendingUp} label="Projected profit" value={formatCurrency(stats.profit)} tone={stats.profit >= 0 ? 'emerald' : 'red'} />
+        {/* Bottom Accent */}
+        <div className="h-[3px] bg-gradient-to-r from-blue-600 via-cyan-500 to-transparent" />
       </section>
 
+      {/* ============================================================ */}
+      {/* PRODUCTION SUMMARY                                           */}
+      {/* ============================================================ */}
+
+      <section className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {/* Active Orders */}
+        <div
+          className="
+            group
+            relative
+            overflow-hidden
+            rounded-2xl
+            border
+            border-slate-200
+            bg-white
+            p-4
+            shadow-[0_4px_18px_rgba(15,23,42,0.04)]
+            transition-all
+            duration-300
+            hover:-translate-y-1
+            hover:border-blue-200
+            hover:shadow-[0_14px_30px_rgba(37,99,235,0.10)]
+          "
+        >
+          <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-blue-100/70 opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100" />
+
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.13em] text-slate-400">
+                Active Orders
+              </p>
+
+              <p className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+                {stats.active}
+              </p>
+
+              <p className="mt-1 text-[9px] font-medium text-slate-400">
+                Currently in production
+              </p>
+            </div>
+
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700 transition-all duration-300 group-hover:scale-110 group-hover:bg-blue-600 group-hover:text-white">
+              <Factory size={19} />
+            </span>
+          </div>
+
+          <div className="absolute bottom-0 left-0 h-[3px] w-0 bg-blue-600 transition-all duration-300 group-hover:w-full" />
+        </div>
+
+        {/* Pieces */}
+        <div
+          className="
+            group
+            relative
+            overflow-hidden
+            rounded-2xl
+            border
+            border-slate-200
+            bg-white
+            p-4
+            shadow-[0_4px_18px_rgba(15,23,42,0.04)]
+            transition-all
+            duration-300
+            hover:-translate-y-1
+            hover:border-violet-200
+            hover:shadow-[0_14px_30px_rgba(139,92,246,0.10)]
+          "
+        >
+          <div className="relative flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[0.13em] text-slate-400">
+                Pieces in Production
+              </p>
+
+              <p className="mt-2 truncate text-2xl font-black tracking-tight text-slate-950">
+                {stats.pieces.toLocaleString("en-IN")}
+              </p>
+
+              <p className="mt-1 text-[9px] font-medium text-slate-400">
+                Total active quantity
+              </p>
+            </div>
+
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-700 transition-all duration-300 group-hover:scale-110 group-hover:bg-violet-600 group-hover:text-white">
+              <Boxes size={19} />
+            </span>
+          </div>
+
+          <div className="absolute bottom-0 left-0 h-[3px] w-0 bg-violet-500 transition-all duration-300 group-hover:w-full" />
+        </div>
+
+        {/* Making Cost */}
+        <div
+          className="
+            group
+            relative
+            overflow-hidden
+            rounded-2xl
+            border
+            border-slate-200
+            bg-white
+            p-4
+            shadow-[0_4px_18px_rgba(15,23,42,0.04)]
+            transition-all
+            duration-300
+            hover:-translate-y-1
+            hover:border-amber-200
+            hover:shadow-[0_14px_30px_rgba(245,158,11,0.10)]
+          "
+        >
+          <div className="relative flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[0.13em] text-slate-400">
+                Total Making Cost
+              </p>
+
+              <p className="mt-2 truncate text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
+                {formatCurrency(stats.cost)}
+              </p>
+
+              <p className="mt-1 text-[9px] font-medium text-slate-400">
+                Current production expense
+              </p>
+            </div>
+
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 transition-all duration-300 group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-white">
+              <IndianRupee size={19} />
+            </span>
+          </div>
+
+          <div className="absolute bottom-0 left-0 h-[3px] w-0 bg-amber-500 transition-all duration-300 group-hover:w-full" />
+        </div>
+
+        {/* Profit */}
+        <div
+          className={`
+            group
+            relative
+            overflow-hidden
+            rounded-2xl
+            border
+            bg-white
+            p-4
+            shadow-[0_4px_18px_rgba(15,23,42,0.04)]
+            transition-all
+            duration-300
+            hover:-translate-y-1
+            ${
+              stats.profit >= 0
+                ? "border-slate-200 hover:border-emerald-200 hover:shadow-[0_14px_30px_rgba(16,185,129,0.10)]"
+                : "border-red-100 hover:border-red-200 hover:shadow-[0_14px_30px_rgba(239,68,68,0.10)]"
+            }
+          `}
+        >
+          <div className="relative flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[0.13em] text-slate-400">
+                Projected Profit
+              </p>
+
+              <p
+                className={`mt-2 truncate text-xl font-black tracking-tight sm:text-2xl ${
+                  stats.profit >= 0
+                    ? "text-emerald-700"
+                    : "text-red-600"
+                }`}
+              >
+                {formatCurrency(stats.profit)}
+              </p>
+
+              <p className="mt-1 text-[9px] font-medium text-slate-400">
+                Expected production margin
+              </p>
+            </div>
+
+            <span
+              className={`
+                flex
+                h-11
+                w-11
+                shrink-0
+                items-center
+                justify-center
+                rounded-xl
+                transition-all
+                duration-300
+                group-hover:scale-110
+                group-hover:text-white
+                ${
+                  stats.profit >= 0
+                    ? "bg-emerald-50 text-emerald-700 group-hover:bg-emerald-600"
+                    : "bg-red-50 text-red-600 group-hover:bg-red-600"
+                }
+              `}
+            >
+              <TrendingUp size={19} />
+            </span>
+          </div>
+
+          <div
+            className={`
+              absolute
+              bottom-0
+              left-0
+              h-[3px]
+              w-0
+              transition-all
+              duration-300
+              group-hover:w-full
+              ${
+                stats.profit >= 0
+                  ? "bg-emerald-500"
+                  : "bg-red-500"
+              }
+            `}
+          />
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* PAGE CONTENT                                                  */}
+      {/* ============================================================ */}
+
       {loading ? (
-        <section className="card"><LoadingState label="Loading production orders..." /></section>
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <LoadingState label="Loading production orders..." />
+        </section>
       ) : error ? (
-        <section className="card"><ErrorState message={error} onRetry={loadData} /></section>
+        <section className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-sm">
+          <ErrorState
+            message={error}
+            onRetry={loadData}
+          />
+        </section>
       ) : orders.length === 0 ? (
-        <section className="card">
-          <EmptyState icon={Factory} title="No production orders yet" description="Create your first order to start the cutting-to-packing workflow." />
+        /* Empty */
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
+          <EmptyState
+            icon={Factory}
+            title="No production orders yet"
+            description="Create your first order to start the cutting-to-packing workflow."
+          />
+
           <div className="flex justify-center pb-6">
-            <button type="button" onClick={() => setShowOrderForm(true)} className="btn-primary">Create first order</button>
+            <button
+              type="button"
+              onClick={() => setShowOrderForm(true)}
+              className="
+                inline-flex
+                h-10
+                items-center
+                gap-2
+                rounded-xl
+                bg-blue-600
+                px-4
+                text-[10px]
+                font-extrabold
+                text-white
+                shadow-[0_8px_20px_rgba(37,99,235,0.22)]
+                transition-all
+                duration-300
+                hover:-translate-y-0.5
+                hover:bg-blue-700
+                hover:shadow-[0_12px_26px_rgba(37,99,235,0.28)]
+              "
+            >
+              <Plus size={14} />
+              Create First Order
+            </button>
           </div>
         </section>
       ) : (
-        <div className="grid items-start gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <OrderList orders={orders} selectedId={selectedId} onSelect={setSelectedId} />
-          {selectedOrder && (
-            <OrderDetail
-              order={selectedOrder}
-              error={actionError}
-              updatingStatus={updatingStatus}
-              onEditStage={setEditingStage}
-              onAddCost={() => setShowCostForm(true)}
-              onRemoveCost={(id) => void removeCost(id)}
-              onChangeStatus={(status) => void changeStatus(status)}
-            />
-          )}
-        </div>
-      )}
+        /* ========================================================== */
+        /* PRODUCTION WORKSPACE                                       */
+        /* ========================================================== */
 
-      {showOrderForm && (
-        <OrderFormModal
-          parties={parties}
-          suppliers={suppliers}
-          onClose={() => setShowOrderForm(false)}
-          onSaved={(order) => {
-            setOrders((current) => [order, ...current]);
-            setSelectedId(order.id);
-            setShowOrderForm(false);
-          }}
-        />
+        <section>
+          {/* Workspace Heading */}
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="h-4 w-1 rounded-full bg-blue-600" />
+
+                <h2 className="text-sm font-extrabold text-slate-950">
+                  Production Workspace
+                </h2>
+              </div>
+
+              <p className="mt-1 text-[10px] text-slate-400">
+                Select an order to manage stages, making
+                costs and production status.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[9px] font-bold text-slate-500 shadow-sm">
+                {orders.length} Orders
+              </span>
+
+              {selectedOrder && (
+                <span className="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1 text-[9px] font-bold text-blue-700">
+                  Order Selected
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Order List + Detail */}
+          <div
+            className="
+              grid
+              items-start
+              gap-4
+              xl:grid-cols-[350px_minmax(0,1fr)]
+            "
+          >
+            {/* Left Side */}
+            <div className="min-w-0">
+              <OrderList
+                orders={orders}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
+            </div>
+
+            {/* Right Side */}
+            <div className="min-w-0">
+              {selectedOrder ? (
+                <OrderDetail
+                  order={selectedOrder}
+                  error={actionError}
+                  updatingStatus={updatingStatus}
+                  onEditStage={setEditingStage}
+                  onAddCost={() =>
+                    setShowCostForm(true)
+                  }
+                  onRemoveCost={(id) =>
+                    void removeCost(id)
+                  }
+                  onChangeStatus={(status) =>
+                    void changeStatus(status)
+                  }
+                />
+              ) : (
+                <section className="flex min-h-[350px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-5 text-center">
+                  <div>
+                    <Factory
+                      size={30}
+                      className="mx-auto text-slate-300"
+                    />
+
+                    <h3 className="mt-3 text-sm font-extrabold text-slate-700">
+                      Select Production Order
+                    </h3>
+
+                    <p className="mx-auto mt-1 max-w-sm text-[10px] leading-5 text-slate-400">
+                      Select an order from the left panel to
+                      view its cutting, stitching, print /
+                      embroidery, packing and costing details.
+                    </p>
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
+        </section>
       )}
-      {showSupplierForm && (
-        <SupplierFormModal
-          onClose={() => setShowSupplierForm(false)}
-          onSaved={(supplier) => {
-            setSuppliers((current) => [...current, supplier].sort((a, b) => a.name.localeCompare(b.name)));
-            setShowSupplierForm(false);
-          }}
-        />
-      )}
-      {editingStage && selectedOrder && (
+    </div>
+
+    {/* ============================================================ */}
+    {/* MODALS                                                       */}
+    {/* ============================================================ */}
+
+    {showOrderForm && (
+      <OrderFormModal
+        parties={parties}
+        suppliers={suppliers}
+        onClose={() =>
+          setShowOrderForm(false)
+        }
+        onSaved={(order) => {
+          setOrders((current) => [
+            order,
+            ...current,
+          ]);
+
+          setSelectedId(order.id);
+          setShowOrderForm(false);
+        }}
+      />
+    )}
+
+    {showSupplierForm && (
+      <SupplierFormModal
+        onClose={() =>
+          setShowSupplierForm(false)
+        }
+        onSaved={(supplier) => {
+          setSuppliers((current) =>
+            [...current, supplier].sort(
+              (a, b) =>
+                a.name.localeCompare(
+                  b.name,
+                ),
+            ),
+          );
+
+          setShowSupplierForm(false);
+        }}
+      />
+    )}
+
+    {editingStage &&
+      selectedOrder && (
         <StageFormModal
           orderId={selectedOrder.id}
           stage={editingStage}
-          onClose={() => setEditingStage(null)}
+          nextStage={getNextProductionStage(
+            selectedOrder.stages,
+            editingStage.type,
+          )}
+          onClose={() =>
+            setEditingStage(null)
+          }
           onSaved={(order) => {
             applyUpdatedOrder(order);
             setEditingStage(null);
           }}
         />
       )}
-      {showCostForm && selectedOrder && (
+
+    {showCostForm &&
+      selectedOrder && (
         <CostFormModal
           orderId={selectedOrder.id}
           suppliers={suppliers}
-          onClose={() => setShowCostForm(false)}
+          onClose={() =>
+            setShowCostForm(false)
+          }
           onSaved={(order) => {
             applyUpdatedOrder(order);
             setShowCostForm(false);
           }}
         />
       )}
-    </>
-  );
+  </>
+);
+
 }
 
 function MetricCard({ icon: Icon, label, value, tone }: { icon: typeof Factory; label: string; value: string; tone: string }) {
@@ -248,40 +726,162 @@ function MetricCard({ icon: Icon, label, value, tone }: { icon: typeof Factory; 
 
 function OrderList({ orders, selectedId, onSelect }: { orders: ProductionOrder[]; selectedId: string; onSelect: (id: string) => void }) {
   return (
-    <aside className="card overflow-hidden xl:sticky xl:top-6">
-      <div className="border-b border-slate-100 px-4 py-3">
-        <h2 className="text-sm font-bold text-slate-900">Production orders</h2>
-        <p className="text-[11px] text-slate-500">{orders.length} total orders</p>
-      </div>
-      <div className="max-h-[68vh] space-y-1.5 overflow-y-auto p-2">
-        {orders.map((order) => (
+   <aside className="card overflow-hidden xl:sticky xl:top-6">
+  {/* Header */}
+  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+    <div>
+      <h2 className="text-sm font-bold text-slate-900">
+        Production Orders
+      </h2>
+      <p className="mt-0.5 text-[11px] text-slate-500">
+        {orders.length} total orders
+      </p>
+    </div>
+
+    <div className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+      {orders.length}
+    </div>
+  </div>
+
+  {/* Orders Grid */}
+  <div className="max-h-[70vh] overflow-y-auto p-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {orders.map((order) => {
+        const isSelected = selectedId === order.id;
+
+        return (
           <button
             key={order.id}
             type="button"
             onClick={() => onSelect(order.id)}
             className={clsx(
-              'w-full rounded-xl border p-3 text-left outline-none transition focus:ring-2 focus:ring-blue-500',
-              selectedId === order.id ? 'border-blue-200 bg-blue-50/70 shadow-sm' : 'border-transparent hover:border-slate-200 hover:bg-slate-50',
+              `
+                group relative
+                min-w-0
+                overflow-hidden
+                rounded-2xl
+                border
+                p-3.5
+                text-left
+                outline-none
+                transition-all
+                duration-200
+                focus:ring-2
+                focus:ring-blue-500
+              `,
+              isSelected
+                ? `
+                    border-blue-300
+                    bg-blue-50
+                    shadow-[0_8px_24px_rgba(37,99,235,0.10)]
+                  `
+                : `
+                    border-slate-200
+                    bg-white
+                    shadow-sm
+                    hover:-translate-y-0.5
+                    hover:border-blue-200
+                    hover:shadow-md
+                  `,
             )}
           >
+            {/* Selected indicator */}
+            {isSelected && (
+              <div className="absolute left-0 top-0 h-full w-1 bg-blue-600" />
+            )}
+
+            {/* Top */}
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-slate-900">{order.orderNumber}</p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-500">{order.styleName} · {order.party.name}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-extrabold tracking-tight text-slate-900">
+                  {order.orderNumber}
+                </p>
+
+                <p className="mt-1 truncate text-[11px] font-medium text-slate-500">
+                  {order.styleName}
+                </p>
               </div>
-              <StatusBadge status={order.status} />
+
+              <div className="shrink-0">
+                <StatusBadge status={order.status} />
+              </div>
             </div>
-            <div className="mt-2.5 flex items-center justify-between text-[10px] text-slate-500">
-              <span>{order.orderedQty.toLocaleString('en-IN')} pcs</span>
-              <span>{order.summary.progressPercent}% complete</span>
+
+            {/* Party */}
+            <div className="mt-3 rounded-xl bg-slate-50 px-2.5 py-2">
+              <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                Party
+              </p>
+
+              <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-700">
+                {order.party.name}
+              </p>
             </div>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
-              <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${order.summary.progressPercent}%` }} />
+
+            {/* Qty + Progress */}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                  Quantity
+                </p>
+
+                <p className="mt-0.5 text-xs font-bold text-slate-800">
+                  {order.orderedQty.toLocaleString("en-IN")}
+                  <span className="ml-1 text-[10px] font-medium text-slate-400">
+                    pcs
+                  </span>
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                  Progress
+                </p>
+
+                <p className="mt-0.5 text-xs font-bold text-blue-600">
+                  {order.summary.progressPercent}%
+                </p>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="mt-3">
+              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                  style={{
+                    width: `${Math.min(
+                      order.summary.progressPercent,
+                      100,
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Bottom */}
+            <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
+              <span className="text-[10px] font-medium text-slate-400">
+                Production
+              </span>
+
+              <span
+                className={clsx(
+                  "text-[10px] font-bold transition-colors",
+                  isSelected
+                    ? "text-blue-600"
+                    : "text-slate-400 group-hover:text-blue-600",
+                )}
+              >
+                View →
+              </span>
             </div>
           </button>
-        ))}
-      </div>
-    </aside>
+        );
+      })}
+    </div>
+  </div>
+</aside>
   );
 }
 
@@ -303,6 +903,7 @@ function OrderDetail({
   onChangeStatus: (status: ProductionOrderStatus) => void;
 }) {
   const nextAction = order.status === 'READY' ? { label: 'Mark dispatched', status: 'DISPATCHED' as const } : order.status === 'DISPATCHED' ? { label: 'Complete order', status: 'COMPLETED' as const } : null;
+  const stages = sortProductionStages(order.stages);
   return (
     <div className="min-w-0 space-y-4">
       <section className="card overflow-hidden">
@@ -339,15 +940,132 @@ function OrderDetail({
         )}
       </section>
 
-      <section className="card p-4 sm:p-5">
-        <div className="mb-4 flex items-end justify-between gap-3">
-          <div><h3 className="text-sm font-bold text-slate-950">Production workflow</h3><p className="text-[11px] text-slate-500">Update DC, quantity, unit and cost at every stage.</p></div>
-          <span className="text-xs font-bold text-blue-700">{order.summary.progressPercent}%</span>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+  {/* Header */}
+  <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+    <div>
+      <h3 className="text-sm font-extrabold text-slate-950">
+        Production Workflow
+      </h3>
+
+      <p className="mt-1 text-[11px] text-slate-500">
+        Update DC, quantity, unit and cost at every stage.
+      </p>
+    </div>
+
+    <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
+      <div>
+        <p className="text-[9px] font-bold uppercase tracking-wider text-blue-400">
+          Overall Progress
+        </p>
+
+        <p className="text-sm font-black text-blue-700">
+          {order.summary.progressPercent}%
+        </p>
+      </div>
+
+      <div className="h-2 w-20 overflow-hidden rounded-full bg-blue-100">
+        <div
+          className="h-full rounded-full bg-blue-600 transition-all duration-500"
+          style={{
+            width: `${Math.min(
+              order.summary.progressPercent,
+              100,
+            )}%`,
+          }}
+        />
+      </div>
+    </div>
+  </div>
+
+  {/* Workflow Cards */}
+  <div className="p-4 sm:p-5">
+    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2.5">
+      <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-blue-500">Good quantity flow</span>
+      {stages.map((stage, index) => (
+        <div key={`flow-${stage.id}`} className="flex items-center gap-2">
+          {index > 0 && <ArrowRight aria-hidden="true" size={13} className="text-blue-300" />}
+          <span className={clsx('rounded-lg border px-2 py-1 text-[10px] font-bold', stage.status === 'COMPLETED' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : stage.status === 'IN_PROGRESS' ? 'border-blue-200 bg-white text-blue-700' : 'border-slate-200 bg-white text-slate-500')}>
+            {STAGE_META[stage.type].shortLabel} · {stage.issuedQty} pcs
+          </span>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
-          {order.stages.map((stage) => <StageCard key={stage.id} stage={stage} onEdit={() => onEditStage(stage)} />)}
+      ))}
+      <span className="ml-auto text-[10px] text-slate-500">Rejected pieces do not move forward.</span>
+    </div>
+    <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+      {stages.map((stage, index) => {
+        const nextStage = stages[index + 1];
+        return (
+        <div
+          key={stage.id}
+          className="
+            group
+            relative
+            overflow-hidden
+            rounded-2xl
+            border
+            border-slate-200
+            bg-gradient-to-br
+            from-white
+            to-slate-50/70
+            p-2
+            shadow-[0_4px_15px_rgba(15,23,42,0.04)]
+            transition-all
+            duration-300
+            hover:-translate-y-1
+            hover:border-blue-200
+            hover:bg-blue-50/40
+            hover:shadow-[0_15px_35px_rgba(15,23,42,0.10)]
+          "
+        >
+          {/* Stage Number */}
+          <div className="mb-2 flex items-center justify-between px-1 pt-1">
+            <div className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-slate-900 px-2 text-[10px] font-black text-white transition-colors group-hover:bg-blue-600">
+              {String(index + 1).padStart(2, "0")}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onEditStage(stage)}
+              className="
+                rounded-lg
+                bg-blue-600
+                px-3
+                py-1.5
+                text-[10px]
+                font-bold
+                text-white
+                shadow-sm
+                transition-all
+                hover:bg-blue-700
+                hover:shadow-md
+                active:scale-95
+              "
+            >
+              Edit
+            </button>
+          </div>
+
+          {/* Existing Stage Card */}
+          <StageCard
+            stage={stage}
+            onEdit={() => onEditStage(stage)}
+          />
+
+          {stage.status === 'COMPLETED' && nextStage && (
+            <div className="mx-1 mt-2 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-2 text-[10px] font-semibold text-emerald-700">
+              {stage.completedQty.toLocaleString('en-IN')} good pcs issued to {STAGE_META[nextStage.type].label}
+            </div>
+          )}
+
+          {/* Hover bottom line */}
+          <div className="absolute bottom-0 left-0 h-[3px] w-0 bg-blue-600 transition-all duration-300 group-hover:w-full" />
         </div>
-      </section>
+        );
+      })}
+    </div>
+  </div>
+</section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="card overflow-hidden">
@@ -389,7 +1107,7 @@ function InfoCell({ label, value }: { label: string; value: string }) {
 function StageCard({ stage, onEdit }: { stage: ProductionStage; onEdit: () => void }) {
   const meta = STAGE_META[stage.type];
   const Icon = meta.icon;
-  const cost = Math.max(stage.issuedQty, stage.completedQty) * Number(stage.rate) + Number(stage.otherCost);
+  const cost = (stage.completedQty + stage.rejectedQty) * Number(stage.rate) + Number(stage.otherCost);
   return (
     <article className={clsx('relative overflow-hidden rounded-xl border p-3.5', stage.status === 'COMPLETED' ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200 bg-white')}>
       <div className="flex items-start justify-between gap-2">
@@ -397,8 +1115,8 @@ function StageCard({ stage, onEdit }: { stage: ProductionStage; onEdit: () => vo
         <button type="button" onClick={onEdit} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-blue-600" aria-label={`Edit ${meta.label}`}><Pencil aria-hidden="true" size={14} /></button>
       </div>
       <div className="mt-3 flex items-center justify-between gap-2"><h4 className="text-xs font-bold text-slate-900">{meta.label}</h4><StatusBadge status={stage.status} /></div>
-      <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
-        <MiniStat label="Issued" value={stage.issuedQty} /><MiniStat label="Done" value={stage.completedQty} /><MiniStat label="Reject" value={stage.rejectedQty} />
+      <div className="mt-3 grid grid-cols-4 gap-1 text-center">
+        <MiniStat label="Planned" value={stage.plannedQty} /><MiniStat label="Issued" value={stage.issuedQty} /><MiniStat label="Completed" value={stage.completedQty} /><MiniStat label="Rejected" value={stage.rejectedQty} />
       </div>
       <div className="mt-3 space-y-1 text-[10px] text-slate-500">
         <p className="truncate"><strong className="text-slate-700">Unit:</strong> {stage.partnerName || 'Not assigned'}</p>
@@ -525,12 +1243,30 @@ function SupplierFormModal({ onClose, onSaved }: { onClose: () => void; onSaved:
   );
 }
 
-function StageFormModal({ orderId, stage, onClose, onSaved }: { orderId: string; stage: ProductionStage; onClose: () => void; onSaved: (order: ProductionOrder) => void }) {
+function StageFormModal({ orderId, stage, nextStage, onClose, onSaved }: { orderId: string; stage: ProductionStage; nextStage?: ProductionStage; onClose: () => void; onSaved: (order: ProductionOrder) => void }) {
   const meta = STAGE_META[stage.type];
   const [form, setForm] = useState({ status: stage.status, partnerName: stage.partnerName ?? '', dcNumber: stage.dcNumber ?? '', plannedQty: String(stage.plannedQty), issuedQty: String(stage.issuedQty), completedQty: String(stage.completedQty), rejectedQty: String(stage.rejectedQty), rate: String(stage.rate), otherCost: String(stage.otherCost), startDate: dateInput(stage.startDate), dueDate: dateInput(stage.dueDate), notes: stage.notes ?? '' });
   const [saving, setSaving] = useState(false); const [error, setError] = useState('');
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (saving) return; setSaving(true); setError('');
+    event.preventDefault();
+    if (saving) return;
+    const issuedQty = Number(form.issuedQty);
+    const completedQty = Number(form.completedQty);
+    const rejectedQty = Number(form.rejectedQty);
+    const accountedQty = completedQty + rejectedQty;
+    if (issuedQty > Number(form.plannedQty)) {
+      setError('Issued quantity cannot exceed the planned quantity.');
+      return;
+    }
+    if (accountedQty > issuedQty) {
+      setError('Completed and rejected quantities cannot exceed the issued quantity.');
+      return;
+    }
+    if (form.status === 'COMPLETED' && accountedQty !== issuedQty) {
+      setError('Completed and rejected quantities must equal the issued quantity before completing this stage.');
+      return;
+    }
+    setSaving(true); setError('');
     try {
       const { data } = await api.patch<ProductionOrder>(`/production-orders/${orderId}/stages/${stage.id}`, {
         ...form,
@@ -562,7 +1298,14 @@ function StageFormModal({ orderId, stage, onClose, onSaved }: { orderId: string;
           <Field label="Due date"><input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></Field>
         </div>
         <Field label="Stage notes"><textarea rows={2} className="input-field resize-none" placeholder="Colour, artwork, measurement or quality notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
-        <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">Calculated stage cost: <strong className="text-slate-950">{formatCurrency(Math.max(Number(form.issuedQty), Number(form.completedQty)) * Number(form.rate) + Number(form.otherCost))}</strong></div>
+        <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">Recorded stage cost: <strong className="text-slate-950">{formatCurrency((Number(form.completedQty) + Number(form.rejectedQty)) * Number(form.rate) + Number(form.otherCost))}</strong></div>
+        {nextStage && (
+          <div className={clsx('rounded-lg border px-3 py-2.5 text-xs', form.status === 'COMPLETED' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-blue-100 bg-blue-50 text-blue-800')}>
+            {form.status === 'COMPLETED'
+              ? `${Number(form.completedQty).toLocaleString('en-IN')} completed good pieces will be planned and issued automatically to ${STAGE_META[nextStage.type].label}.`
+              : `Complete this stage to send only its completed good quantity to ${STAGE_META[nextStage.type].label}. Rejected pieces stay here.`}
+          </div>
+        )}
         <FormActions saving={saving} onClose={onClose} submitLabel="Update stage" />
       </form>
     </Modal>
