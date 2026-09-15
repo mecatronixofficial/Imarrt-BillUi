@@ -74,6 +74,18 @@ export default function DocumentDetailPage() {
     finally { setBusy(''); }
   }
 
+  async function downloadAttachment(attachmentId: string, fileName: string) {
+    if (!document) return;
+    setBusy(`attachment-${attachmentId}`); setError('');
+    try {
+      const { data } = await api.get<Blob>(`/documents/${document.id}/attachments/${attachmentId}`, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const anchor = window.document.createElement('a'); anchor.href = url; anchor.download = fileName; anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (attachmentError: unknown) { setError(getApiError(attachmentError, 'Could not download the attachment.')); }
+    finally { setBusy(''); }
+  }
+
   function shareText() {
     if (!document) return '';
     const party = document.party?.name || document.supplier?.name || 'Party';
@@ -173,7 +185,21 @@ export default function DocumentDetailPage() {
               <table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-900 text-left text-[10px] uppercase tracking-wider text-slate-300"><tr><th className="px-4 py-3">#</th><th className="px-4 py-3">Description</th><th className="px-4 py-3 text-right">Qty</th><th className="px-4 py-3 text-right">Rate</th><th className="px-4 py-3 text-right">Tax</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-slate-100">{document.items?.map((item, index) => <tr key={item.id}><td className="px-4 py-3 text-slate-400">{index + 1}</td><td className="px-4 py-3"><p className="font-semibold text-slate-800">{item.description}</p>{item.hsnSac && <p className="mt-0.5 text-[10px] text-slate-400">HSN/SAC {item.hsnSac}</p>}</td><td className="px-4 py-3 text-right text-slate-600">{Number(item.quantity)} {item.unit}</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td><td className="px-4 py-3 text-right text-slate-600">{Number(item.taxRate).toFixed(2)}%</td><td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(item.lineTotal)}</td></tr>)}</tbody></table>
             </div>
 
-            <div className="grid gap-6 sm:grid-cols-[1fr_290px]"><div className="space-y-4 text-xs leading-5 text-slate-500">{document.reason && <div><p className="font-bold uppercase tracking-wider text-slate-400">Reason</p><p className="mt-1 whitespace-pre-line">{document.reason}</p></div>}{document.terms && <div><p className="font-bold uppercase tracking-wider text-slate-400">Terms and conditions</p><p className="mt-1 whitespace-pre-line">{document.terms}</p></div>}{document.notes && <div className="rounded-lg bg-indigo-50 p-3 text-indigo-700"><strong>Notes:</strong> {document.notes}</div>}</div><div className="rounded-xl bg-slate-50 p-4 text-sm"><div className="flex justify-between py-1.5"><span className="text-slate-500">Subtotal</span><span>{formatCurrency(document.subTotal)}</span></div><div className="flex justify-between py-1.5"><span className="text-slate-500">Tax</span><span>{formatCurrency(document.taxTotal)}</span></div><div className="flex justify-between py-1.5"><span className="text-slate-500">Discount</span><span>-{formatCurrency(document.discount)}</span></div><div className="mt-2 flex justify-between border-t-2 border-blue-600 pt-3 text-lg font-black text-slate-950"><span>Total</span><span>{formatCurrency(document.grandTotal)}</span></div></div></div>
+            {document.attachments?.length ? (
+              <div className="mb-6 border-b border-slate-200 pb-6">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Purchase bill files</p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {document.attachments.map((attachment) => (
+                    <button key={attachment.id} type="button" onClick={() => void downloadAttachment(attachment.id, attachment.fileName)} className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50">
+                      {busy === `attachment-${attachment.id}` ? <Loader2 size={16} className="shrink-0 animate-spin text-blue-600" /> : <FileCheck2 size={16} className="shrink-0 text-blue-600" />}
+                      <span className="min-w-0"><strong className="block truncate text-xs text-slate-700">{attachment.fileName}</strong><small className="text-[10px] text-slate-400">{attachment.kind.toLowerCase()} · {(attachment.size / 1024 / 1024).toFixed(1)} MB</small></span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="grid gap-6 sm:grid-cols-[1fr_290px]"><div className="space-y-4 text-xs leading-5 text-slate-500">{document.paymentMethod && <div><p className="font-bold uppercase tracking-wider text-slate-400">Payment type</p><p className="mt-1 capitalize">{document.paymentMethod.replaceAll('_', ' ')}</p></div>}{document.reason && <div><p className="font-bold uppercase tracking-wider text-slate-400">Reason</p><p className="mt-1 whitespace-pre-line">{document.reason}</p></div>}{document.terms && <div><p className="font-bold uppercase tracking-wider text-slate-400">Terms and conditions</p><p className="mt-1 whitespace-pre-line">{document.terms}</p></div>}{document.notes && <div className="rounded-lg bg-indigo-50 p-3 text-indigo-700"><strong>Notes:</strong> {document.notes}</div>}</div><div className="rounded-xl bg-slate-50 p-4 text-sm"><div className="flex justify-between py-1.5"><span className="text-slate-500">Subtotal</span><span>{formatCurrency(document.subTotal)}</span></div><div className="flex justify-between py-1.5"><span className="text-slate-500">Tax</span><span>{formatCurrency(document.taxTotal)}</span></div><div className="flex justify-between py-1.5"><span className="text-slate-500">Discount</span><span>-{formatCurrency(document.discount)}</span></div><div className="mt-2 flex justify-between border-t-2 border-blue-600 pt-3 text-lg font-black text-slate-950"><span>Total</span><span>{formatCurrency(document.grandTotal)}</span></div></div></div>
           </div>
         </article>
 

@@ -1,25 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
   Building2,
+  Camera,
   Check,
+  ChevronDown,
   CreditCard,
+  Download,
+  File as FileIcon,
+  FileCheck2,
+  FilePlus2,
   FileSpreadsheet,
   FileText,
   Loader2,
+  Mail,
+  MessageCircle,
   Package,
   Plus,
   RotateCcw,
   Send,
   Save,
+  Share2,
   ShoppingBag,
   Trash2,
   Truck,
+  Upload,
   UserRound,
   X,
 } from 'lucide-react';
@@ -58,6 +69,50 @@ const today = () => {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
+
+const PURCHASE_UNIT_OPTIONS = ['pcs', 'nos', 'kg', 'g', 'ltr', 'ml', 'm', 'cm', 'box', 'set', 'pair', 'hr', 'day'];
+const PURCHASE_TAX_OPTIONS = [0, 0.1, 0.25, 1, 1.5, 3, 5, 6, 7.5, 12, 18, 28];
+const PLACE_OF_SUPPLY_OPTIONS = [
+  'Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh',
+  'Chhattisgarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat', 'Haryana',
+  'Himachal Pradesh', 'Jammu and Kashmir', 'Jharkhand', 'Karnataka', 'Kerala', 'Ladakh', 'Lakshadweep',
+  'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Puducherry',
+  'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand',
+  'West Bengal',
+];
+
+function optionsWithCurrent(options: Array<string | number>, current: string | number) {
+  return current === '' || options.some((option) => String(option).toLowerCase() === String(current).toLowerCase())
+    ? options
+    : [...options, current];
+}
+
+type PurchaseAttachment = {
+  id: string;
+  file: File;
+  category: 'bill' | 'image' | 'document';
+  previewUrl?: string;
+};
+
+type PurchaseShareTarget = 'pdf' | 'document' | 'excel' | 'whatsapp' | 'email';
+
+function escapeMarkup(value: string | number) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function downloadFile(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = window.document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 const TYPE_ICONS: Record<BusinessDocumentType, typeof FileText> = {
   QUOTATION: FileText,
@@ -110,10 +165,13 @@ export default function DocumentForm({
   const [terms, setTerms] = useState('Prices and taxes are subject to the terms agreed with the party.');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<DocumentDraftLine[]>(() => [emptyLine()]);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [attachments, setAttachments] = useState<PurchaseAttachment[]>([]);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [saving, setSaving] = useState<'DRAFT' | 'ISSUED' | ''>('');
+  const [saving, setSaving] = useState('');
   const [error, setError] = useState('');
   const [savedId, setSavedId] = useState('');
   const [loadVersion, setLoadVersion] = useState(0);
@@ -121,6 +179,10 @@ export default function DocumentForm({
 
   const busyRef = useRef(false);
   const errorRef = useRef<HTMLDivElement>(null);
+  const billInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const attachmentsRef = useRef<PurchaseAttachment[]>([]);
 
   const isPurchase = docType === 'PURCHASE_INVOICE';
   const isAdjustment = docType === 'CREDIT_NOTE' || docType === 'DEBIT_NOTE';
@@ -203,6 +265,14 @@ export default function DocumentForm({
     if (error) errorRef.current?.focus();
   }, [error]);
 
+  useEffect(() => { attachmentsRef.current = attachments; }, [attachments]);
+
+  useEffect(() => () => {
+    attachmentsRef.current.forEach(({ previewUrl }) => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    });
+  }, []);
+
   function updateLine(key: string, patch: Partial<DocumentDraftLine>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   }
@@ -213,13 +283,15 @@ export default function DocumentForm({
       updateLine(key, { itemId: undefined });
       return;
     }
+    const itemPrice = Number(item.salePrice);
+    const itemTaxRate = Number(item.taxRate);
     updateLine(key, {
       itemId: item.id,
       description: item.name,
       hsnSac: '',
       unit: item.unit || 'pcs',
-      unitPrice: Number(item.salePrice || 0),
-      taxRate: gstRegistered ? Number(item.taxRate || 0) : 0,
+      unitPrice: Number.isFinite(itemPrice) ? itemPrice : 0,
+      taxRate: isPurchase || gstRegistered ? (Number.isFinite(itemTaxRate) ? itemTaxRate : 0) : 0,
     });
   }
 
@@ -250,11 +322,91 @@ export default function DocumentForm({
     }
   }
 
-  const totals = useMemo(() => calculateDocument(lines, discount, gstRegistered), [lines, discount, gstRegistered]);
+  function addPurchaseAttachments(event: ChangeEvent<HTMLInputElement>, category: PurchaseAttachment['category']) {
+    const selected = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    const availableSlots = Math.max(0, 10 - attachments.length);
+    let availableBytes = Math.max(0, 25 * 1024 * 1024 - attachments.reduce((sum, entry) => sum + entry.file.size, 0));
+    const accepted = selected.filter((file) => {
+      if (file.size <= 0 || file.size > 10 * 1024 * 1024 || file.size > availableBytes) return false;
+      availableBytes -= file.size;
+      return true;
+    }).slice(0, availableSlots);
+
+    if (accepted.length !== selected.length) {
+      setError('You can upload up to 10 files and 25 MB total. Each file must be 10 MB or smaller.');
+    }
+
+    setAttachments((current) => [
+      ...current,
+      ...accepted.map((file) => ({
+        id: generateLineId(),
+        file,
+        category,
+        previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+      })),
+    ]);
+  }
+
+  function removePurchaseAttachment(id: string) {
+    setAttachments((current) => {
+      const attachment = current.find((entry) => entry.id === id);
+      if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      return current.filter((entry) => entry.id !== id);
+    });
+  }
+
+  function purchaseExportMarkup(document: BusinessDocument) {
+    const rows = lines
+      .filter((line) => (line.description || '').trim() || line.itemId || line.unitPrice !== 0)
+      .map((line, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${escapeMarkup(line.description)}</td>
+          <td>${escapeMarkup(line.quantity)}</td>
+          <td>${escapeMarkup(line.unit)}</td>
+          <td>${escapeMarkup(line.unitPrice)}</td>
+          <td>${escapeMarkup(line.taxRate)}%</td>
+          <td>${escapeMarkup(calculateDocument([line], 0, true).total)}</td>
+        </tr>`).join('');
+    return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#172033}h1{font-size:22px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccd3dc;padding:8px;text-align:left}th{background:#eef3f8}.total{text-align:right;font-size:18px;font-weight:700;margin-top:16px}</style></head><body><h1>New Purchase Bill</h1><p><strong>Bill:</strong> ${escapeMarkup(referenceNumber || document.documentNumber)}</p><p><strong>Supplier:</strong> ${escapeMarkup(selectedParty?.name || '')}</p><p><strong>Bill date:</strong> ${escapeMarkup(issueDate)}</p><table><thead><tr><th>#</th><th>Item details</th><th>Qty</th><th>Unit</th><th>Price / unit</th><th>Tax</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table><p class="total">Total: ${escapeMarkup(totals.total)}</p></body></html>`;
+  }
+
+  async function runPurchaseShare(target: PurchaseShareTarget, document: BusinessDocument) {
+    const fileBase = referenceNumber.trim() || document.documentNumber || 'purchase-bill';
+    if (target === 'pdf') {
+      const { data } = await api.get<Blob>(`/documents/${document.id}/pdf`, { responseType: 'blob' });
+      downloadFile(new Blob([data], { type: 'application/pdf' }), `${fileBase}.pdf`);
+      return;
+    }
+
+    if (target === 'document') {
+      downloadFile(new Blob([purchaseExportMarkup(document)], { type: 'application/msword;charset=utf-8' }), `${fileBase}.doc`);
+      return;
+    }
+
+    if (target === 'excel') {
+      downloadFile(new Blob([purchaseExportMarkup(document)], { type: 'application/vnd.ms-excel;charset=utf-8' }), `${fileBase}.xls`);
+      return;
+    }
+
+    const message = `Purchase Bill ${referenceNumber || document.documentNumber}\nSupplier: ${selectedParty?.name || ''}\nTotal: ${formatCurrency(totals.total)}`;
+    if (target === 'whatsapp') {
+      const rawNumber = (selectedParty?.phone || '').replace(/\D/g, '');
+      const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
+      window.open(`https://wa.me/${number}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const recipient = selectedParty?.email || '';
+    window.open(`mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(`Purchase Bill ${referenceNumber || document.documentNumber}`)}&body=${encodeURIComponent(message)}`, '_blank');
+  }
+
+  const totals = useMemo(() => calculateDocument(lines, discount, isPurchase || gstRegistered), [discount, gstRegistered, isPurchase, lines]);
   const selectedParty = availableParties.find(({ id }) => id === partyId);
   const disabled = loading || Boolean(loadError) || Boolean(saving) || Boolean(savedId);
 
-  async function submit(status: 'DRAFT' | 'ISSUED') {
+  async function submit(status: 'DRAFT' | 'ISSUED', shareTarget?: PurchaseShareTarget) {
     if (busyRef.current || disabled) return;
     setError('');
 
@@ -265,24 +417,28 @@ export default function DocumentForm({
     if (validUntil && validUntil < issueDate) return setError('Validity date must be on or after the issue date.');
     if (dueDate && dueDate < issueDate) return setError('Due date must be on or after the issue date.');
 
-    const enteredLines = lines.filter((line) => (line.description || '').trim() || line.itemId || (line.unitPrice ?? 0) !== 0);
+    const normalizedLines = lines.map((line) => {
+      const catalogItem = line.itemId ? catalog.find((item) => item.id === line.itemId) : undefined;
+      return {
+        ...line,
+        description: (line.description || catalogItem?.name || '').trim(),
+        quantity: Number(line.quantity),
+        unitPrice: Number(line.unitPrice),
+        taxRate: Number(line.taxRate),
+      };
+    });
+    const enteredLines = normalizedLines.filter((line) => line.description || line.itemId || line.unitPrice !== 0);
     if (!enteredLines.length) return setError('Add at least one item with a description.');
 
-    if (
-      enteredLines.some(
-        (line) =>
-          !(line.description || '').trim() ||
-          line.description.length > 200 ||
-          !Number.isFinite(line.quantity) ||
-          line.quantity <= 0 ||
-          !Number.isFinite(line.unitPrice) ||
-          line.unitPrice < 0 ||
-          !Number.isFinite(line.taxRate) ||
-          line.taxRate < 0 ||
-          line.taxRate > 100,
-      )
-    ) {
-      return setError('Check each line: enter a description, positive quantity, valid price, and tax between 0 and 100%.');
+    for (const line of enteredLines) {
+      const rowNumber = normalizedLines.findIndex(({ key }) => key === line.key) + 1;
+      if (!line.description) return setError(`Row ${rowNumber}: enter an item description.`);
+      if (line.description.length > 200) return setError(`Row ${rowNumber}: description must be 200 characters or fewer.`);
+      if (!Number.isFinite(line.quantity) || line.quantity <= 0) return setError(`Row ${rowNumber}: quantity must be greater than zero.`);
+      if (!Number.isFinite(line.unitPrice) || line.unitPrice < 0) return setError(`Row ${rowNumber}: enter a valid price of zero or more.`);
+      if (!Number.isFinite(line.taxRate) || line.taxRate < 0 || line.taxRate > 100) {
+        return setError(`Row ${rowNumber}: select a tax rate between 0% and 100%.`);
+      }
     }
 
     const safeDiscount = Number.isFinite(discount) ? discount : 0;
@@ -291,7 +447,7 @@ export default function DocumentForm({
     }
 
     setBusy(true);
-    setSaving(status);
+    setSaving(shareTarget ? `SHARE_${shareTarget}` : status);
     let createdId = '';
 
     try {
@@ -313,14 +469,15 @@ export default function DocumentForm({
         reason: isAdjustment ? reason.trim() || undefined : undefined,
         terms: terms.trim() || undefined,
         notes: notes.trim() || undefined,
+        paymentMethod: isPurchase ? paymentMethod : undefined,
         items: enteredLines.map((line) => ({
           itemId: line.itemId,
           description: (line.description || '').trim(),
-          hsnSac: (line.hsnSac || '').trim() || undefined,
+          hsnSac: isPurchase ? undefined : (line.hsnSac || '').trim() || undefined,
           quantity: line.quantity,
           unit: line.unit || 'pcs',
           unitPrice: line.unitPrice,
-          taxRate: gstRegistered ? line.taxRate : 0,
+          taxRate: isPurchase || gstRegistered ? line.taxRate : 0,
         })),
       };
 
@@ -329,11 +486,20 @@ export default function DocumentForm({
       });
       createdId = data.id;
       setSavedId(data.id);
+      if (isPurchase && attachments.length) {
+        const formData = new FormData();
+        attachments.forEach(({ file }) => formData.append('files', file, file.name));
+        await api.post(`/documents/${data.id}/attachments`, formData, {
+          headers: { 'X-Business-Id': businessId, 'Content-Type': 'multipart/form-data' },
+          timeout: 120000,
+        });
+      }
+      if (isPurchase && shareTarget) await runPurchaseShare(shareTarget, data);
       router.push(`/documents/${data.id}?companyId=${encodeURIComponent(businessId)}`);
     } catch (saveError: unknown) {
       setError(
         createdId
-          ? 'Document saved, but could not open the view page.'
+          ? 'Purchase bill saved, but an upload or sharing step could not be completed. Open the saved bill to review it.'
           : getApiError(saveError, `Could not save ${config.label.toLowerCase()}. Your details are still here.`),
       );
     } finally {
@@ -343,7 +509,7 @@ export default function DocumentForm({
   }
 
   return (
-    <div className={styles.editor}>
+    <div className={`${styles.editor} ${isPurchase ? styles.purchaseEditor : ''}`}>
       <header className={styles.header}>
         <div className={styles.heading}>
           <button type="button" className={styles.iconButton} onClick={onClose} disabled={Boolean(saving)} aria-label="Close document">
@@ -354,7 +520,7 @@ export default function DocumentForm({
           </span>
           <div>
             <div className={styles.titleRow}>
-              <h1>New {config.label.toLowerCase()}</h1>
+              <h1>{isPurchase ? 'New Purchase Bill' : `New ${config.label.toLowerCase()}`}</h1>
               <span className={styles.draft}>{savedId ? 'Saved' : 'Draft'}</span>
             </div>
             <p>{config.description}</p>
@@ -424,7 +590,7 @@ export default function DocumentForm({
             </div>
           )}
 
-          <fieldset disabled={disabled} className={styles.formLayout}>
+          <fieldset disabled={disabled} className={`${styles.formLayout} ${isPurchase ? styles.purchaseLayout : ''}`}>
             <legend className="sr-only">{config.label} details</legend>
 
             <div className={styles.primaryColumn}>
@@ -442,21 +608,33 @@ export default function DocumentForm({
                   }
                 />
                 <div className={styles.cardBody}>
-                  <Field label={`${isPurchase ? 'Supplier' : 'Customer'} *`}>
-                    <select
-                      className={styles.input}
-                      value={partyId}
-                      disabled={isAdjustment && Boolean(referenceInvoiceId)}
-                      onChange={(e) => setPartyId(e.target.value)}
-                    >
-                      <option value="">{loading ? 'Loading...' : `Select ${isPurchase ? 'supplier' : 'customer'}`}</option>
-                      {availableParties.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                  <div className={isPurchase ? styles.purchaseSupplierFields : undefined}>
+                    <Field label={`${isPurchase ? 'Supplier' : 'Customer'} *`}>
+                      <select
+                        className={styles.input}
+                        value={partyId}
+                        disabled={isAdjustment && Boolean(referenceInvoiceId)}
+                        onChange={(e) => setPartyId(e.target.value)}
+                      >
+                        <option value="">{loading ? 'Loading...' : `Search by ${isPurchase ? 'name / phone' : 'customer'}`}</option>
+                        {availableParties.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}{p.phone ? ` · ${p.phone}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    {isPurchase && (
+                      <Field label="Phone number">
+                        <input
+                          className={`${styles.input} ${styles.phoneReadonly}`}
+                          value={selectedParty?.phone || ''}
+                          placeholder="Phone No."
+                          readOnly
+                        />
+                      </Field>
+                    )}
+                  </div>
 
                   {selectedParty ? (
                     <div className={styles.customerDetails}>
@@ -555,11 +733,11 @@ export default function DocumentForm({
                       <tr>
                         <th scope="col">#</th>
                         <th scope="col">Item / Description</th>
-                        <th scope="col">HSN/SAC</th>
+                          {!isPurchase && <th scope="col">HSN/SAC</th>}
                         <th scope="col">Qty</th>
                         <th scope="col">Unit</th>
-                        <th scope="col">Rate (₹)</th>
-                        <th scope="col">GST %</th>
+                          <th scope="col">{isPurchase ? 'Price / unit (₹)' : 'Rate (₹)'}</th>
+                          <th scope="col">{isPurchase ? 'Tax %' : 'GST %'}</th>
                         <th scope="col">Amount</th>
                         <th scope="col">
                           <span className="sr-only">Remove</span>
@@ -593,15 +771,17 @@ export default function DocumentForm({
                               onChange={(e) => updateLine(line.key, { description: e.target.value })}
                             />
                           </td>
-                          <td>
-                            <input
-                              aria-label={`HSN ${index + 1}`}
-                              className={styles.hsnInput}
-                              placeholder="HSN"
-                              value={line.hsnSac}
-                              onChange={(e) => updateLine(line.key, { hsnSac: e.target.value })}
-                            />
-                          </td>
+                          {!isPurchase && (
+                            <td>
+                              <input
+                                aria-label={`HSN ${index + 1}`}
+                                className={styles.hsnInput}
+                                placeholder="HSN"
+                                value={line.hsnSac}
+                                onChange={(e) => updateLine(line.key, { hsnSac: e.target.value })}
+                              />
+                            </td>
+                          )}
                           <td>
                             <input
                               aria-label={`Quantity ${index + 1}`}
@@ -614,13 +794,26 @@ export default function DocumentForm({
                             />
                           </td>
                           <td>
-                            <input
-                              aria-label={`Unit ${index + 1}`}
-                              className={styles.cellInput}
-                              style={{ width: '4rem' }}
-                              value={line.unit}
-                              onChange={(e) => updateLine(line.key, { unit: e.target.value })}
-                            />
+                            {isPurchase ? (
+                              <select
+                                aria-label={`Unit ${index + 1}`}
+                                className={`${styles.cellInput} ${styles.purchaseSelect}`}
+                                value={line.unit}
+                                onChange={(e) => updateLine(line.key, { unit: e.target.value })}
+                              >
+                                {optionsWithCurrent(PURCHASE_UNIT_OPTIONS, line.unit).map((unit) => (
+                                  <option key={unit} value={unit}>{String(unit).toUpperCase()}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                aria-label={`Unit ${index + 1}`}
+                                className={styles.cellInput}
+                                style={{ width: '4rem' }}
+                                value={line.unit}
+                                onChange={(e) => updateLine(line.key, { unit: e.target.value })}
+                              />
+                            )}
                           </td>
                           <td>
                             <input
@@ -634,17 +827,30 @@ export default function DocumentForm({
                             />
                           </td>
                           <td>
-                            <input
-                              aria-label={`Tax ${index + 1}`}
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.01"
-                              disabled={!gstRegistered}
-                              className={styles.cellInput}
-                              value={gstRegistered ? (isNaN(line.taxRate) ? '' : line.taxRate) : 0}
-                              onChange={(e) => updateLine(line.key, { taxRate: parseFloat(e.target.value) || 0 })}
-                            />
+                            {isPurchase ? (
+                              <select
+                                aria-label={`Tax ${index + 1}`}
+                                className={`${styles.cellInput} ${styles.purchaseSelect} ${styles.taxSelect}`}
+                                value={line.taxRate}
+                                onChange={(e) => updateLine(line.key, { taxRate: Number(e.target.value) })}
+                              >
+                                {optionsWithCurrent(PURCHASE_TAX_OPTIONS, line.taxRate).map((rate) => (
+                                  <option key={rate} value={rate}>{Number(rate) === 0 ? 'No tax' : `GST ${rate}%`}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                aria-label={`Tax ${index + 1}`}
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                disabled={!gstRegistered}
+                                className={styles.cellInput}
+                                value={gstRegistered ? (isNaN(line.taxRate) ? '' : line.taxRate) : 0}
+                                onChange={(e) => updateLine(line.key, { taxRate: parseFloat(e.target.value) || 0 })}
+                              />
+                            )}
                           </td>
                           <td className={styles.amount}>{formatCurrency(totals.lines[index]?.total ?? 0)}</td>
                           <td>
@@ -671,11 +877,11 @@ export default function DocumentForm({
                     disabled={lines.length >= 200}
                     onClick={() => setLines((current) => [...current, emptyLine()])}
                   >
-                    <Plus size={16} /> Add line
+                    <Plus size={16} /> {isPurchase ? 'Add row' : 'Add line'}
                   </button>
                   <span>{totals.quantity} total quantity</span>
                 </div>
-                {!gstRegistered && !loading && (
+                {!isPurchase && !gstRegistered && !loading && (
                   <p className={styles.taxNote}>Tax is not applied because this business is not GST registered.</p>
                 )}
               </section>
@@ -683,7 +889,7 @@ export default function DocumentForm({
               <section className={styles.card}>
                 <SectionHeading
                   icon={<FileText size={18} />}
-                  title="Terms & Notes"
+                  title={isPurchase ? 'Terms, payment & uploads' : 'Terms & Notes'}
                   description="Party instructions, payment conditions, and notices"
                   trailing={<span className={styles.optional}>Optional</span>}
                 />
@@ -708,6 +914,80 @@ export default function DocumentForm({
                       placeholder="Special instructions, remarks, or contact details..."
                     />
                   </Field>
+                  {isPurchase && (
+                    <div className={styles.purchaseTools}>
+                      <Field label="Payment type">
+                        <select className={styles.input} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                          <option value="cash">Cash</option>
+                          <option value="credit">Credit</option>
+                          <option value="upi">UPI</option>
+                          <option value="bank_transfer">Bank transfer</option>
+                          <option value="cheque">Cheque</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </Field>
+
+                      <div className={styles.uploadArea}>
+                        <span className={styles.fieldLabel}>Purchase bill files</span>
+                        <input
+                          ref={billInputRef}
+                          className={styles.hiddenFileInput}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,application/pdf"
+                          multiple
+                          onChange={(event) => addPurchaseAttachments(event, 'bill')}
+                        />
+                        <input
+                          ref={imageInputRef}
+                          className={styles.hiddenFileInput}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          multiple
+                          onChange={(event) => addPurchaseAttachments(event, 'image')}
+                        />
+                        <input
+                          ref={documentInputRef}
+                          className={styles.hiddenFileInput}
+                          type="file"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                          multiple
+                          onChange={(event) => addPurchaseAttachments(event, 'document')}
+                        />
+                        <div className={styles.uploadButtons}>
+                          <button type="button" className={styles.uploadButton} onClick={() => billInputRef.current?.click()}>
+                            <Upload size={16} /> Upload purchase bill
+                          </button>
+                          <button type="button" className={styles.uploadButton} onClick={() => imageInputRef.current?.click()}>
+                            <Camera size={16} /> Add image
+                          </button>
+                          <button type="button" className={styles.uploadButton} onClick={() => documentInputRef.current?.click()}>
+                            <FilePlus2 size={16} /> Add document
+                          </button>
+                        </div>
+                      </div>
+
+                      {attachments.length > 0 && (
+                        <div className={styles.attachmentList} aria-label="Purchase bill attachments">
+                          {attachments.map((attachment) => (
+                            <div key={attachment.id} className={styles.attachmentChip}>
+                              {attachment.previewUrl ? (
+                                <Image src={attachment.previewUrl} width={36} height={36} unoptimized alt="" />
+                              ) : (
+                                <span className={styles.attachmentIcon}><FileCheck2 size={17} /></span>
+                              )}
+                              <span>
+                                <strong>{attachment.file.name}</strong>
+                                <small>{attachment.category} · {(attachment.file.size / 1024 / 1024).toFixed(1)} MB</small>
+                              </span>
+                              <button type="button" onClick={() => removePurchaseAttachment(attachment.id)} aria-label={`Remove ${attachment.file.name}`}>
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </section>
             </div>
@@ -715,20 +995,31 @@ export default function DocumentForm({
             <aside className={styles.sideColumn}>
               <section className={styles.card}>
                 <div className={styles.simpleHeading}>
-                  <h3>{config.label} details</h3>
+                  <h3>{isPurchase ? 'Bill details' : `${config.label} details`}</h3>
                   <span className={styles.optional}>INR ₹</span>
                 </div>
                 <div className={`${styles.cardBody} ${styles.detailsFields}`}>
-                  <div>
-                    <span className={styles.fieldLabel}>Document number</span>
-                    <div className={styles.readonlyValue}>
-                      Auto-assigned
-                      <span>Auto-sequence</span>
+                  {isPurchase ? (
+                    <Field label="Bill number">
+                      <input
+                        className={styles.input}
+                        value={referenceNumber}
+                        onChange={(e) => setReferenceNumber(e.target.value)}
+                        placeholder="Enter supplier bill number"
+                      />
+                    </Field>
+                  ) : (
+                    <div>
+                      <span className={styles.fieldLabel}>Document number</span>
+                      <div className={styles.readonlyValue}>
+                        Auto-assigned
+                        <span>Auto-sequence</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className={styles.dateGrid}>
-                    <Field label="Issue date *">
+                    <Field label={isPurchase ? 'Bill date *' : 'Issue date *'}>
                       <input
                         type="date"
                         className={styles.input}
@@ -763,22 +1054,33 @@ export default function DocumentForm({
                     )}
                   </div>
 
-                  <Field label="Party reference / PO number">
-                    <input
-                      className={styles.input}
-                      value={referenceNumber}
-                      onChange={(e) => setReferenceNumber(e.target.value)}
-                      placeholder="e.g. PO-84920"
-                    />
-                  </Field>
+                  {!isPurchase && (
+                    <Field label="Party reference / PO number">
+                      <input
+                        className={styles.input}
+                        value={referenceNumber}
+                        onChange={(e) => setReferenceNumber(e.target.value)}
+                        placeholder="e.g. PO-84920"
+                      />
+                    </Field>
+                  )}
 
                   <Field label="Place of supply">
-                    <input
-                      className={styles.input}
-                      value={placeOfSupply}
-                      onChange={(e) => setPlaceOfSupply(e.target.value)}
-                      placeholder="State or destination"
-                    />
+                    {isPurchase ? (
+                      <select className={styles.input} value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)}>
+                        <option value="">Select state</option>
+                        {optionsWithCurrent(PLACE_OF_SUPPLY_OPTIONS, placeOfSupply).map((state) => (
+                          <option key={state} value={state}>{state}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className={styles.input}
+                        value={placeOfSupply}
+                        onChange={(e) => setPlaceOfSupply(e.target.value)}
+                        placeholder="State or destination"
+                      />
+                    )}
                   </Field>
                 </div>
               </section>
@@ -844,9 +1146,38 @@ export default function DocumentForm({
             {saving === 'DRAFT' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             <span>{saving === 'DRAFT' ? 'Saving…' : 'Save as draft'}</span>
           </button>
+          {isPurchase && (
+            <div
+              className={styles.shareDropdown}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node)) setShareMenuOpen(false);
+              }}
+            >
+              <button
+                type="button"
+                disabled={disabled}
+                className={styles.shareButton}
+                aria-haspopup="menu"
+                aria-expanded={shareMenuOpen}
+                onClick={() => setShareMenuOpen((open) => !open)}
+              >
+                {saving.startsWith('SHARE_') ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
+                Share <ChevronDown size={15} />
+              </button>
+              {shareMenuOpen && (
+                <div className={styles.shareMenu} role="menu">
+                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'pdf')}><Download size={16} /><span>PDF<small>Download printable bill</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'document')}><FileIcon size={16} /><span>Document<small>Download editable Word file</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'excel')}><FileSpreadsheet size={16} /><span>Excel<small>Download spreadsheet</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'whatsapp')}><MessageCircle size={16} /><span>WhatsApp<small>Share with supplier</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'email')}><Mail size={16} /><span>Email<small>Send to supplier email</small></span></button>
+                </div>
+              )}
+            </div>
+          )}
           <button type="button" disabled={disabled} onClick={() => void submit('ISSUED')} className={styles.saveButton}>
             {saving === 'ISSUED' ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
-            <span>{saving === 'ISSUED' ? 'Saving…' : 'Save and issue'}</span>
+            <span>{saving === 'ISSUED' ? 'Saving…' : isPurchase ? 'Save' : 'Save and issue'}</span>
           </button>
         </div>
       </footer>
