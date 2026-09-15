@@ -916,3 +916,431 @@ textarea.input {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Purchase bills use a dedicated, full-width entry sheet inspired by the
+   supplied reference. Other business documents keep the standard card flow. */
+.purchaseEditor {
+  background: #f4f5f7;
+}
+
+.purchaseEditor .header {
+  min-height: 3.5rem;
+  padding: 0.625rem 1.75rem;
+  box-shadow: none;
+}
+
+.purchaseEditor .headerIcon,
+.purchaseEditor .draft,
+.purchaseEditor .heading p,
+.purchaseEditor .documentNumber {
+  display: none;
+}
+
+.purchaseEditor .titleRow h1 {
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+
+.purchaseEditor .scrollArea {
+  padding: 1rem 1.25rem;
+  background: #f4f5f7;
+}
+
+.purchaseEditor .workspace {
+  max-width: none;
+  gap: 0.75rem;
+}
+
+.purchaseEditor .intro {
+  display: none;
+}
+
+.purchaseLayout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.purchaseLayout .primaryColumn,
+.purchaseLayout .sideColumn {
+  display: contents;
+}
+
+.purchaseLayout .primaryColumn > .card:first-child {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.purchaseLayout .sideColumn > .card:first-child {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.purchaseLayout .itemsCard {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.purchaseLayout .primaryColumn > .card:last-child {
+  grid-column: 1;
+  grid-row: 4;
+}
+
+.purchaseLayout .summary {
+  grid-column: 1;
+  grid-row: 5;
+}
+
+.purchaseLayout .summaryHint {
+  grid-column: 1;
+  grid-row: 6;
+}
+
+.purchaseLayout .card {
+  border-color: #dde2e8;
+  border-radius: 0.5rem;
+  box-shadow: none;
+}
+
+.purchaseLayout .sectionHeading,
+.purchaseLayout .simpleHeading {
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  background: #ffffff;
+}
+
+.purchaseLayout .sectionHeading p {
+  display: none;
+}
+
+.purchaseLayout .cardBody {
+  padding: 1rem;
+}
+
+.purchaseSupplierFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(10rem, 0.9fr);
+  gap: 0.875rem;
+}
+
+.phoneReadonly {
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.purchaseSelect {
+  width: 5.75rem;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.taxSelect {
+  width: 6.75rem;
+  text-transform: none;
+}
+
+.purchaseTools {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.35fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.uploadArea {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+.uploadButtons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.uploadButton {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.5rem;
+  color: #1677db;
+  background: #ffffff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.uploadButton:hover:not(:disabled) {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+
+.attachmentList {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.attachmentChip {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #ffffff;
+}
+
+.attachmentChip img,
+.attachmentIcon {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 2.25rem;
+  border-radius: 0.375rem;
+}
+
+.attachmentChip img {
+  object-fit: cover;
+}
+
+.attachmentIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.attachmentChip > span:nth-child(2) {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.attachmentChip strong,
+.attachmentChip small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentChip strong {
+  color: #334155;
+  font-size: 0.6875rem;
+}
+
+.attachmentChip small {
+  color: #94a3b8;
+  font-size: 0.625rem;
+  text-transform: capitalize;
+}
+
+.attachmentChip > button {
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.375rem;
+  color: #94a3b8;
+  background: transparent;
+  cursor: pointer;
+}
+
+.attachmentChip > button:hover {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.shareDropdown {
+  position: relative;
+}
+
+.shareButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid #93c5fd;
+  border-radius: 0.5rem;
+  color: #1677db;
+  background: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.shareButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.shareMenu {
+  position: absolute;
+  z-index: 60;
+  right: 0;
+  bottom: calc(100% + 0.5rem);
+  width: 15rem;
+  padding: 0.375rem;
+  border: 1px solid #dbe2ea;
+  border-radius: 0.625rem;
+  background: #ffffff;
+  box-shadow: 0 14px 35px rgb(15 23 42 / 18%);
+}
+
+.shareMenu > button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem;
+  border: 0;
+  border-radius: 0.45rem;
+  color: #334155;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shareMenu > button:hover {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.shareMenu > button > span {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.shareMenu small {
+  color: #94a3b8;
+  font-size: 0.625rem;
+  font-weight: 500;
+}
+
+.purchaseLayout .table {
+  min-width: 1080px;
+}
+
+.purchaseLayout .table th {
+  height: 2.75rem;
+  padding-block: 0.5rem;
+  color: #38516d;
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
+}
+
+.purchaseLayout .table td {
+  min-height: 3.75rem;
+  padding-block: 0.625rem;
+  background: #fafbfc;
+  border-right: 1px solid #e5e7eb;
+}
+
+.purchaseLayout .table tbody tr:nth-child(even) td {
+  background: #f5f7fa;
+}
+
+.purchaseLayout .tableFooter {
+  background: #ffffff;
+}
+
+.purchaseLayout .addButton {
+  background: #ffffff;
+  border-color: #93c5fd;
+  color: #1683f8;
+  text-transform: uppercase;
+}
+
+.purchaseEditor .footer {
+  padding: 0.75rem 1.75rem;
+  box-shadow: 0 -1px 4px rgb(15 23 42 / 7%);
+}
+
+@media (min-width: 1050px) {
+  .purchaseLayout {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+  }
+
+  .purchaseLayout .primaryColumn > .card:first-child {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .purchaseLayout .sideColumn > .card:first-child {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .purchaseLayout .itemsCard {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .purchaseLayout .primaryColumn > .card:last-child {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .purchaseLayout .summary {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .purchaseLayout .summaryHint {
+    grid-column: 2;
+    grid-row: 4;
+  }
+}
+
+@media (max-width: 680px) {
+  .purchaseEditor .header,
+  .purchaseEditor .footer {
+    padding-inline: 0.75rem;
+  }
+
+  .purchaseEditor .headerEnd > label,
+  .purchaseEditor .footerTotal {
+    display: none;
+  }
+
+  .purchaseEditor .scrollArea {
+    padding: 0.75rem;
+  }
+
+  .purchaseSupplierFields,
+  .purchaseLayout .dateGrid,
+  .purchaseLayout .notesGrid,
+  .purchaseTools,
+  .uploadButtons,
+  .attachmentList {
+    grid-template-columns: 1fr;
+  }
+
+  .purchaseEditor .actions {
+    width: 100%;
+    gap: 0.4rem;
+  }
+
+  .purchaseEditor .actions button {
+    flex: 1;
+    justify-content: center;
+    padding-inline: 0.5rem;
+  }
+}

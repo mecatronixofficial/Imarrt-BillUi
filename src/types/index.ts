@@ -109,6 +109,15 @@ export interface InvoiceLineItem {
   lineTotal: string;
 }
 
+export interface InvoiceAttachment {
+  id: string;
+  kind: 'IMAGE' | 'DOCUMENT';
+  fileName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+}
+
 export interface Invoice {
   id: string;
   branchId?: string;
@@ -128,6 +137,7 @@ export interface Invoice {
   deliveries?: InvoiceDelivery[];
   deliveryAttempts?: InvoiceDelivery[];
   payments?: PaymentRecord[];
+  attachments?: InvoiceAttachment[];
 }
 
 export interface PaymentRecord {
@@ -218,6 +228,7 @@ export interface BusinessDocument {
   vehicleNumber?: string;
   eWayBillNumber?: string;
   referenceNumber?: string;
+  paymentMethod?: string;
   reason?: string;
   terms?: string;
   notes?: string;
@@ -229,8 +240,18 @@ export interface BusinessDocument {
   createdAt: string;
   updatedAt: string;
   items?: BusinessDocumentItem[];
+  attachments?: BusinessDocumentAttachment[];
   business?: Business;
   createdBy?: Pick<User, 'id' | 'name' | 'email'>;
+}
+
+export interface BusinessDocumentAttachment {
+  id: string;
+  kind: 'IMAGE' | 'DOCUMENT';
+  fileName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
 }
 
 export interface Supplier {

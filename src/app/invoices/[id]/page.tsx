@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock3, Download, IndianRupee, Loader2, Mail, MessageCircle, ReceiptText, Send, Share2, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock3, Download, FileImage, FileText, IndianRupee, Loader2, Mail, MessageCircle, Paperclip, ReceiptText, Send, Share2, XCircle } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import Modal from '@/components/Modal';
@@ -18,6 +18,7 @@ export default function InvoiceDetailPage() {
   const [showPayment, setShowPayment] = useState(false);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingAttachment, setDownloadingAttachment] = useState('');
   const [sharing, setSharing] = useState(false);
   const [sendingChannel, setSendingChannel] = useState<InvoiceDeliveryChannel | ''>('');
   const [error, setError] = useState('');
@@ -58,6 +59,27 @@ export default function InvoiceDetailPage() {
       setError(getApiError(downloadError, 'Could not download the invoice PDF.'));
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function downloadAttachment(attachmentId: string, fileName: string) {
+    if (!invoice || downloadingAttachment) return;
+    setDownloadingAttachment(attachmentId);
+    setError('');
+    try {
+      const response = await api.get(`/invoices/${invoice.id}/attachments/${attachmentId}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (downloadError: unknown) {
+      setError(getApiError(downloadError, 'Could not download this attachment.'));
+    } finally {
+      setDownloadingAttachment('');
     }
   }
 
@@ -210,6 +232,37 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
       </article>
+
+      <section className="card mt-5 overflow-hidden">
+        <div className="border-b border-slate-100 p-5">
+          <h2 className="flex items-center gap-2 font-bold text-slate-900"><Paperclip size={17} className="text-blue-600" /> Attachments</h2>
+          <p className="mt-1 text-xs text-slate-500">Images and documents saved with this invoice.</p>
+        </div>
+        {invoice.attachments?.length ? (
+          <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
+            {invoice.attachments.map((attachment) => (
+              <button
+                key={attachment.id}
+                type="button"
+                onClick={() => void downloadAttachment(attachment.id, attachment.fileName)}
+                disabled={Boolean(downloadingAttachment)}
+                className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50/40 disabled:opacity-60"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                  {attachment.kind === 'IMAGE' ? <FileImage size={18} /> : <FileText size={18} />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <strong className="block truncate text-xs text-slate-800">{attachment.fileName}</strong>
+                  <small className="text-[10px] text-slate-500">{(attachment.size / 1024 / 1024).toFixed(1)} MB</small>
+                </span>
+                {downloadingAttachment === attachment.id ? <Loader2 size={15} className="shrink-0 animate-spin text-blue-600" /> : <Download size={15} className="shrink-0 text-slate-400" />}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="p-5 text-xs text-slate-400">No images or documents were uploaded for this invoice.</p>
+        )}
+      </section>
 
       <section className="card mt-5 overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">

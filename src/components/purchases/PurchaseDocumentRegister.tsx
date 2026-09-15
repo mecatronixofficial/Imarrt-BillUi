@@ -7,6 +7,7 @@ import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
 import { getAllPages, getApiError } from '@/lib/api';
+import { DOCUMENT_CONFIG } from '@/lib/documents';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { BusinessDocument, BusinessDocumentType } from '@/types';
 
@@ -53,7 +54,7 @@ export default function PurchaseDocumentRegister(props: Props) {
 
   return (
     <>
-      <PageHeader title={props.title} description={props.description} action={<Link href={`/documents/new?type=${props.type}`} className="btn-primary inline-flex items-center gap-2"><FilePlus2 aria-hidden="true" size={16} />{props.actionLabel}</Link>} />
+      <PageHeader title={props.title} description={props.description} action={<Link href={DOCUMENT_CONFIG[props.type].createPath} className="btn-primary inline-flex items-center gap-2"><FilePlus2 aria-hidden="true" size={16} />{props.actionLabel}</Link>} />
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Metric label="Total records" value={documents.length.toLocaleString('en-IN')} />
         <Metric label="Open records" value={open.toLocaleString('en-IN')} />

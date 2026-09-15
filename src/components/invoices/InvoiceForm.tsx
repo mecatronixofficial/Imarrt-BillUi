@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeft, ArrowRight, Check, FileText, Loader2, Plus, ReceiptText, Save, Share2, Trash2, UserRound, X } from 'lucide-react';
+import Image from 'next/image';
+import { AlertCircle, ArrowLeft, ArrowRight, Camera, Check, FileCheck2, FilePlus2, FileText, Loader2, Phone, Plus, ReceiptText, Save, Share2, Trash2, UserRound, X } from 'lucide-react';
 import { api, getActiveBusinessId, getAllPages, getApiError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import type { Business, Invoice, Item, Party } from '@/types';
@@ -35,6 +36,13 @@ const today = () => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
+type InvoiceAttachment = {
+  id: string;
+  file: File;
+  kind: 'image' | 'document';
+  previewUrl?: string;
+};
+
 export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => void; onBusyChange?: (busy: boolean) => void }) {
   const router = useRouter();
   const { initialPartyId = '' } = useEmbeddedForm();
@@ -44,6 +52,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   const [businessId, setBusinessId] = useState(() => getActiveBusinessId() ?? '');
   const [gstRegistered, setGstRegistered] = useState(false);
   const [partyId, setPartyId] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [saleMode, setSaleMode] = useState<'CREDIT' | 'CASH'>('CREDIT');
   const [invoiceDate, setInvoiceDate] = useState(today);
   const [invoiceNumber, setInvoiceNumber] = useState('Assigned on save');
@@ -51,6 +60,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [terms, setTerms] = useState('');
   const [notes, setNotes] = useState('');
+  const [attachments, setAttachments] = useState<InvoiceAttachment[]>([]);
   const [discount, setDiscount] = useState<number>(0);
   const [lines, setLines] = useState<InvoiceDraftLine[]>(() => [emptyLine()]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +71,9 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   const [loadVersion, setLoadVersion] = useState(0);
   const busyRef = useRef(false);
   const errorRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const attachmentsRef = useRef<InvoiceAttachment[]>([]);
 
   const setBusy = useCallback((busy: boolean) => {
     busyRef.current = busy;
@@ -91,8 +104,10 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
 
       const queryPartyId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('partyId') : null;
       const requested = initialPartyId || queryPartyId || '';
-      if (requested && partyResponse.data.some(({ id }) => id === requested)) {
-        setPartyId(requested);
+      const requestedParty = requested ? partyResponse.data.find(({ id }) => id === requested) : undefined;
+      if (requestedParty) {
+        setPartyId(requestedParty.id);
+        setCustomerPhone(requestedParty.phone || '');
       }
     } catch (loadFailure) {
       if (!signal.aborted) {
@@ -125,6 +140,14 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
     if (error) errorRef.current?.focus();
   }, [error]);
 
+  useEffect(() => { attachmentsRef.current = attachments; }, [attachments]);
+
+  useEffect(() => () => {
+    attachmentsRef.current.forEach(({ previewUrl }) => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    });
+  }, []);
+
   function updateLine(key: string, patch: Partial<InvoiceDraftLine>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   }
@@ -144,15 +167,78 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
     );
   }
 
-  const totals = useMemo(() => calculateInvoice(lines, discount, gstRegistered), [lines, discount, gstRegistered]);
+  function selectParty(nextPartyId: string) {
+    const party = parties.find(({ id }) => id === nextPartyId);
+    setPartyId(nextPartyId);
+    setCustomerPhone(party?.phone || '');
+  }
+
+  function addAttachments(event: ChangeEvent<HTMLInputElement>, kind: InvoiceAttachment['kind']) {
+    const selected = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    const availableSlots = Math.max(0, 10 - attachments.length);
+    let availableBytes = Math.max(0, 25 * 1024 * 1024 - attachments.reduce((sum, entry) => sum + entry.file.size, 0));
+    const accepted = selected.filter((file) => {
+      if (file.size > 10 * 1024 * 1024 || file.size > availableBytes) return false;
+      availableBytes -= file.size;
+      return true;
+    }).slice(0, availableSlots);
+
+    if (accepted.length !== selected.length) {
+      setError('You can add up to 10 files and 25 MB total. Each file must be 10 MB or smaller.');
+    }
+
+    setAttachments((current) => [
+      ...current,
+      ...accepted.map((file) => ({
+        id: generateLineId(),
+        file,
+        kind,
+        previewUrl: kind === 'image' ? URL.createObjectURL(file) : undefined,
+      })),
+    ]);
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((current) => {
+      const attachment = current.find((entry) => entry.id === id);
+      if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      return current.filter((entry) => entry.id !== id);
+    });
+  }
+
+  const totals = useMemo(() => calculateInvoice(lines, discount, true), [lines, discount]);
   const selectedParty = parties.find(({ id }) => id === partyId);
   const disabled = loading || Boolean(loadError) || Boolean(saving) || Boolean(savedId);
+
+  async function shareWithAttachments(invoice: Invoice) {
+    if (!attachments.length || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
+    const { data: pdf } = await api.get(`/invoices/${invoice.id}/pdf`, {
+      responseType: 'blob',
+      headers: { 'X-Business-Id': businessId },
+    });
+    const files = [
+      new File([pdf], `${invoice.invoiceNumber}.pdf`, { type: 'application/pdf' }),
+      ...attachments.map(({ file }) => file),
+    ];
+    if (typeof navigator.canShare === 'function' && !navigator.canShare({ files })) return false;
+    await navigator.share({
+      title: `Invoice ${invoice.invoiceNumber}`,
+      text: `${selectedParty?.name || 'Customer'} · ${formatCurrency(invoice.grandTotal)}`,
+      files,
+    });
+    return true;
+  }
 
   async function submit(action: 'SAVE' | 'SHARE') {
     if (busyRef.current || disabled) return;
     setError('');
     const enteredLines = lines.filter((line) => (line.description || '').trim() || line.itemId || (line.unitPrice ?? 0) !== 0);
     if (!partyId) return setError('Select a customer before saving this invoice.');
+    const normalizedPhone = customerPhone.replace(/[\s()-]/g, '');
+    if (normalizedPhone && !/^\+?[0-9]{7,15}$/.test(normalizedPhone)) {
+      return setError('Enter a valid customer phone number with 7 to 15 digits.');
+    }
     if (!invoiceDate || (dueDate && dueDate < invoiceDate)) return setError('Choose an invoice date and a due date on or after it.');
     if (!enteredLines.length) return setError('Add at least one item with a description.');
     if (
@@ -175,7 +261,10 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
     if (safeDiscount < 0 || safeDiscount > totals.subtotal + totals.tax) {
       return setError('Discount must be between zero and the invoice amount.');
     }
-    const invoiceNotes = [notes.trim(), terms.trim() && `Terms & conditions\n${terms.trim()}`].filter(Boolean).join('\n\n');
+    const invoiceNotes = [
+      notes.trim(),
+      terms.trim() && `Terms & conditions\n${terms.trim()}`,
+    ].filter(Boolean).join('\n\n');
     if (invoiceNotes.length > 5000) return setError('Notes and terms together must be 5,000 characters or fewer.');
 
     setBusy(true);
@@ -183,6 +272,14 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
     let createdId = '';
     try {
       const requestConfig = { headers: { 'X-Business-Id': businessId } };
+      if (selectedParty && normalizedPhone !== (selectedParty.phone || '').replace(/[\s()-]/g, '')) {
+        const { data: updatedParty } = await api.patch<Party>(
+          `/parties/${selectedParty.id}`,
+          { phone: normalizedPhone || undefined },
+          requestConfig,
+        );
+        setParties((current) => current.map((party) => party.id === updatedParty.id ? updatedParty : party));
+      }
       const { data } = await api.post<Invoice>('/invoices', {
         partyId,
         issueDate: invoiceDate,
@@ -195,23 +292,34 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
           description: (line.description || '').trim(),
           quantity: line.quantity,
           unitPrice: line.unitPrice,
-          taxRate: gstRegistered ? line.taxRate : 0,
+          taxRate: line.taxRate,
         })),
       }, requestConfig);
       createdId = data.id;
       setSavedId(data.id);
+      if (attachments.length) {
+        const formData = new FormData();
+        attachments.forEach(({ file }) => formData.append('files', file, file.name));
+        await api.post(`/invoices/${data.id}/attachments`, formData, {
+          headers: { 'X-Business-Id': businessId, 'Content-Type': 'multipart/form-data' },
+          timeout: 120000,
+        });
+      }
       if (saleMode === 'CASH' && Number(data.grandTotal) > 0) {
         await api.post(`/invoices/${data.id}/payments`, { amount: Number(data.grandTotal), method: paymentMethod }, requestConfig);
       }
       if (action === 'SHARE') {
-        const { data: attempts } = await api.post<Array<{ status: string }>>(`/invoices/${data.id}/deliver`, { channels: ['WHATSAPP'] }, requestConfig);
-        if (attempts.some(({ status }) => status === 'FAILED')) throw new Error('WhatsApp delivery failed.');
+        const sharedFromDevice = await shareWithAttachments(data);
+        if (!sharedFromDevice) {
+          const { data: attempts } = await api.post<Array<{ status: string }>>(`/invoices/${data.id}/deliver`, { channels: ['WHATSAPP'] }, requestConfig);
+          if (attempts.some(({ status }) => status === 'FAILED')) throw new Error('WhatsApp delivery failed.');
+        }
       }
       router.push(`/invoices/${data.id}?companyId=${encodeURIComponent(businessId)}`);
     } catch (saveFailure) {
       setError(
         createdId
-          ? 'Invoice saved, but payment or sharing could not be completed. Open the saved invoice to review and finish it.'
+          ? 'Invoice saved, but an attachment, payment, or sharing step could not be completed. Open the saved invoice to review it.'
           : getApiError(saveFailure, 'Could not save the invoice. Your details are still here.'),
       );
     } finally {
@@ -239,6 +347,22 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
           </div>
         </div>
         <div className={styles.headerEnd}>
+          <div className={styles.headerPayment}>
+            <span>Payment type</span>
+            <div className={styles.paymentToggle} aria-label="Payment type">
+              {(['CASH', 'CREDIT'] as const).map((mode) => (
+                <button
+                  type="button"
+                  key={mode}
+                  aria-pressed={saleMode === mode}
+                  className={saleMode === mode ? styles.paymentSelected : ''}
+                  onClick={() => setSaleMode(mode)}
+                >
+                  {mode === 'CASH' ? 'Cash' : 'Credit'}
+                </button>
+              ))}
+            </div>
+          </div>
           <DocumentCompanyPicker
             businesses={businesses}
             value={businessId}
@@ -291,23 +415,39 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
               <section className={styles.card}>
                 <SectionHeading icon={<UserRound size={18} />} title="Customer details" description="Who are you billing?" />
                 <div className={styles.cardBody}>
+                  <div className={styles.customerFields}>
                   <Field label="Customer *">
-                    <select className={styles.input} value={partyId} onChange={(event) => setPartyId(event.target.value)}>
+                    <select className={styles.input} value={partyId} onChange={(event) => selectParty(event.target.value)}>
                       <option value="">{loading ? 'Loading customers…' : 'Select a customer'}</option>
                       {parties.map((party) => (
                         <option key={party.id} value={party.id}>
-                          {party.name}
+                          {party.name}{party.phone ? ` · ${party.phone}` : ''}
                         </option>
                       ))}
                     </select>
                   </Field>
+                  <Field label="Phone number">
+                    <div className={styles.phoneInput}>
+                      <Phone size={16} aria-hidden="true" />
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        className={styles.input}
+                        value={customerPhone}
+                        placeholder="Enter contact number"
+                        onChange={(event) => setCustomerPhone(event.target.value.replace(/[^0-9+ ()-]/g, ''))}
+                      />
+                    </div>
+                  </Field>
+                  </div>
                   {selectedParty ? (
                     <div className={styles.customerDetails}>
                       <div className={styles.customerIdentity}>
                         <span className={styles.avatar}>{(selectedParty.name || 'CU').slice(0, 2).toUpperCase()}</span>
                         <div>
                           <strong>{selectedParty.name}</strong>
-                          <p>{selectedParty.phone || selectedParty.email || 'No contact details'}</p>
+                          <p>{customerPhone || selectedParty.email || 'No contact details'}</p>
                         </div>
                         <span className={styles.balance}>
                           Balance due<strong>{formatCurrency(selectedParty.balanceDue ?? 0)}</strong>
@@ -418,9 +558,8 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                               min="0"
                               max="100"
                               step="0.01"
-                              disabled={!gstRegistered}
                               className={styles.cellInput}
-                              value={gstRegistered ? (isNaN(line.taxRate) ? '' : line.taxRate) : 0}
+                              value={isNaN(line.taxRate) ? '' : line.taxRate}
                               onChange={(event) => updateLine(line.key, { taxRate: parseFloat(event.target.value) || 0 })}
                             />
                           </td>
@@ -453,9 +592,6 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                   </button>
                   <span>{totals.quantity} total quantity</span>
                 </div>
-                {!gstRegistered && !loading && (
-                  <p className={styles.taxNote}>Tax is not applied because this business is not GST registered.</p>
-                )}
               </section>
 
               <section className={styles.card}>
@@ -486,6 +622,53 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                       onChange={(event) => setTerms(event.target.value)}
                     />
                   </Field>
+                  <div className={styles.attachmentSection}>
+                    <div className={styles.attachmentButtons}>
+                      <input
+                        ref={imageInputRef}
+                        className={styles.hiddenFileInput}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        multiple
+                        onChange={(event) => addAttachments(event, 'image')}
+                      />
+                      <input
+                        ref={documentInputRef}
+                        className={styles.hiddenFileInput}
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                        multiple
+                        onChange={(event) => addAttachments(event, 'document')}
+                      />
+                      <button type="button" className={styles.uploadButton} onClick={() => imageInputRef.current?.click()}>
+                        <Camera size={17} />
+                        <span>Add images<small>PNG, JPG or WebP</small></span>
+                      </button>
+                      <button type="button" className={styles.uploadButton} onClick={() => documentInputRef.current?.click()}>
+                        <FilePlus2 size={17} />
+                        <span>Add documents<small>PDF, Word or spreadsheet</small></span>
+                      </button>
+                    </div>
+                    {attachments.length > 0 && (
+                      <div className={styles.attachmentList} aria-label="Selected attachments">
+                        {attachments.map((attachment) => (
+                          <div key={attachment.id} className={styles.attachmentChip}>
+                            {attachment.previewUrl ? (
+                              <Image src={attachment.previewUrl} width={36} height={36} unoptimized alt="" />
+                            ) : (
+                              <span className={styles.documentIcon}><FileCheck2 size={17} /></span>
+                            )}
+                            <span>
+                              <strong>{attachment.file.name}</strong>
+                              <small>{(attachment.file.size / 1024 / 1024).toFixed(1)} MB</small>
+                            </span>
+                            <button type="button" onClick={() => removeAttachment(attachment.id)} aria-label={`Remove ${attachment.file.name}`}><X size={14} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className={styles.attachmentHelp}>Images and documents are saved with the invoice. Up to 10 files and 25 MB total.</p>
+                  </div>
                 </div>
               </section>
             </div>
@@ -523,26 +706,6 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                         onChange={(event) => setDueDate(event.target.value)}
                       />
                     </Field>
-                  </div>
-                  <div>
-                    <span className={styles.fieldLabel}>Payment type</span>
-                    <div className={styles.segmented} aria-label="Payment type">
-                      {(['CREDIT', 'CASH'] as const).map((mode) => (
-                        <button
-                          type="button"
-                          key={mode}
-                          aria-pressed={saleMode === mode}
-                          className={saleMode === mode ? styles.selectedSegment : ''}
-                          onClick={() => setSaleMode(mode)}
-                        >
-                          {saleMode === mode && <Check size={14} />}
-                          {mode === 'CREDIT' ? 'Credit sale' : 'Paid sale'}
-                        </button>
-                      ))}
-                    </div>
-                    <p className={styles.help}>
-                      {saleMode === 'CREDIT' ? 'Payment will be collected later.' : 'Record the full payment when saving.'}
-                    </p>
                   </div>
                   {saleMode === 'CASH' && (
                     <Field label="Payment method">
