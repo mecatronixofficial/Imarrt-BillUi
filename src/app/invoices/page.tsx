@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, ReceiptText } from 'lucide-react';
-import PageHeader from '@/components/PageHeader';
+import { Plus, ReceiptText, Trash2 } from 'lucide-react';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import StatusBadge from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
-import { getAllPages, getApiError } from '@/lib/api';
+import { api, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Invoice } from '@/types';
 
@@ -14,6 +14,26 @@ export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [canDelete, setCanDelete] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function deleteInvoice() {
+    if (!invoiceToDelete || deleting) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api.delete(`/invoices/${invoiceToDelete.id}`);
+      setInvoices((current) => current.filter((invoice) => invoice.id !== invoiceToDelete.id));
+      setInvoiceToDelete(null);
+    } catch (deleteError: unknown) {
+      setDeleteError(getApiError(deleteError, 'Could not delete invoice.'));
+      setInvoiceToDelete(null);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -31,6 +51,14 @@ export default function InvoicesPage() {
   useEffect(() => {
     void loadInvoices();
   }, [loadInvoices]);
+
+  useEffect(() => {
+    let active = true;
+    void getCurrentUser().then((user) => {
+      if (active) setCanDelete(user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN');
+    }).catch(() => { if (active) setCanDelete(false); });
+    return () => { active = false; };
+  }, []);
 
   return (
     <>
@@ -99,6 +127,7 @@ export default function InvoicesPage() {
       
 
       <section className="card overflow-hidden">
+        {deleteError && <div role="alert" className="border-b border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">{deleteError}</div>}
         {loading ? (
           <LoadingState label="Loading invoices..." />
         ) : error ? (
@@ -117,6 +146,7 @@ export default function InvoicesPage() {
                   <th className="px-5 py-3 font-semibold">Status</th>
                   <th className="px-5 py-3 text-right font-semibold">Total</th>
                   <th className="px-5 py-3 text-right font-semibold">Balance due</th>
+                  {canDelete && <th className="px-5 py-3 text-right font-semibold">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -135,6 +165,7 @@ export default function InvoicesPage() {
                       <td className="px-5 py-3"><StatusBadge status={invoice.status} /></td>
                       <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-slate-800">{formatCurrency(invoice.grandTotal)}</td>
                       <td className="whitespace-nowrap px-5 py-3 text-right text-slate-600">{formatCurrency(balance)}</td>
+                      {canDelete && <td className="px-5 py-3 text-right"><button type="button" onClick={() => setInvoiceToDelete(invoice)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700" aria-label={`Delete invoice ${invoice.invoiceNumber}`}><Trash2 size={14} aria-hidden="true" /> Delete</button></td>}
                     </tr>
                   );
                 })}
@@ -143,6 +174,7 @@ export default function InvoicesPage() {
           </div>
         )}
       </section>
+      {invoiceToDelete && <ConfirmDialog title="Delete invoice?" message={`Delete invoice ${invoiceToDelete.invoiceNumber}? This cannot be undone.`} busy={deleting} onCancel={() => setInvoiceToDelete(null)} onConfirm={() => void deleteInvoice()} />}
     </>
   );
 }

@@ -40,7 +40,10 @@ export interface User {
 
 export interface Party {
   id: string;
+  code?: string;
   name: string;
+  billingName?: string;
+  group?: string;
   email?: string;
   phone?: string;
   whatsappNumber?: string;
@@ -265,8 +268,8 @@ export interface Supplier {
   notes?: string;
 }
 
-export type ProductionOrderStatus = 'CONFIRMED' | 'IN_PRODUCTION' | 'READY' | 'DISPATCHED' | 'COMPLETED' | 'CANCELLED';
-export type ProductionStageType = 'CUTTING' | 'PRINT_EMBROIDERY' | 'STITCHING' | 'PACKING';
+export type ProductionOrderStatus = 'DRAFT' | 'CONFIRMED' | 'IN_PRODUCTION' | 'READY' | 'DISPATCHED' | 'COMPLETED' | 'CANCELLED';
+export type ProductionStageType = 'MASTER' | 'FABRIC_PURCHASE' | 'WASHING_COMPACTING' | 'CUTTING' | 'PRINT_EMBROIDERY' | 'STITCHING' | 'PACKING' | 'FINAL';
 export type ProductionStageStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
 export type ProductionCostCategory = 'FABRIC' | 'COLLAR_RIB' | 'ACCESSORIES' | 'LABELS' | 'TAGS' | 'POLY_BAGS' | 'BUTTONS' | 'CARTONS' | 'TRANSPORT' | 'OTHER';
 
@@ -283,6 +286,9 @@ export interface ProductionStage {
   rejectedQty: number;
   rate: string;
   otherCost: string;
+  inputWeightKg?: string | null;
+  outputWeightKg?: string | null;
+  rateUnit?: 'PIECE' | 'KG';
   startDate?: string;
   dueDate?: string;
   completedAt?: string;
@@ -325,13 +331,22 @@ export interface ProductionOrder {
   fabricGsm?: string;
   color?: string;
   sizeBreakdown?: Record<string, number>;
+  sizeColorBreakdown?: Record<string, Record<string, number>>;
+  instructions?: { product?: Array<{ item: string; detail: string }>; accessories?: Array<{ item: string; detail: string }>; packing?: Array<{ item: string; detail: string }> };
   orderedQty: number;
   saleRate: string;
+  supplierRate?: string;
+  orderDate?: string;
+  confirmedAt?: string;
+  invoiceDetails?: string;
+  transport?: string;
+  destination?: string;
   dueDate?: string;
   status: ProductionOrderStatus;
   notes?: string;
   createdAt: string;
   stages: ProductionStage[];
   costs: ProductionCost[];
+  images?: Array<{ id: string; stageType?: ProductionStageType | null; displayName?: string; color?: string; sizeLabel?: string; details?: string; fileName: string; mimeType: string; size: number; createdAt: string }>;
   summary: ProductionSummary;
 }
