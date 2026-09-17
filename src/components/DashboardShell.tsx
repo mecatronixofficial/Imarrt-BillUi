@@ -150,8 +150,8 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400"><span>{pageMeta.section}</span><ChevronRight aria-hidden="true" size={11} /><span className="truncate text-slate-500">{pageMeta.title}</span></div>
             <p className="mt-0.5 truncate text-sm font-extrabold capitalize text-slate-900">{pageMeta.title}</p>
           </div>
+          <div className="absolute left-1/2 w-[340px] -translate-x-1/2"><CommandMenu /></div>
           <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
-            <CommandMenu />
             <Link href="/invoices/new" className="btn-primary inline-flex h-9 shrink-0 items-center gap-2 px-3 text-xs">
               <Plus aria-hidden="true" size={15} />
               <span className="hidden xl:inline">New invoice</span>

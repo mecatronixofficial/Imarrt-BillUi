@@ -29,10 +29,14 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import type { Party, Invoice, Item, ProductionOrder, ProductionStageType } from '@/types';
 
 const STAGES: Array<{ type: ProductionStageType; label: string; icon: typeof Scissors; color: string }> = [
+  { type: 'MASTER', label: 'Master', icon: Users, color: 'bg-slate-600' },
+  { type: 'FABRIC_PURCHASE', label: 'Fabric', icon: Boxes, color: 'bg-indigo-500' },
+  { type: 'WASHING_COMPACTING', label: 'Wash / Compact', icon: Factory, color: 'bg-cyan-500' },
   { type: 'CUTTING', label: 'Cutting', icon: Scissors, color: 'bg-blue-500' },
   { type: 'PRINT_EMBROIDERY', label: 'Print / Emb', icon: Palette, color: 'bg-violet-500' },
   { type: 'STITCHING', label: 'Stitching', icon: Shirt, color: 'bg-amber-500' },
   { type: 'PACKING', label: 'Packing', icon: PackageCheck, color: 'bg-emerald-500' },
+  { type: 'FINAL', label: 'Final total', icon: Package, color: 'bg-teal-500' },
 ];
 
 type DashboardData = {
@@ -87,7 +91,7 @@ export default function DashboardPage() {
   const insights = useMemo(() => calculateInsights(data), [data]);
 
   return (
-    <div>
+    <div className="min-w-0">
       <HeroHeader />
 
       {loading ? (
@@ -102,19 +106,19 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <section className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Business summary">
+          <section className="mb-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4" aria-label="Business summary">
             <SummaryCard icon={IndianRupee} label="Total collected" value={formatCurrency(insights.collected)} detail={`${insights.collectionRate}% collection rate`} tone="emerald" />
             <SummaryCard icon={CircleDollarSign} label="Outstanding" value={formatCurrency(insights.outstanding)} detail={`${insights.unpaidInvoices} invoices pending`} tone="amber" />
             <SummaryCard icon={Factory} label="Active production" value={insights.activeOrders.toLocaleString('en-IN')} detail={`${insights.piecesInProduction.toLocaleString('en-IN')} pieces running`} tone="blue" />
             <SummaryCard icon={TrendingUp} label="Projected profit" value={formatCurrency(insights.projectedProfit)} detail={`${insights.averageMargin}% average margin`} tone={insights.projectedProfit >= 0 ? 'violet' : 'red'} />
           </section>
 
-          <section className="mb-4 grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]">
+          <section className="mb-4 grid min-w-0 items-stretch gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.75fr)]">
             <ProductionOverview orders={data.production} stageTotals={insights.stageTotals} />
             <FinancialSnapshot insights={insights} />
           </section>
 
-          <section className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)_280px]">
+          <section className="grid min-w-0 items-start gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)_minmax(0,280px)]">
             <RecentInvoices invoices={data.invoices} />
             <RecentProduction orders={data.production} />
             <BusinessPulse data={data} insights={insights} />
@@ -167,8 +171,8 @@ function SummaryCard({ icon: Icon, label, value, detail, tone }: { icon: typeof 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{label}</p>
-          <p className="mt-1 truncate text-lg font-extrabold tracking-tight text-slate-950 sm:text-xl">{value}</p>
-          <p className="mt-1 truncate text-[10px] text-slate-500">{detail}</p>
+          <p className="mt-1 break-words text-lg font-extrabold tracking-tight text-slate-950 sm:text-xl">{value}</p>
+          <p className="mt-1 text-[10px] text-slate-500">{detail}</p>
         </div>
         <span className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition group-hover:scale-105', style.icon)}><Icon aria-hidden="true" size={18} /></span>
       </div>
@@ -177,7 +181,8 @@ function SummaryCard({ icon: Icon, label, value, detail, tone }: { icon: typeof 
 }
 
 function ProductionOverview({ orders, stageTotals }: { orders: ProductionOrder[]; stageTotals: ReturnType<typeof calculateInsights>['stageTotals'] }) {
-  const active = orders.filter(({ status }) => !['COMPLETED', 'CANCELLED'].includes(status));
+  const active = orders.filter(({ status }) => !['DRAFT', 'COMPLETED', 'CANCELLED'].includes(status));
+  const visibleStages = STAGES.filter(({ type }) => orders.some((order) => order.stages.some((stage) => stage.type === type)));
   return (
 <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
   <CardHeader
@@ -190,8 +195,8 @@ function ProductionOverview({ orders, stageTotals }: { orders: ProductionOrder[]
 
   {/* Stage Summary */}
   <div className="border-b border-slate-100 bg-slate-50/40 p-3 sm:p-4">
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {STAGES.map(({ type, label, icon: Icon, color }, index) => {
+    <div className="grid gap-3 sm:grid-cols-2">
+      {visibleStages.map(({ type, label, icon: Icon, color }, index) => {
         const stage = stageTotals[type];
         const progress = Math.min(stage.progress, 100);
 
@@ -645,7 +650,7 @@ function FinancialSnapshot({ insights }: { insights: ReturnType<typeof calculate
   </div>
 
   {/* Charts */}
-  <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.35fr_.75fr]">
+  <div className="grid gap-4 p-4 sm:p-5">
     {/* LEFT — LINE / AREA CHART */}
     <div
       className="
@@ -1042,271 +1047,72 @@ function DarkStat({ label, value, note }: { label: string; value: string; note: 
 
 function RecentInvoices({ invoices }: { invoices: Invoice[] }) {
   return (
-    <article className="card overflow-hidden">
+    <article className="card min-w-0 overflow-hidden">
       <CardHeader icon={ReceiptText} title="Recent invoices" description="Latest party billing activity" href="/invoices" linkLabel="View all" />
       {invoices.length === 0 ? (
         <CompactEmpty icon={FileText} text="No invoices created yet." href="/invoices/new" action="Create invoice" />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[510px] text-xs">
-            <thead className="bg-slate-50/80 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400"><tr><th className="px-4 py-2.5">Invoice</th><th className="px-4 py-2.5">Party</th><th className="px-4 py-2.5">Status</th><th className="px-4 py-2.5 text-right">Amount</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">
-              {invoices.slice(0, 5).map((invoice) => (
-                <tr key={invoice.id} className="transition hover:bg-slate-50/80">
-                  <td className="px-4 py-3"><Link href={`/invoices/${invoice.id}`} className="font-bold text-blue-600 hover:underline">{invoice.invoiceNumber}</Link><span className="mt-0.5 block text-[9px] text-slate-400">{formatDate(invoice.issueDate)}</span></td>
-                  <td className="max-w-36 truncate px-4 py-3 font-medium text-slate-700">{invoice.party?.name ?? 'Unknown'}</td>
-                  <td className="px-4 py-3"><StatusBadge status={invoice.status} /></td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(invoice.grandTotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="divide-y divide-slate-100">
+          {invoices.slice(0, 5).map((invoice) => (
+            <Link key={invoice.id} href={`/invoices/${invoice.id}`} className="block p-4 hover:bg-slate-50">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-blue-600">{invoice.invoiceNumber}</p>
+                  <p className="mt-1 truncate text-xs text-slate-600">{invoice.party?.name ?? 'Unknown'}</p>
+                </div>
+                <p className="shrink-0 text-xs font-bold text-slate-900">{formatCurrency(invoice.grandTotal)}</p>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="text-[10px] text-slate-400">{formatDate(invoice.issueDate)}</span>
+                <StatusBadge status={invoice.status} />
+              </div>
+            </Link>
+          ))}
         </div>
       )}
     </article>
   );
 }
 
+
 function RecentProduction({ orders }: { orders: ProductionOrder[] }) {
   return (
-   <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-  <CardHeader
-    icon={Boxes}
-    title="Production orders"
-    description="Recent styles and delivery status"
-    href="/production"
-    linkLabel="View all"
-  />
-
-  {orders.length === 0 ? (
-    <CompactEmpty
-      icon={Factory}
-      text="No production orders yet."
-      href="/production"
-      action="Start production"
-    />
-  ) : (
-    <div className="overflow-x-auto">
-      <div className="min-w-[760px]">
-        {/* Table Header */}
-        <div
-          className="
-            grid
-            grid-cols-[2fr_1.1fr_.8fr_1fr_.9fr_40px]
-            items-center
-            gap-3
-            border-b
-            border-slate-200
-            bg-slate-50
-            px-4
-            py-2.5
-          "
-        >
-          <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
-            Style / Order
-          </span>
-
-          <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
-            Quantity
-          </span>
-
-          <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
-            Progress
-          </span>
-
-          <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
-            Due Date
-          </span>
-
-          <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
-            Status
-          </span>
-
-          <span />
-        </div>
-
-        {/* Rows */}
+    <article className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <CardHeader icon={Boxes} title="Production orders" description="Recent styles and delivery status" href="/production" linkLabel="View all" />
+      {orders.length === 0 ? (
+        <CompactEmpty icon={Factory} text="No production orders yet." href="/production" action="Start production" />
+      ) : (
         <div className="divide-y divide-slate-100">
           {orders.slice(0, 5).map((order) => (
-            <Link
-              key={order.id}
-              href="/production"
-              className="
-                group
-                relative
-                grid
-                grid-cols-[2fr_1.1fr_.8fr_1fr_.9fr_40px]
-                items-center
-                gap-3
-                bg-white
-                px-4
-                py-3.5
-                transition-all
-                duration-300
-
-                hover:z-10
-                hover:bg-blue-50/40
-                hover:shadow-[0_8px_24px_rgba(37,99,235,0.08)]
-              "
-            >
-              {/* Left hover indicator */}
-              <div
-                className="
-                  absolute
-                  bottom-2
-                  left-0
-                  top-2
-                  w-[3px]
-                  scale-y-0
-                  rounded-r-full
-                  bg-blue-600
-                  transition-transform
-                  duration-300
-                  group-hover:scale-y-100
-                "
-              />
-
-              {/* Style / Order */}
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  className="
-                    flex
-                    h-10
-                    w-10
-                    shrink-0
-                    items-center
-                    justify-center
-                    rounded-xl
-                    border
-                    border-blue-100
-                    bg-blue-50
-                    text-blue-600
-                    transition-all
-                    duration-300
-
-                    group-hover:scale-105
-                    group-hover:border-blue-200
-                    group-hover:bg-blue-600
-                    group-hover:text-white
-                    group-hover:shadow-md
-                  "
-                >
-                  <Shirt aria-hidden="true" size={17} />
-                </span>
-
-                <div className="min-w-0">
-                  <p
-                    className="
-                      truncate
-                      text-xs
-                      font-extrabold
-                      text-slate-900
-                      transition-colors
-                      group-hover:text-blue-700
-                    "
-                  >
-                    {order.styleName}
-                  </p>
-
-                  <p className="mt-1 truncate text-[9px] font-medium text-slate-400">
-                    {order.orderNumber}
-                    {order.party?.name && ` · ${order.party.name}`}
-                  </p>
-                </div>
-              </div>
-
-              {/* Quantity */}
-              <div>
-                <p className="text-xs font-extrabold text-slate-800">
-                  {order.orderedQty.toLocaleString("en-IN")}
-                </p>
-
-                <p className="mt-0.5 text-[9px] font-medium text-slate-400">
-                  pieces
-                </p>
-              </div>
-
-              {/* Progress */}
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-extrabold text-blue-700">
-                    {order.summary?.progressPercent ?? 0}%
+            <Link key={order.id} href="/production" className="block min-w-0 p-4 transition hover:bg-blue-50/40">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <Shirt aria-hidden="true" size={17} />
                   </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-extrabold text-slate-900">{order.styleName}</p>
+                    <p className="mt-1 truncate text-[10px] text-slate-500">{order.orderNumber}{order.party?.name && ` · ${order.party.name}`}</p>
+                  </div>
                 </div>
-
-                <div className="mt-1.5 h-1.5 w-full max-w-[80px] overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="
-                      h-full
-                      rounded-full
-                      bg-blue-600
-                      transition-all
-                      duration-700
-                    "
-                    style={{
-                      width: `${Math.min(
-                        order.summary?.progressPercent ?? 0,
-                        100,
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Due Date */}
-              <div>
-                <p className="text-[10px] font-bold text-slate-700">
-                  {formatDate(order.dueDate)}
-                </p>
-
-                <p className="mt-0.5 text-[9px] text-slate-400">
-                  Delivery date
-                </p>
-              </div>
-
-              {/* Status */}
-              <div className="flex items-center">
                 <StatusBadge status={order.status} />
               </div>
-
-              {/* Arrow */}
-              <div className="flex justify-end">
-                <span
-                  className="
-                    flex
-                    h-8
-                    w-8
-                    items-center
-                    justify-center
-                    rounded-xl
-                    border
-                    border-slate-200
-                    bg-white
-                    text-sm
-                    font-bold
-                    text-slate-400
-                    transition-all
-                    duration-300
-
-                    group-hover:translate-x-1
-                    group-hover:border-blue-200
-                    group-hover:bg-blue-600
-                    group-hover:text-white
-                    group-hover:shadow-sm
-                  "
-                >
-                  →
-                </span>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
+                <div className="min-w-0"><p className="text-slate-400">Quantity</p><p className="mt-0.5 truncate font-bold text-slate-800">{order.orderedQty.toLocaleString('en-IN')} pcs</p></div>
+                <div className="min-w-0"><p className="text-slate-400">Progress</p><p className="mt-0.5 font-bold text-blue-700">{order.summary?.progressPercent ?? 0}%</p></div>
+                <div className="min-w-0"><p className="text-slate-400">Due date</p><p className="mt-0.5 truncate font-bold text-slate-800">{formatDate(order.dueDate)}</p></div>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.min(order.summary?.progressPercent ?? 0, 100)}%` }} />
               </div>
             </Link>
           ))}
         </div>
-      </div>
-    </div>
-  )}
-</article>
+      )}
+    </article>
   );
 }
+
 
 function BusinessPulse({ data, insights }: { data: DashboardData; insights: ReturnType<typeof calculateInsights> }) {
   const pulse = [
@@ -1827,9 +1633,10 @@ function calculateInsights(data: DashboardData) {
   const outstanding = Math.max(0, invoiced - collected);
   const now = Date.now();
   const weekAhead = now + 7 * 24 * 60 * 60 * 1000;
-  const active = data.production.filter(({ status }) => !['COMPLETED', 'CANCELLED'].includes(status));
-  const totalProductionRevenue = data.production.reduce((total, order) => total + order.summary.revenue, 0);
-  const projectedProfit = data.production.reduce((total, order) => total + order.summary.profit, 0);
+  const active = data.production.filter(({ status }) => !['DRAFT', 'COMPLETED', 'CANCELLED'].includes(status));
+  const confirmedProduction = data.production.filter(({ status }) => status !== 'DRAFT');
+  const totalProductionRevenue = confirmedProduction.reduce((total, order) => total + order.summary.revenue, 0);
+  const projectedProfit = confirmedProduction.reduce((total, order) => total + order.summary.profit, 0);
   const stageTotals = Object.fromEntries(STAGES.map(({ type }) => {
     const stages = active.flatMap((order) => order.stages.filter((stage) => stage.type === type));
     const planned = stages.reduce((total, stage) => total + stage.plannedQty, 0);

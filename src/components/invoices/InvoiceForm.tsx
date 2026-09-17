@@ -510,7 +510,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                               value={line.itemId ?? ''}
                               onChange={(event) => pickItem(line.key, event.target.value)}
                             >
-                              <option value="">Custom item / select from catalog</option>
+                              <option value="">Items</option>
                               {catalog.map((item) => (
                                 <option key={item.id} value={item.id}>
                                   {item.name}

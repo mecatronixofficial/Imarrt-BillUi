@@ -2,18 +2,19 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock3, Download, FileImage, FileText, IndianRupee, Loader2, Mail, MessageCircle, Paperclip, ReceiptText, Send, Share2, XCircle } from 'lucide-react';
-import PageHeader from '@/components/PageHeader';
+import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft, CheckCircle2, Clock3, Download, FileImage, FileText, IndianRupee, Loader2, Mail, MessageCircle, Paperclip, ReceiptText, Send, Share2, Trash2, XCircle } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
 import Modal from '@/components/Modal';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { ErrorState, LoadingState } from '@/components/ContentState';
-import { api, getApiError } from '@/lib/api';
+import { api, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Invoice, InvoiceDelivery, InvoiceDeliveryChannel } from '@/types';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [showPayment, setShowPayment] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -22,10 +23,28 @@ export default function InvoiceDetailPage() {
   const [sharing, setSharing] = useState(false);
   const [sendingChannel, setSendingChannel] = useState<InvoiceDeliveryChannel | ''>('');
   const [error, setError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
 
-  const loadInvoice = useCallback(async () => {
+  async function deleteInvoice() {
+    if (!invoice || !canDelete || deleting) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await api.delete(`/invoices/${invoice.id}`);
+      router.push('/invoices');
+      router.refresh();
+    } catch (deleteError: unknown) {
+      setError(getApiError(deleteError, 'Could not delete invoice.'));
+      setConfirmDelete(false);
+      setDeleting(false);
+    }
+  }
+
+  const loadInvoice = useCallback(async (showLoader = false) => {
     if (!id) return;
-    setLoading(true);
+    if (showLoader) setLoading(true);
     setError('');
     try {
       const { data } = await api.get<Invoice>(`/invoices/${id}`);
@@ -38,8 +57,16 @@ export default function InvoiceDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    void loadInvoice();
+    void loadInvoice(true);
   }, [loadInvoice]);
+
+  useEffect(() => {
+    let active = true;
+    void getCurrentUser().then((user) => {
+      if (active) setCanDelete(user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN');
+    }).catch(() => { if (active) setCanDelete(false); });
+    return () => { active = false; };
+  }, []);
 
   async function downloadPdf() {
     if (!invoice || downloading) return;
@@ -92,12 +119,13 @@ export default function InvoiceDetailPage() {
   function shareWhatsApp() {
     if (!invoice) return;
     const rawNumber = (invoice.party.whatsappNumber || invoice.party.phone || '').replace(/\D/g, '');
+    if (!rawNumber) return;
     const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
     window.open(`https://wa.me/${number}?text=${encodeURIComponent(invoiceSummary())}`, '_blank', 'noopener,noreferrer');
   }
 
   function shareEmail() {
-    if (!invoice) return;
+    if (!invoice?.party.email) return;
     const subject = `Invoice ${invoice.invoiceNumber}`;
     window.location.href = `mailto:${encodeURIComponent(invoice.party.email || '')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`${invoiceSummary()}\n\nPlease find the invoice details above. You can attach the downloaded PDF to this email.`)}`;
   }
@@ -134,7 +162,7 @@ export default function InvoiceDetailPage() {
   }
 
   if (error && !invoice) {
-    return <><div className="card"><ErrorState message={error} onRetry={loadInvoice} /></div></>;
+    return <><div className="card"><ErrorState message={error} onRetry={() => void loadInvoice(true)} /></div></>;
   }
 
   if (!invoice) {
@@ -145,37 +173,51 @@ export default function InvoiceDetailPage() {
 
   return (
     <>
-      <PageHeader
-        title={invoice.invoiceNumber}
-        description={`Issued ${formatDate(invoice.issueDate)}`}
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Link href="/invoices" className="btn-secondary inline-flex items-center gap-2">
-              <ArrowLeft aria-hidden="true" size={15} /> Back
-            </Link>
-            {balanceDue > 0 && invoice.status !== 'CANCELLED' && (
-              <button type="button" onClick={() => setShowPayment(true)} className="btn-secondary inline-flex items-center gap-2">
-                <IndianRupee aria-hidden="true" size={15} /> Record payment
-              </button>
-            )}
-            <button type="button" onClick={shareWhatsApp} className="btn-secondary inline-flex items-center gap-2 text-emerald-700">
-              <MessageCircle aria-hidden="true" size={15} /> WhatsApp
-            </button>
-            <button type="button" onClick={shareEmail} className="btn-secondary inline-flex items-center gap-2 text-blue-700">
-              <Mail aria-hidden="true" size={15} /> Email
-            </button>
-            <button type="button" onClick={() => void nativeShare()} disabled={sharing} className="btn-secondary inline-flex items-center gap-2 text-indigo-700">
-              {sharing ? <Loader2 aria-hidden="true" size={15} className="animate-spin" /> : <Share2 aria-hidden="true" size={15} />} Share
-            </button>
-            <button type="button" onClick={() => void downloadPdf()} disabled={downloading} className="btn-primary inline-flex items-center gap-2">
-              {downloading ? <Loader2 aria-hidden="true" size={15} className="animate-spin" /> : <Download aria-hidden="true" size={15} />}
-              {downloading ? 'Downloading...' : 'Download PDF'}
-            </button>
+      <div className="mb-4 overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-white shadow-sm">
+        <div className="border-l-4 border-blue-600 px-5 py-4 sm:px-6">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Invoice date</p>
+          <p className="mt-1 text-sm font-semibold text-slate-700">{formatDate(invoice.issueDate)}</p>
+          <div className="mt-3 border-t border-blue-100 pt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">Invoice code</p>
+            <p className="mt-1 break-all text-xl font-extrabold tracking-tight text-slate-950 sm:text-2xl">{invoice.invoiceNumber}</p>
           </div>
-        }
-      />
+        </div>
+      </div>
+
+      <div className="mb-5 flex flex-wrap gap-2">
+        <Link href="/invoices" className="btn-secondary inline-flex items-center gap-2">
+          <ArrowLeft aria-hidden="true" size={15} /> Back
+        </Link>
+        {balanceDue > 0 && invoice.status !== 'CANCELLED' && (
+          <button type="button" onClick={() => setShowPayment(true)} className="btn-secondary inline-flex items-center gap-2">
+            <IndianRupee aria-hidden="true" size={15} /> Record payment
+          </button>
+        )}
+        <button type="button" onClick={shareWhatsApp} disabled={!(invoice.party.whatsappNumber || invoice.party.phone)} className="btn-secondary inline-flex items-center gap-2 text-emerald-700 disabled:opacity-50">
+          <MessageCircle aria-hidden="true" size={15} /> WhatsApp
+        </button>
+        <button type="button" onClick={shareEmail} disabled={!invoice.party.email} className="btn-secondary inline-flex items-center gap-2 text-blue-700 disabled:opacity-50">
+          <Mail aria-hidden="true" size={15} /> Email
+        </button>
+        <button type="button" onClick={() => void nativeShare()} disabled={sharing} className="btn-secondary inline-flex items-center gap-2 text-indigo-700">
+          {sharing ? <Loader2 aria-hidden="true" size={15} className="animate-spin" /> : <Share2 aria-hidden="true" size={15} />} Share
+        </button>
+        <button type="button" onClick={() => void downloadPdf()} disabled={downloading} className="btn-primary inline-flex items-center gap-2">
+          {downloading ? <Loader2 aria-hidden="true" size={15} className="animate-spin" /> : <Download aria-hidden="true" size={15} />}
+          {downloading ? 'Downloading...' : 'Download PDF'}
+        </button>
+        {canDelete && <button type="button" onClick={() => setConfirmDelete(true)} className="btn-secondary inline-flex items-center gap-2 text-red-600">
+          <Trash2 aria-hidden="true" size={15} /> Delete
+        </button>}
+      </div>
 
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <SummaryCard label="Invoice total" value={formatCurrency(invoice.grandTotal)} tone="blue" />
+        <SummaryCard label="Amount paid" value={formatCurrency(invoice.amountPaid)} tone="green" />
+        <SummaryCard label="Balance due" value={formatCurrency(balanceDue)} tone={balanceDue > 0 ? 'amber' : 'green'} />
+      </div>
 
       <article className="card overflow-hidden">
         <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/50 p-5 sm:flex-row sm:items-start sm:justify-between">
@@ -213,7 +255,7 @@ export default function InvoiceDetailPage() {
                   <td className="py-3 font-medium text-slate-800">{item.description}</td>
                   <td className="py-3 text-right text-slate-600">{item.quantity}</td>
                   <td className="whitespace-nowrap py-3 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td>
-                  <td className="py-3 text-right text-slate-600">{Number(item.taxRate).toFixed(2)}%</td>
+                  <td className="py-3 text-right text-slate-600">{Number(item.taxRate || 0).toFixed(2)}%</td>
                   <td className="whitespace-nowrap py-3 text-right font-semibold text-slate-800">{formatCurrency(item.lineTotal)}</td>
                 </tr>
               ))}
@@ -228,10 +270,30 @@ export default function InvoiceDetailPage() {
             <div className="flex justify-between"><span className="text-slate-500">Discount</span><span>-{formatCurrency(invoice.discount)}</span></div>
             <div className="flex justify-between border-t border-slate-100 pt-3 text-base font-bold"><span>Total</span><span>{formatCurrency(invoice.grandTotal)}</span></div>
             <div className="flex justify-between text-emerald-600"><span>Paid</span><span>{formatCurrency(invoice.amountPaid)}</span></div>
-            <div className="flex justify-between rounded-lg bg-red-50 px-3 py-2 font-bold text-red-600"><span>Balance due</span><span>{formatCurrency(balanceDue)}</span></div>
+            <div className={`flex justify-between rounded-lg px-3 py-2 font-bold ${balanceDue > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}><span>Balance due</span><span>{formatCurrency(balanceDue)}</span></div>
           </div>
         </div>
       </article>
+
+      <section className="card mt-5 overflow-hidden">
+        <div className="border-b border-slate-100 p-5">
+          <h2 className="flex items-center gap-2 font-bold text-slate-900"><IndianRupee size={17} className="text-emerald-600" /> Payment history</h2>
+          <p className="mt-1 text-xs text-slate-500">Payments recorded against this invoice.</p>
+        </div>
+        {invoice.payments?.length ? (
+          <div className="divide-y divide-slate-100">
+            {invoice.payments.map((payment) => (
+              <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+                <div>
+                  <p className="font-semibold capitalize text-slate-800">{payment.method.replaceAll('_', ' ')}</p>
+                  <p className="text-xs text-slate-500">{formatDate(payment.paidAt)}{payment.reference ? ` · ${payment.reference}` : ''}</p>
+                </div>
+                <span className="font-bold tabular-nums text-emerald-700">{formatCurrency(payment.amount)}</span>
+              </div>
+            ))}
+          </div>
+        ) : <p className="p-5 text-xs text-slate-500">No payments recorded yet.</p>}
+      </section>
 
       <section className="card mt-5 overflow-hidden">
         <div className="border-b border-slate-100 p-5">
@@ -286,12 +348,27 @@ export default function InvoiceDetailPage() {
           }}
         />
       )}
+      {confirmDelete && <ConfirmDialog title="Delete invoice?" message={`Delete invoice ${invoice.invoiceNumber}? This cannot be undone.`} busy={deleting} onCancel={() => setConfirmDelete(false)} onConfirm={() => void deleteInvoice()} />}
     </>
   );
 }
 
+function SummaryCard({ label, value, tone }: { label: string; value: string; tone: 'blue' | 'green' | 'amber' }) {
+  const colors = {
+    blue: 'border-blue-100 bg-blue-50/70 text-blue-700',
+    green: 'border-emerald-100 bg-emerald-50/70 text-emerald-700',
+    amber: 'border-amber-100 bg-amber-50/70 text-amber-700',
+  };
+  return (
+    <div className={`rounded-xl border px-4 py-4 ${colors[tone]}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-75">{label}</p>
+      <p className="mt-2 text-xl font-bold tabular-nums sm:text-2xl">{value}</p>
+    </div>
+  );
+}
+
 function PaymentModal({ invoiceId, maxAmount, onClose, onSaved }: { invoiceId: string; maxAmount: number; onClose: () => void; onSaved: () => void }) {
-  const [amount, setAmount] = useState(maxAmount);
+  const [amount, setAmount] = useState(String(maxAmount));
   const [method, setMethod] = useState('cash');
   const [reference, setReference] = useState('');
   const [error, setError] = useState('');
@@ -300,10 +377,15 @@ function PaymentModal({ invoiceId, maxAmount, onClose, onSaved }: { invoiceId: s
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
+    const paymentAmount = Number(amount);
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || paymentAmount > maxAmount) {
+      setError(`Enter an amount greater than zero and no more than ${formatCurrency(maxAmount)}.`);
+      return;
+    }
     setSaving(true);
     setError('');
     try {
-      await api.post(`/invoices/${invoiceId}/payments`, { amount, method, reference: reference.trim() || undefined });
+      await api.post(`/invoices/${invoiceId}/payments`, { amount: paymentAmount, method, reference: reference.trim() || undefined });
       onSaved();
     } catch (saveError: unknown) {
       setError(getApiError(saveError, 'Could not record payment.'));
@@ -318,7 +400,7 @@ function PaymentModal({ invoiceId, maxAmount, onClose, onSaved }: { invoiceId: s
         {error && <div role="alert" className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
         <div>
           <label htmlFor="payment-amount" className="label">Amount</label>
-          <input id="payment-amount" type="number" required autoFocus min="0.01" max={maxAmount} step="0.01" className="input-field" value={amount} onChange={(event) => setAmount(Number(event.target.value))} />
+          <input id="payment-amount" type="number" required autoFocus min="0.01" max={maxAmount} step="0.01" className="input-field" value={amount} onChange={(event) => setAmount(event.target.value)} />
           <p className="mt-1.5 text-xs text-slate-500">Balance due: {formatCurrency(maxAmount)}</p>
         </div>
         <div>

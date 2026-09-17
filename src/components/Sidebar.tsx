@@ -17,8 +17,6 @@ import {
   LogOut,
   MapPin,
   Package,
-  PanelLeftClose,
-  PanelLeftOpen,
   ReceiptText,
   Settings,
   ShieldCheck,
@@ -236,7 +234,10 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
       aria-label="Main navigation"
     >
       <header className={clsx('relative flex h-16 shrink-0 items-center justify-between px-4 transition-all', collapsed && 'lg:h-24 lg:flex-col lg:justify-center lg:gap-2 lg:px-2 lg:py-2')}>
-        <Link href="/dashboard" className="flex items-center gap-2.5" aria-label="iMart Billing dashboard">
+        <button type="button" onClick={() => {
+          if (window.matchMedia('(min-width: 1024px)').matches) updateCollapsed(!collapsed);
+          else { onClose?.(); router.push('/dashboard'); }
+        }} className="flex items-center gap-2.5 rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label={collapsed ? 'Expand sidebar' : 'Minimize sidebar'} title={collapsed ? 'Expand sidebar' : 'Minimize sidebar'}>
           <span className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-950/50', collapsed && 'lg:h-8 lg:w-8')}>
             <ReceiptText aria-hidden="true" size={19} strokeWidth={2.4} />
           </span>
@@ -244,11 +245,8 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
             <span className="block text-sm font-extrabold tracking-tight">iMart Billing</span>
             <span className="block text-[8px] font-semibold uppercase tracking-[0.17em] text-blue-300">Business made simple</span>
           </span>
-        </Link>
+        </button>
         <div className={clsx('hidden items-center lg:flex', collapsed && 'gap-1')}>
-          <button type="button" onClick={() => updateCollapsed(!collapsed)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label={collapsed ? 'Show full sidebar' : 'Show icons only'} title={collapsed ? 'Show full sidebar' : 'Show icons only'}>
-            {collapsed ? <PanelLeftOpen aria-hidden="true" size={17} /> : <PanelLeftClose aria-hidden="true" size={17} />}
-          </button>
           <button type="button" onClick={onHide} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Hide sidebar" title="Hide sidebar">
             <X aria-hidden="true" size={17} />
           </button>
