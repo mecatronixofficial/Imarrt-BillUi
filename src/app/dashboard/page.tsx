@@ -26,6 +26,8 @@ import StatusBadge from '@/components/StatusBadge';
 import { ErrorState, LoadingState } from '@/components/ContentState';
 import { getAllPages, getApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { getPreferences } from '@/lib/preferences';
+import { usePreferences } from '@/lib/useGeneralPreferences';
 import type { Party, Invoice, Item, ProductionOrder, ProductionStageType } from '@/types';
 
 const STAGES: Array<{ type: ProductionStageType; label: string; icon: typeof Scissors; color: string }> = [
@@ -626,6 +628,7 @@ function ProductionOverview({ orders, stageTotals }: { orders: ProductionOrder[]
 }
 
 function FinancialSnapshot({ insights }: { insights: ReturnType<typeof calculateInsights> }) {
+  const { paymentReminders } = usePreferences('party');
   return (
    <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.07)]">
   {/* Header */}
@@ -1004,9 +1007,11 @@ function FinancialSnapshot({ insights }: { insights: ReturnType<typeof calculate
         {formatCurrency(insights.outstanding)}
       </p>
 
-      <p className="mt-1 text-[9px] font-semibold text-rose-500">
-        {insights.overdueInvoices} overdue
-      </p>
+      {paymentReminders && (
+        <p className="mt-1 text-[9px] font-semibold text-rose-500">
+          {insights.overdueInvoices} overdue
+        </p>
+      )}
     </div>
 
     <div className="border-b border-slate-100 px-4 py-3.5 transition-colors hover:bg-white sm:border-b-0 sm:border-r">
@@ -1115,10 +1120,11 @@ function RecentProduction({ orders }: { orders: ProductionOrder[] }) {
 
 
 function BusinessPulse({ data, insights }: { data: DashboardData; insights: ReturnType<typeof calculateInsights> }) {
+  const { lowStockAlert } = usePreferences('item');
   const pulse = [
     { label: 'Parties', value: data.parties.length, icon: Users, color: 'bg-blue-50 text-blue-600', href: '/parties' },
     { label: 'Items', value: data.items.length, icon: Package, color: 'bg-violet-50 text-violet-600', href: '/items' },
-    { label: 'Low stock', value: insights.lowStock, icon: AlertCircle, color: insights.lowStock ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600', href: '/items' },
+    ...(lowStockAlert ? [{ label: 'Low stock', value: insights.lowStock, icon: AlertCircle, color: insights.lowStock ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600', href: '/items' }] : []),
     { label: 'Due soon', value: insights.ordersDueSoon, icon: Clock3, color: 'bg-amber-50 text-amber-600', href: '/production' },
   ];
   return (
@@ -1655,7 +1661,7 @@ function calculateInsights(data: DashboardData) {
     piecesInProduction: active.reduce((total, order) => total + order.orderedQty, 0),
     projectedProfit,
     averageMargin: totalProductionRevenue ? Number(((projectedProfit / totalProductionRevenue) * 100).toFixed(1)) : 0,
-    lowStock: data.items.filter((item) => Number(item.stockQty) <= 5).length,
+    lowStock: getPreferences('item').lowStockAlert ? data.items.filter((item) => Number(item.stockQty) <= getPreferences('item').lowStockThreshold).length : 0,
     ordersDueSoon: active.filter((order) => order.dueDate && new Date(order.dueDate).getTime() >= now && new Date(order.dueDate).getTime() <= weekAhead).length,
     stageTotals,
   };

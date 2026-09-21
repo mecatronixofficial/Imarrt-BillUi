@@ -1,5 +1,10 @@
-import type { ReactNode } from 'react';
-import { ChevronRight } from 'lucide-react';
+'use client';
+
+import { useEffect, useState, type ReactNode } from 'react';
+import { AlertCircle, Check, ChevronRight, Loader2, Lock } from 'lucide-react';
+import { getApiError, getCurrentUser } from '@/lib/api';
+import { syncPreferences } from '@/lib/preferences';
+import { useSaveStatus } from '@/lib/useGeneralPreferences';
 
 export function SettingsCard({ title, description, icon, children }: { title: string; description?: string; icon?: ReactNode; children: ReactNode }) {
   return (
@@ -126,6 +131,56 @@ export function LinkRow({ label, description, onClick }: { label: string; descri
   );
 }
 
+/** Live save state for the company preferences (replaces the old "saved on this device" note). */
 export function SavedNote() {
-  return <p className="mt-5 text-[11px] font-medium text-slate-400">Changes are saved automatically on this device.</p>;
+  const { state, error } = useSaveStatus();
+  return (
+    <div role="status" aria-live="polite" className="mt-5 min-h-5 text-[11px] font-medium">
+      {state === 'saving' && <span className="inline-flex items-center gap-1.5 text-slate-500"><Loader2 size={12} className="animate-spin" /> Saving…</span>}
+      {state === 'saved' && <span className="inline-flex items-center gap-1.5 text-emerald-600"><Check size={12} /> Saved for this company</span>}
+      {state === 'error' && <span className="inline-flex items-center gap-1.5 text-red-600"><AlertCircle size={12} /> {error}</span>}
+      {state === 'idle' && <span className="text-slate-400">Changes save automatically for this company.</span>}
+    </div>
+  );
+}
+
+/** A setting whose feature does not exist in the app yet. It is shown so it is not a mystery, but cannot be switched on. */
+export function UnavailableRow({ label, description }: { label: string; description?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0" aria-disabled="true">
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-slate-400">{label}</span>
+        {description && <span className="mt-0.5 block text-xs leading-5 text-slate-400">{description}</span>}
+      </span>
+      <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Coming soon</span>
+    </div>
+  );
+}
+
+/**
+ * Wraps every Settings page: pulls the company's saved preferences from the server
+ * and makes the controls read-only for roles that may not change them.
+ */
+export function SettingsAccess({ children }: { children: ReactNode }) {
+  const [canEdit, setCanEdit] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    void getCurrentUser().then((user) => { if (active) setCanEdit(user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN'); }).catch(() => undefined);
+    void syncPreferences().catch((error: unknown) => { if (active) setLoadError(getApiError(error, 'Could not load the saved settings.')); });
+    return () => { active = false; };
+  }, []);
+
+  return (
+    <>
+      {!canEdit && (
+        <p className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800"><Lock size={14} aria-hidden="true" /> Only the company owner can change these settings. You are viewing the current values.</p>
+      )}
+      {loadError && (
+        <p role="alert" className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium text-red-700"><AlertCircle size={14} aria-hidden="true" /> {loadError}</p>
+      )}
+      <fieldset disabled={!canEdit} className="min-w-0 space-y-4 border-0 p-0">{children}</fieldset>
+    </>
+  );
 }

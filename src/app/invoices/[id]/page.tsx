@@ -9,7 +9,9 @@ import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ErrorState, LoadingState } from '@/components/ContentState';
 import { api, getApiError, getCurrentUser } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatQuantity, formatTransactionDate } from '@/lib/format';
+import { getPreferences } from '@/lib/preferences';
+import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
 import type { Invoice, InvoiceDelivery, InvoiceDeliveryChannel } from '@/types';
 
 export default function InvoiceDetailPage() {
@@ -26,6 +28,12 @@ export default function InvoiceDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [canDelete, setCanDelete] = useState(false);
+  const [offerShare, setOfferShare] = useState(false);
+
+  // Set by the invoice form when the company wants a WhatsApp share offered right after saving.
+  useEffect(() => {
+    setOfferShare(new URLSearchParams(window.location.search).get('share') === 'whatsapp');
+  }, []);
 
   async function deleteInvoice() {
     if (!invoice || !canDelete || deleting) return;
@@ -110,18 +118,29 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  function invoiceSummary() {
-    if (!invoice) return '';
-    const balance = Math.max(0, Number(invoice.grandTotal) - Number(invoice.amountPaid));
-    return `Invoice ${invoice.invoiceNumber}\n${invoice.party.name}\nTotal: ${formatCurrency(invoice.grandTotal)}\nBalance due: ${formatCurrency(balance)}\nIssued: ${formatDate(invoice.issueDate)}`;
+  function templateValues(amount: number) {
+    return {
+      FirmName: invoice?.business?.legalName || invoice?.business?.name || '',
+      PartyName: invoice?.party.name ?? '',
+      InvoiceNumber: invoice?.invoiceNumber ?? '',
+      Amount: formatCurrency(amount),
+    };
   }
 
-  function shareWhatsApp() {
+  function invoiceSummary() {
+    if (!invoice) return '';
+    return renderMessage(getPreferences('message').invoiceMessage, templateValues(Number(invoice.grandTotal)));
+  }
+
+  function reminderSummary() {
+    if (!invoice) return '';
+    const balance = Math.max(0, Number(invoice.grandTotal) - Number(invoice.amountPaid));
+    return renderMessage(getPreferences('message').paymentReminderMessage, templateValues(balance));
+  }
+
+  function shareWhatsApp(message = invoiceSummary()) {
     if (!invoice) return;
-    const rawNumber = (invoice.party.whatsappNumber || invoice.party.phone || '').replace(/\D/g, '');
-    if (!rawNumber) return;
-    const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
-    window.open(`https://wa.me/${number}?text=${encodeURIComponent(invoiceSummary())}`, '_blank', 'noopener,noreferrer');
+    window.open(whatsappLink(invoice.party.whatsappNumber || invoice.party.phone, message), '_blank', 'noopener,noreferrer');
   }
 
   function shareEmail() {
@@ -176,13 +195,23 @@ export default function InvoiceDetailPage() {
       <div className="mb-4 overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-white shadow-sm">
         <div className="border-l-4 border-blue-600 px-5 py-4 sm:px-6">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Invoice date</p>
-          <p className="mt-1 text-sm font-semibold text-slate-700">{formatDate(invoice.issueDate)}</p>
+          <p className="mt-1 text-sm font-semibold text-slate-700">{formatTransactionDate(invoice.issueDate, invoice.createdAt)}</p>
           <div className="mt-3 border-t border-blue-100 pt-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">Invoice code</p>
             <p className="mt-1 break-all text-xl font-extrabold tracking-tight text-slate-950 sm:text-2xl">{invoice.invoiceNumber}</p>
           </div>
         </div>
       </div>
+
+      {offerShare && (
+        <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <span className="font-semibold">Invoice saved. Share it with {invoice.party.name} on WhatsApp?</span>
+          <span className="flex gap-2">
+            <button type="button" onClick={() => { shareWhatsApp(); setOfferShare(false); }} disabled={!(invoice.party.whatsappNumber || invoice.party.phone)} className="btn-secondary inline-flex items-center gap-2 text-emerald-700 disabled:opacity-50"><MessageCircle aria-hidden="true" size={15} /> Share on WhatsApp</button>
+            <button type="button" onClick={() => setOfferShare(false)} className="btn-secondary">Not now</button>
+          </span>
+        </div>
+      )}
 
       <div className="mb-5 flex flex-wrap gap-2">
         <Link href="/invoices" className="btn-secondary inline-flex items-center gap-2">
@@ -193,9 +222,14 @@ export default function InvoiceDetailPage() {
             <IndianRupee aria-hidden="true" size={15} /> Record payment
           </button>
         )}
-        <button type="button" onClick={shareWhatsApp} disabled={!(invoice.party.whatsappNumber || invoice.party.phone)} className="btn-secondary inline-flex items-center gap-2 text-emerald-700 disabled:opacity-50">
+        <button type="button" onClick={() => shareWhatsApp()} disabled={!(invoice.party.whatsappNumber || invoice.party.phone)} className="btn-secondary inline-flex items-center gap-2 text-emerald-700 disabled:opacity-50">
           <MessageCircle aria-hidden="true" size={15} /> WhatsApp
         </button>
+        {balanceDue > 0 && invoice.status !== 'CANCELLED' && (
+          <button type="button" onClick={() => shareWhatsApp(reminderSummary())} disabled={!(invoice.party.whatsappNumber || invoice.party.phone)} className="btn-secondary inline-flex items-center gap-2 text-amber-700 disabled:opacity-50">
+            <MessageCircle aria-hidden="true" size={15} /> Payment reminder
+          </button>
+        )}
         <button type="button" onClick={shareEmail} disabled={!invoice.party.email} className="btn-secondary inline-flex items-center gap-2 text-blue-700 disabled:opacity-50">
           <Mail aria-hidden="true" size={15} /> Email
         </button>
@@ -253,7 +287,7 @@ export default function InvoiceDetailPage() {
               {invoice.items.map((item) => (
                 <tr key={item.id}>
                   <td className="py-3 font-medium text-slate-800">{item.description}</td>
-                  <td className="py-3 text-right text-slate-600">{item.quantity}</td>
+                  <td className="py-3 text-right text-slate-600">{formatQuantity(item.quantity)}</td>
                   <td className="whitespace-nowrap py-3 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td>
                   <td className="py-3 text-right text-slate-600">{Number(item.taxRate || 0).toFixed(2)}%</td>
                   <td className="whitespace-nowrap py-3 text-right font-semibold text-slate-800">{formatCurrency(item.lineTotal)}</td>

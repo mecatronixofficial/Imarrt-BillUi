@@ -4,9 +4,16 @@
 
 html {
   min-height: 100%;
+  font-size: 17px;
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+@media (min-width: 1280px) {
+  html {
+    font-size: 17.5px;
+  }
 }
 
 body {
@@ -22,6 +29,22 @@ body {
 
 body :where(h1, h2, h3, h4, h5, h6, p, span, strong, small, label, a, button, input, select, textarea, th, td) {
   font-weight: 600;
+}
+
+/* Keep captions, badges, and helper labels readable throughout the app. */
+.text-\[6px\],
+.text-\[7px\],
+.text-\[8px\] {
+  font-size: 11px !important;
+}
+
+.text-\[9px\],
+.text-\[10px\] {
+  font-size: 12px !important;
+}
+
+.text-\[11px\] {
+  font-size: 13px !important;
 }
 
 button,

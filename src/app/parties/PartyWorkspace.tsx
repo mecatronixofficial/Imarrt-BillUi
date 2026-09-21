@@ -49,6 +49,7 @@ import {
 import { api, getAllPages, getApiError, getCurrentUser } from "@/lib/api";
 
 import { formatCurrency, formatDate } from "@/lib/format";
+import { useGeneralPreferences, usePreferences } from "@/lib/useGeneralPreferences";
 
 import type { Party, PartyLedger, PartyTransaction } from "@/types";
 
@@ -91,6 +92,7 @@ function isRegisteredGstType(type: Party["gstType"]) {
 
 export function PartyWorkspace({ partyId }: { partyId?: string }) {
   const router = useRouter();
+  const { partyCategories: showGroupBadge } = usePreferences("party");
 
   const [parties, setParties] = useState<Party[]>([]);
 
@@ -452,7 +454,7 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
                           </span>
                         )}
 
-                        {party.group && (
+                        {showGroupBadge && party.group && (
                           <span className="rounded-md bg-violet-100 px-2 py-1 text-[7px] font-black uppercase tracking-[0.1em] text-violet-700">
                             {party.group}
                           </span>
@@ -1584,6 +1586,8 @@ type PartyFormState = {
 
   gstin: string;
 
+  tin: string;
+
   gstType: NonNullable<Party["gstType"]>;
 
   billingAddr: string;
@@ -1620,6 +1624,8 @@ function createForm(party: Party | null): PartyFormState {
     whatsappOptIn: party?.whatsappOptIn ?? false,
 
     gstin: party?.gstin ?? "",
+
+    tin: party?.tin ?? "",
 
     gstType: party?.gstType ?? "UNREGISTERED",
 
@@ -1659,6 +1665,9 @@ function PartyFormModal({
 
   onSaved: (party: Party) => void;
 }) {
+  const { tinNumber: showTin } = useGeneralPreferences();
+  const { openingBalance: showOpening, partyCategories: showCategories } = usePreferences("party");
+
   const [tab, setTab] = useState(initialTab);
 
   const [form, setForm] = useState<PartyFormState>(() => createForm(party));
@@ -1736,7 +1745,7 @@ function PartyFormModal({
 
         billingName: form.billingName.trim() || undefined,
 
-        group: form.group.trim() || undefined,
+        group: showCategories ? form.group.trim() || undefined : undefined,
 
         email: form.email.trim().toLowerCase() || undefined,
 
@@ -1748,6 +1757,9 @@ function PartyFormModal({
 
         gstin: registered ? form.gstin.trim().toUpperCase() : undefined,
 
+        // An empty value clears an existing TIN when editing; nothing is sent when the setting is off.
+        ...(showTin ? { tin: form.tin.trim().toUpperCase() || (party ? "" : undefined) } : {}),
+
         billingAddr: form.billingAddr.trim() || undefined,
 
         shippingAddr: form.shippingAddr.trim() || undefined,
@@ -1756,7 +1768,12 @@ function PartyFormModal({
 
         creditLimit: Math.max(0, Number(form.creditLimit) || 0),
 
-        openingBalance: Math.max(0, Number(form.openingBalance) || 0),
+        ...(showOpening
+          ? {
+              openingBalance: Math.max(0, Number(form.openingBalance) || 0),
+              openingBalanceType: form.openingBalanceType,
+            }
+          : {}),
       };
 
       const { data } = party
@@ -1863,29 +1880,31 @@ function PartyFormModal({
               />
             </FormField>
 
-            <FormField label="Party Group">
-              <input
-                id="party-group"
-                list="party-group-options"
-                className="input-field"
-                value={form.group}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    group: event.target.value,
-                  })
-                }
-                placeholder="Select or enter a group"
-              />
-              <datalist id="party-group-options">
-                <option value="General" />
-                <option value="Distributor" />
-                <option value="Wholesaler" />
-                <option value="Retailer" />
-                <option value="Supplier" />
-                <option value="Manufacturer" />
-              </datalist>
-            </FormField>
+            {showCategories && (
+              <FormField label="Party Group">
+                <input
+                  id="party-group"
+                  list="party-group-options"
+                  className="input-field"
+                  value={form.group}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      group: event.target.value,
+                    })
+                  }
+                  placeholder="Select or enter a group"
+                />
+                <datalist id="party-group-options">
+                  <option value="General" />
+                  <option value="Distributor" />
+                  <option value="Wholesaler" />
+                  <option value="Retailer" />
+                  <option value="Supplier" />
+                  <option value="Manufacturer" />
+                </datalist>
+              </FormField>
+            )}
 
             <FormField label="Phone Number">
               <input
@@ -2099,6 +2118,23 @@ function PartyFormModal({
               )}
             </div>
 
+            {showTin && (
+              <FormField label="TIN number">
+                <input
+                  id="party-tin"
+                  className="input-field uppercase"
+                  maxLength={20}
+                  pattern="[A-Za-z0-9-]{4,20}"
+                  title="4-20 letters, numbers, or hyphens"
+                  value={form.tin}
+                  onChange={(event) =>
+                    setForm({ ...form, tin: event.target.value.replace(/\s/g, "").toUpperCase() })
+                  }
+                  placeholder="Tax identification number"
+                />
+              </FormField>
+            )}
+
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField label="Billing Address">
                 <textarea
@@ -2156,107 +2192,109 @@ function PartyFormModal({
 
           <section className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              {/* OPENING */}
+              {showOpening && (
+                <>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[10px] font-black text-slate-900">
+                    Opening Balance
+                  </p>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-[10px] font-black text-slate-900">
-                  Opening Balance
-                </p>
+                  <p className="mt-0.5 text-[8px] text-slate-400">
+                    Starting balance for this party
+                  </p>
 
-                <p className="mt-0.5 text-[8px] text-slate-400">
-                  Starting balance for this party
-                </p>
+                  <div className="mt-3 flex h-10 overflow-hidden rounded-xl border border-slate-200 bg-white transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100/60">
+                    <span className="flex shrink-0 items-center border-r border-slate-200 bg-slate-50 px-3 text-[8px] font-black text-slate-500">
+                      INR
+                    </span>
 
-                <div className="mt-3 flex h-10 overflow-hidden rounded-xl border border-slate-200 bg-white transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100/60">
-                  <span className="flex shrink-0 items-center border-r border-slate-200 bg-slate-50 px-3 text-[8px] font-black text-slate-500">
-                    INR
-                  </span>
+                    <input
+                      id="opening-balance"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      className="min-w-0 flex-1 bg-transparent px-3 text-[10px] font-bold text-slate-900 outline-none"
+                      value={form.openingBalance}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
 
-                  <input
-                    id="opening-balance"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    className="min-w-0 flex-1 bg-transparent px-3 text-[10px] font-bold text-slate-900 outline-none"
-                    value={form.openingBalance}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-
-                        openingBalance: event.target.value,
-                      })
-                    }
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <p className="mb-2 mt-3 text-[7px] font-black uppercase tracking-wider text-slate-400">
-                  Balance Type
-                </p>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        openingBalanceType: "RECEIVABLE",
-                      })
-                    }
-                    className={`
-                      flex
-                      h-9
-                      items-center
-                      justify-center
-                      gap-1.5
-                      rounded-lg
-                      text-[8px]
-                      font-extrabold
-                      transition
-
-                      ${
-                        form.openingBalanceType === "RECEIVABLE"
-                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                          : "bg-slate-50 text-slate-500 hover:bg-slate-100"
+                          openingBalance: event.target.value,
+                        })
                       }
-                    `}
-                  >
-                    <ArrowDownLeft size={11} />
-                    To Receive
-                  </button>
+                      placeholder="0.00"
+                    />
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        openingBalanceType: "PAYABLE",
-                      })
-                    }
-                    className={`
-                      flex
-                      h-9
-                      items-center
-                      justify-center
-                      gap-1.5
-                      rounded-lg
-                      text-[8px]
-                      font-extrabold
-                      transition
+                  <p className="mb-2 mt-3 text-[7px] font-black uppercase tracking-wider text-slate-400">
+                    Balance Type
+                  </p>
 
-                      ${
-                        form.openingBalanceType === "PAYABLE"
-                          ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                          : "bg-slate-50 text-slate-500 hover:bg-slate-100"
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          openingBalanceType: "RECEIVABLE",
+                        })
                       }
-                    `}
-                  >
-                    <ArrowUpRight size={11} />
-                    To Pay
-                  </button>
+                      className={`
+                        flex
+                        h-9
+                        items-center
+                        justify-center
+                        gap-1.5
+                        rounded-lg
+                        text-[8px]
+                        font-extrabold
+                        transition
+
+                        ${
+                          form.openingBalanceType === "RECEIVABLE"
+                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                            : "bg-slate-50 text-slate-500 hover:bg-slate-100"
+                        }
+                      `}
+                    >
+                      <ArrowDownLeft size={11} />
+                      To Receive
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          openingBalanceType: "PAYABLE",
+                        })
+                      }
+                      className={`
+                        flex
+                        h-9
+                        items-center
+                        justify-center
+                        gap-1.5
+                        rounded-lg
+                        text-[8px]
+                        font-extrabold
+                        transition
+
+                        ${
+                          form.openingBalanceType === "PAYABLE"
+                            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                            : "bg-slate-50 text-slate-500 hover:bg-slate-100"
+                        }
+                      `}
+                    >
+                      <ArrowUpRight size={11} />
+                      To Pay
+                    </button>
+                  </div>
                 </div>
-              </div>
+                </>
+              )}
 
               {/* CREDIT LIMIT */}
 

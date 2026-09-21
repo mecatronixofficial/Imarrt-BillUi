@@ -1,3 +1,5 @@
+import type { TotalsOptions } from '../invoices/invoiceTotals';
+
 export type DocumentDraftLine = {
   key: string;
   itemId?: string;
@@ -15,6 +17,7 @@ export function calculateDocument(
   drafts: DocumentDraftLine[] = [],
   discount: number = 0,
   gstRegistered: boolean = true,
+  options: TotalsOptions = {},
 ) {
   const safeDrafts = Array.isArray(drafts) ? drafts : [];
   const lines = safeDrafts.map((line) => {
@@ -23,19 +26,20 @@ export function calculateDocument(
     const unitPrice = Number.isFinite(line?.unitPrice) ? (line.unitPrice ?? 0) : 0;
     const taxRate = Number.isFinite(line?.taxRate) ? (line.taxRate ?? 0) : 0;
     const subtotal = active ? round2(quantity * unitPrice) : 0;
-    const tax = round2(subtotal * (gstRegistered ? taxRate : 0) / 100);
+    const tax = round2(subtotal * (gstRegistered && !options.noTax ? taxRate : 0) / 100);
     return { subtotal, tax, total: round2(subtotal + tax), active };
   });
 
   const subtotal = round2(lines.reduce((sum, line) => sum + line.subtotal, 0));
-  const tax = round2(lines.reduce((sum, line) => sum + line.tax, 0));
+  const summedTax = round2(lines.reduce((sum, line) => sum + line.tax, 0));
+  const tax = options.roundTax ? Math.round(summedTax) : summedTax;
   const validDiscount = Number.isFinite(discount) && discount > 0 ? discount : 0;
 
   return {
     lines,
     subtotal,
     tax,
-    total: round2(Math.max(0, subtotal + tax - validDiscount)),
+    total: options.roundOff ? Math.round(Math.max(0, round2(subtotal + tax - validDiscount))) : round2(Math.max(0, subtotal + tax - validDiscount)),
     count: lines.filter(({ active }) => active).length,
     quantity: round2(
       safeDrafts.reduce(

@@ -38,10 +38,14 @@ import Modal from '@/components/Modal';
 import { api, getActiveBusinessId, getAllPages, getApiError } from '@/lib/api';
 import { DOCUMENT_CONFIG, DOCUMENT_TYPES, type DocumentConfig } from '@/lib/documents';
 import { formatCurrency } from '@/lib/format';
+import { prepareUploads } from '@/lib/imageCompression';
 import type { Business, BusinessDocument, BusinessDocumentType, Invoice, Item, Party, Supplier } from '@/types';
 import { useEmbeddedForm } from '@/components/EmbeddedFormContext';
 import DocumentCompanyPicker from '@/components/DocumentCompanyPicker';
 import { calculateDocument, type DocumentDraftLine } from './documentTotals';
+import { totalsOptionsFor } from '../invoices/invoiceTotals';
+import { usePreferences } from '@/lib/useGeneralPreferences';
+import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
 import styles from './DocumentForm.module.css';
 
 const generateLineId = () => {
@@ -94,7 +98,7 @@ type PurchaseAttachment = {
   previewUrl?: string;
 };
 
-type PurchaseShareTarget = 'pdf' | 'document' | 'excel' | 'whatsapp' | 'email';
+type DocumentShareTarget = 'pdf' | 'document' | 'excel' | 'whatsapp' | 'email';
 
 function escapeMarkup(value: string | number) {
   return String(value)
@@ -146,12 +150,14 @@ export default function DocumentForm({
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [catalog, setCatalog] = useState<Item[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [purchaseBills, setPurchaseBills] = useState<BusinessDocument[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [businessId, setBusinessId] = useState(() => getActiveBusinessId() ?? '');
   const [gstRegistered, setGstRegistered] = useState(true);
 
   const [partyId, setPartyId] = useState('');
   const [referenceInvoiceId, setReferenceInvoiceId] = useState('');
+  const [sourceDocumentId, setSourceDocumentId] = useState('');
   const [issueDate, setIssueDate] = useState(today);
   const [validUntil, setValidUntil] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -177,6 +183,9 @@ export default function DocumentForm({
   const [loadVersion, setLoadVersion] = useState(0);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
 
+  const transactionPrefs = usePreferences('transaction');
+  const taxPrefs = usePreferences('taxes');
+  const messagePrefs = usePreferences('message');
   const busyRef = useRef(false);
   const errorRef = useRef<HTMLDivElement>(null);
   const billInputRef = useRef<HTMLInputElement>(null);
@@ -185,11 +194,15 @@ export default function DocumentForm({
   const attachmentsRef = useRef<PurchaseAttachment[]>([]);
 
   const isPurchase = docType === 'PURCHASE_INVOICE';
+  const isDebitNote = docType === 'DEBIT_NOTE';
+  const isSupplierDocument = isPurchase || isDebitNote;
   const isAdjustment = docType === 'CREDIT_NOTE' || docType === 'DEBIT_NOTE';
   const isChallan = docType === 'DELIVERY_CHALLAN';
   const config: DocumentConfig = DOCUMENT_CONFIG[docType];
+  const documentTitle = isPurchase ? 'Purchase Bill' : config.label;
+  const partyLabel = isSupplierDocument ? 'Supplier' : 'Customer';
   const IconComponent = TYPE_ICONS[docType] || FileText;
-  const availableParties = isPurchase ? suppliers : parties;
+  const availableParties = isSupplierDocument ? suppliers : parties;
 
   const setBusy = useCallback(
     (busy: boolean) => {
@@ -203,6 +216,7 @@ export default function DocumentForm({
     setDocType(newType);
     setPartyId('');
     setReferenceInvoiceId('');
+    setSourceDocumentId('');
     setReason('');
     onTypeChange?.(newType);
   };
@@ -213,11 +227,12 @@ export default function DocumentForm({
       setLoadError('');
       try {
         const companyConfig = { signal, headers: businessId ? { 'X-Business-Id': businessId } : undefined };
-        const [partyRes, supplierRes, itemRes, invoiceRes, businessRes] = await Promise.all([
+        const [partyRes, supplierRes, itemRes, invoiceRes, purchaseBillRes, businessRes] = await Promise.all([
           getAllPages<Party>('/parties', companyConfig),
           getAllPages<Supplier>('/suppliers', companyConfig),
           getAllPages<Item>('/items', companyConfig),
           getAllPages<Invoice>('/invoices', companyConfig),
+          getAllPages<BusinessDocument>('/documents', { ...companyConfig, params: { type: 'PURCHASE_INVOICE' } }),
           getAllPages<Business>('/businesses', { signal }),
         ]);
         if (signal.aborted) return;
@@ -226,6 +241,7 @@ export default function DocumentForm({
         setSuppliers(supplierRes.data || []);
         setCatalog(itemRes.data || []);
         setInvoices(invoiceRes.data || []);
+        setPurchaseBills(purchaseBillRes.data || []);
         setBusinesses(businessRes.data || []);
 
         const selectedId = businessId || getActiveBusinessId() || businessRes.data?.[0]?.id || '';
@@ -238,9 +254,9 @@ export default function DocumentForm({
         const queryPartyId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('partyId') : null;
         const requestedParty = initialPartyId || queryPartyId || '';
         if (requestedParty) {
-          if (isPurchase && supplierRes.data.some(({ id }) => id === requestedParty)) {
+          if (isSupplierDocument && supplierRes.data.some(({ id }) => id === requestedParty)) {
             setPartyId(requestedParty);
-          } else if (!isPurchase && partyRes.data.some(({ id }) => id === requestedParty)) {
+          } else if (!isSupplierDocument && partyRes.data.some(({ id }) => id === requestedParty)) {
             setPartyId(requestedParty);
           }
         }
@@ -252,7 +268,7 @@ export default function DocumentForm({
         if (!signal.aborted) setLoading(false);
       }
     },
-    [businessId, config.label, initialPartyId, isPurchase],
+    [businessId, config.label, initialPartyId, isSupplierDocument],
   );
 
   useEffect(() => {
@@ -291,7 +307,7 @@ export default function DocumentForm({
       hsnSac: '',
       unit: item.unit || 'pcs',
       unitPrice: Number.isFinite(itemPrice) ? itemPrice : 0,
-      taxRate: isPurchase || gstRegistered ? (Number.isFinite(itemTaxRate) ? itemTaxRate : 0) : 0,
+      taxRate: isSupplierDocument || gstRegistered ? (Number.isFinite(itemTaxRate) ? itemTaxRate : 0) : 0,
     });
   }
 
@@ -319,6 +335,28 @@ export default function DocumentForm({
       }
     } catch {
       // Keep reference even if line items cannot be prefilled
+    }
+  }
+
+  async function pickReferencePurchaseBill(documentId: string) {
+    setSourceDocumentId(documentId);
+    const purchaseBill = purchaseBills.find((entry) => entry.id === documentId);
+    if (purchaseBill?.supplierId) setPartyId(purchaseBill.supplierId);
+    if (!documentId) return;
+
+    try {
+      const { data } = await api.get<BusinessDocument>(`/documents/${documentId}`);
+      if (data.supplierId) setPartyId(data.supplierId);
+      if (data.items?.length) {
+        setLines(data.items.map((item) => ({
+          key: generateLineId(), itemId: item.itemId, description: item.description,
+          hsnSac: item.hsnSac || '', quantity: Number(item.quantity) || 1,
+          unit: item.unit || 'pcs', unitPrice: Number(item.unitPrice) || 0,
+          taxRate: Number(item.taxRate) || 0,
+        })));
+      }
+    } catch {
+      // Keep the reference even if the source lines cannot be prefilled.
     }
   }
 
@@ -356,7 +394,7 @@ export default function DocumentForm({
     });
   }
 
-  function purchaseExportMarkup(document: BusinessDocument) {
+  function documentExportMarkup(document: BusinessDocument) {
     const rows = lines
       .filter((line) => (line.description || '').trim() || line.itemId || line.unitPrice !== 0)
       .map((line, index) => `
@@ -367,13 +405,13 @@ export default function DocumentForm({
           <td>${escapeMarkup(line.unit)}</td>
           <td>${escapeMarkup(line.unitPrice)}</td>
           <td>${escapeMarkup(line.taxRate)}%</td>
-          <td>${escapeMarkup(calculateDocument([line], 0, true).total)}</td>
+          <td>${escapeMarkup(calculateDocument([line], 0, true, { noTax: totalOptions.noTax }).total)}</td>
         </tr>`).join('');
-    return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#172033}h1{font-size:22px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccd3dc;padding:8px;text-align:left}th{background:#eef3f8}.total{text-align:right;font-size:18px;font-weight:700;margin-top:16px}</style></head><body><h1>New Purchase Bill</h1><p><strong>Bill:</strong> ${escapeMarkup(referenceNumber || document.documentNumber)}</p><p><strong>Supplier:</strong> ${escapeMarkup(selectedParty?.name || '')}</p><p><strong>Bill date:</strong> ${escapeMarkup(issueDate)}</p><table><thead><tr><th>#</th><th>Item details</th><th>Qty</th><th>Unit</th><th>Price / unit</th><th>Tax</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table><p class="total">Total: ${escapeMarkup(totals.total)}</p></body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#172033}h1{font-size:22px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccd3dc;padding:8px;text-align:left}th{background:#eef3f8}.total{text-align:right;font-size:18px;font-weight:700;margin-top:16px}</style></head><body><h1>${escapeMarkup(documentTitle)}</h1><p><strong>${escapeMarkup(config.shortLabel)}:</strong> ${escapeMarkup(referenceNumber || document.documentNumber)}</p><p><strong>${escapeMarkup(partyLabel)}:</strong> ${escapeMarkup(selectedParty?.name || '')}</p><p><strong>Date:</strong> ${escapeMarkup(issueDate)}</p><table><thead><tr><th>#</th><th>Item details</th><th>Qty</th><th>Unit</th><th>Price / unit</th><th>Tax</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table><p class="total">Total: ${escapeMarkup(totals.total)}</p></body></html>`;
   }
 
-  async function runPurchaseShare(target: PurchaseShareTarget, document: BusinessDocument) {
-    const fileBase = referenceNumber.trim() || document.documentNumber || 'purchase-bill';
+  async function runDocumentShare(target: DocumentShareTarget, document: BusinessDocument) {
+    const fileBase = referenceNumber.trim() || document.documentNumber || config.label.toLowerCase().replaceAll(' ', '-');
     if (target === 'pdf') {
       const { data } = await api.get<Blob>(`/documents/${document.id}/pdf`, { responseType: 'blob' });
       downloadFile(new Blob([data], { type: 'application/pdf' }), `${fileBase}.pdf`);
@@ -381,38 +419,48 @@ export default function DocumentForm({
     }
 
     if (target === 'document') {
-      downloadFile(new Blob([purchaseExportMarkup(document)], { type: 'application/msword;charset=utf-8' }), `${fileBase}.doc`);
+      downloadFile(new Blob([documentExportMarkup(document)], { type: 'application/msword;charset=utf-8' }), `${fileBase}.doc`);
       return;
     }
 
     if (target === 'excel') {
-      downloadFile(new Blob([purchaseExportMarkup(document)], { type: 'application/vnd.ms-excel;charset=utf-8' }), `${fileBase}.xls`);
+      downloadFile(new Blob([documentExportMarkup(document)], { type: 'application/vnd.ms-excel;charset=utf-8' }), `${fileBase}.xls`);
       return;
     }
 
-    const message = `Purchase Bill ${referenceNumber || document.documentNumber}\nSupplier: ${selectedParty?.name || ''}\nTotal: ${formatCurrency(totals.total)}`;
+    const documentNumberText = referenceNumber || document.documentNumber;
+    const template = docType === 'QUOTATION' || docType === 'PROFORMA_INVOICE' ? messagePrefs.estimateMessage : messagePrefs.invoiceMessage;
+    const message = isSupplierDocument
+      ? `${documentTitle} ${documentNumberText}\n${partyLabel}: ${selectedParty?.name || ''}\nTotal: ${formatCurrency(totals.total)}`
+      : renderMessage(template, {
+          FirmName: businesses.find(({ id }) => id === businessId)?.name ?? '',
+          PartyName: selectedParty?.name ?? '',
+          InvoiceNumber: documentNumberText,
+          EstimateNumber: documentNumberText,
+          Amount: formatCurrency(totals.total),
+        });
     if (target === 'whatsapp') {
-      const rawNumber = (selectedParty?.phone || '').replace(/\D/g, '');
-      const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
-      window.open(`https://wa.me/${number}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+      window.open(whatsappLink(selectedParty?.phone, message), '_blank', 'noopener,noreferrer');
       return;
     }
 
     const recipient = selectedParty?.email || '';
-    window.open(`mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(`Purchase Bill ${referenceNumber || document.documentNumber}`)}&body=${encodeURIComponent(message)}`, '_blank');
+    window.open(`mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(`${documentTitle} ${referenceNumber || document.documentNumber}`)}&body=${encodeURIComponent(message)}`, '_blank');
   }
 
-  const totals = useMemo(() => calculateDocument(lines, discount, isPurchase || gstRegistered), [discount, gstRegistered, isPurchase, lines]);
+  const totalOptions = useMemo(() => totalsOptionsFor(transactionPrefs, taxPrefs, !isSupplierDocument), [transactionPrefs, taxPrefs, isSupplierDocument]);
+  const totals = useMemo(() => calculateDocument(lines, discount, isSupplierDocument || gstRegistered, totalOptions), [discount, gstRegistered, isSupplierDocument, lines, totalOptions]);
   const selectedParty = availableParties.find(({ id }) => id === partyId);
   const disabled = loading || Boolean(loadError) || Boolean(saving) || Boolean(savedId);
 
-  async function submit(status: 'DRAFT' | 'ISSUED', shareTarget?: PurchaseShareTarget) {
+  async function submit(status: 'DRAFT' | 'ISSUED', shareTarget?: DocumentShareTarget) {
     if (busyRef.current || disabled) return;
     setError('');
 
-    const targetPartyLabel = isPurchase ? 'supplier' : 'party';
+    const targetPartyLabel = isSupplierDocument ? 'supplier' : 'party';
     if (!partyId) return setError(`Select a ${targetPartyLabel} before saving this ${config.label.toLowerCase()}.`);
-    if (isAdjustment && !referenceInvoiceId) return setError('Select the invoice this note adjusts.');
+    if (docType === 'CREDIT_NOTE' && !referenceInvoiceId) return setError('Select the sale invoice this credit note adjusts.');
+    if (isDebitNote && !sourceDocumentId) return setError('Select the purchase bill this debit note adjusts.');
     if (!issueDate) return setError('Choose an issue date.');
     if (validUntil && validUntil < issueDate) return setError('Validity date must be on or after the issue date.');
     if (dueDate && dueDate < issueDate) return setError('Due date must be on or after the issue date.');
@@ -454,9 +502,10 @@ export default function DocumentForm({
       const payload = {
         type: docType,
         status,
-        partyId: isPurchase ? undefined : partyId,
-        supplierId: isPurchase ? partyId : undefined,
-        referenceInvoiceId: isAdjustment ? referenceInvoiceId : undefined,
+        partyId: isSupplierDocument ? undefined : partyId,
+        supplierId: isSupplierDocument ? partyId : undefined,
+        referenceInvoiceId: docType === 'CREDIT_NOTE' ? referenceInvoiceId : undefined,
+        sourceDocumentId: isDebitNote ? sourceDocumentId : undefined,
         issueDate,
         validUntil: validUntil || undefined,
         dueDate: dueDate || undefined,
@@ -473,11 +522,11 @@ export default function DocumentForm({
         items: enteredLines.map((line) => ({
           itemId: line.itemId,
           description: (line.description || '').trim(),
-          hsnSac: isPurchase ? undefined : (line.hsnSac || '').trim() || undefined,
+          hsnSac: isSupplierDocument ? undefined : (line.hsnSac || '').trim() || undefined,
           quantity: line.quantity,
           unit: line.unit || 'pcs',
           unitPrice: line.unitPrice,
-          taxRate: isPurchase || gstRegistered ? line.taxRate : 0,
+          taxRate: isSupplierDocument || gstRegistered ? line.taxRate : 0,
         })),
       };
 
@@ -488,18 +537,18 @@ export default function DocumentForm({
       setSavedId(data.id);
       if (isPurchase && attachments.length) {
         const formData = new FormData();
-        attachments.forEach(({ file }) => formData.append('files', file, file.name));
+        (await prepareUploads(attachments.map(({ file }) => file))).forEach((file) => formData.append('files', file, file.name));
         await api.post(`/documents/${data.id}/attachments`, formData, {
           headers: { 'X-Business-Id': businessId, 'Content-Type': 'multipart/form-data' },
           timeout: 120000,
         });
       }
-      if (isPurchase && shareTarget) await runPurchaseShare(shareTarget, data);
-      router.push(`/documents/${data.id}?companyId=${encodeURIComponent(businessId)}`);
+      if (shareTarget) await runDocumentShare(shareTarget, data);
+      router.push(`/documents/${data.id}?companyId=${encodeURIComponent(businessId)}${!shareTarget && status === 'ISSUED' && messagePrefs.autoShareOnSave && !isSupplierDocument ? '&share=whatsapp' : ''}`);
     } catch (saveError: unknown) {
       setError(
         createdId
-          ? 'Purchase bill saved, but an upload or sharing step could not be completed. Open the saved bill to review it.'
+          ? `${config.label} saved, but an upload or sharing step could not be completed. Open the saved ${config.label.toLowerCase()} to review it.`
           : getApiError(saveError, `Could not save ${config.label.toLowerCase()}. Your details are still here.`),
       );
     } finally {
@@ -548,9 +597,9 @@ export default function DocumentForm({
         <div className={styles.workspace}>
           <div className={styles.intro}>
             <div>
-              <span className={styles.eyebrow}>{config.plural.toUpperCase()} / CREATE {config.label.toUpperCase()}</span>
-              <h2>Let’s set up your {config.label.toLowerCase()}.</h2>
-              <p>Add party details, line items, and terms. We’ll calculate totals automatically.</p>
+              <span className={styles.eyebrow}>{isPurchase ? 'PURCHASES / CREATE BILL' : `${config.plural.toUpperCase()} / CREATE ${config.label.toUpperCase()}`}</span>
+              <h2>{isPurchase ? 'Let’s get the details right.' : `Let’s set up your ${config.label.toLowerCase()}.`}</h2>
+              <p>{isPurchase ? 'Add your supplier and items. We’ll calculate the rest.' : 'Add party details, line items, and terms. We’ll calculate totals automatically.'}</p>
             </div>
             {allowTypeSwitch && (
               <div className={styles.typeTabs} role="tablist" aria-label="Document types">
@@ -597,10 +646,10 @@ export default function DocumentForm({
               <section className={styles.card}>
                 <SectionHeading
                   icon={<UserRound size={18} />}
-                  title={isPurchase ? 'Supplier details' : 'Party / Customer details'}
-                  description={isPurchase ? 'Who supplied the materials or services?' : 'Who is this document addressed to?'}
+                  title={isSupplierDocument ? 'Supplier details' : 'Party / Customer details'}
+                  description={isSupplierDocument ? 'Who supplied the materials or services?' : 'Who is this document addressed to?'}
                   trailing={
-                    isPurchase && (
+                    isSupplierDocument && (
                       <button type="button" onClick={() => setShowSupplierModal(true)} className={styles.quickAddBtn}>
                         <Plus size={13} /> Add supplier
                       </button>
@@ -608,15 +657,15 @@ export default function DocumentForm({
                   }
                 />
                 <div className={styles.cardBody}>
-                  <div className={isPurchase ? styles.purchaseSupplierFields : undefined}>
-                    <Field label={`${isPurchase ? 'Supplier' : 'Customer'} *`}>
+                  <div className={isSupplierDocument ? styles.purchaseSupplierFields : undefined}>
+                    <Field label={`${isSupplierDocument ? 'Supplier' : 'Customer'} *`}>
                       <select
                         className={styles.input}
                         value={partyId}
-                        disabled={isAdjustment && Boolean(referenceInvoiceId)}
+                        disabled={(docType === 'CREDIT_NOTE' && Boolean(referenceInvoiceId)) || (isDebitNote && Boolean(sourceDocumentId))}
                         onChange={(e) => setPartyId(e.target.value)}
                       >
-                        <option value="">{loading ? 'Loading...' : `Search by ${isPurchase ? 'name / phone' : 'customer'}`}</option>
+                        <option value="">{loading ? 'Loading...' : `Search by ${isSupplierDocument ? 'name / phone' : 'customer'}`}</option>
                         {availableParties.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}{p.phone ? ` · ${p.phone}` : ''}
@@ -624,7 +673,7 @@ export default function DocumentForm({
                         ))}
                       </select>
                     </Field>
-                    {isPurchase && (
+                    {isSupplierDocument && (
                       <Field label="Phone number">
                         <input
                           className={`${styles.input} ${styles.phoneReadonly}`}
@@ -656,18 +705,18 @@ export default function DocumentForm({
                       <div className={styles.addressGrid}>
                         <div>
                           <span>Billing address</span>
-                          <p>{(isPurchase ? (selectedParty as Supplier).address : (selectedParty as Party).billingAddr) || 'No billing address added'}</p>
+                          <p>{(isSupplierDocument ? (selectedParty as Supplier).address : (selectedParty as Party).billingAddr) || 'No billing address added'}</p>
                         </div>
                         <div>
                           <span>Shipping address</span>
-                          <p>{(isPurchase ? (selectedParty as Supplier).address : (selectedParty as Party).shippingAddr || (selectedParty as Party).billingAddr) || 'Same as billing address'}</p>
+                          <p>{(isSupplierDocument ? (selectedParty as Supplier).address : (selectedParty as Party).shippingAddr || (selectedParty as Party).billingAddr) || 'Same as billing address'}</p>
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div className={styles.customerPlaceholder}>
                       <UserRound size={18} />
-                      <p>Select a {isPurchase ? 'supplier' : 'customer'} to see contact information and addresses.</p>
+                      <p>Select a {isSupplierDocument ? 'supplier' : 'customer'} to see contact information and addresses.</p>
                     </div>
                   )}
                 </div>
@@ -675,18 +724,31 @@ export default function DocumentForm({
 
               {isAdjustment && (
                 <section className={styles.card}>
-                  <SectionHeading icon={<RotateCcw size={18} />} title="Adjustment context" description="Link to original invoice and state correction reason" />
+                  <SectionHeading icon={<RotateCcw size={18} />} title="Adjustment context" description={isDebitNote ? 'Link to the original purchase bill and state the adjustment reason' : 'Link to the original sale invoice and state the adjustment reason'} />
                   <div className={`${styles.cardBody} ${styles.extraGrid}`}>
-                    <Field label="Original invoice *">
-                      <select className={styles.input} value={referenceInvoiceId} onChange={(e) => void pickReferenceInvoice(e.target.value)}>
-                        <option value="">Select invoice to adjust</option>
-                        {invoices.map((inv) => (
-                          <option key={inv.id} value={inv.id}>
-                            {inv.invoiceNumber} · {inv.party?.name} · {formatCurrency(inv.grandTotal)}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
+                    {isDebitNote ? (
+                      <Field label="Original purchase bill *">
+                        <select className={styles.input} value={sourceDocumentId} onChange={(e) => void pickReferencePurchaseBill(e.target.value)}>
+                          <option value="">Select purchase bill to adjust</option>
+                          {purchaseBills.map((bill) => (
+                            <option key={bill.id} value={bill.id}>
+                              {bill.documentNumber} · {bill.supplier?.name || 'Supplier'} · {formatCurrency(bill.grandTotal)}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    ) : (
+                      <Field label="Original sale invoice *">
+                        <select className={styles.input} value={referenceInvoiceId} onChange={(e) => void pickReferenceInvoice(e.target.value)}>
+                          <option value="">Select sale invoice to adjust</option>
+                          {invoices.map((inv) => (
+                            <option key={inv.id} value={inv.id}>
+                              {inv.invoiceNumber} · {inv.party?.name} · {formatCurrency(inv.grandTotal)}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
                     <div className="sm:col-span-2">
                       <Field label="Reason for adjustment *">
                         <input
@@ -733,11 +795,11 @@ export default function DocumentForm({
                       <tr>
                         <th scope="col">#</th>
                         <th scope="col">Item / Description</th>
-                          {!isPurchase && <th scope="col">HSN/SAC</th>}
+                          {!isSupplierDocument && <th scope="col">HSN/SAC</th>}
                         <th scope="col">Qty</th>
                         <th scope="col">Unit</th>
-                          <th scope="col">{isPurchase ? 'Price / unit (₹)' : 'Rate (₹)'}</th>
-                          <th scope="col">{isPurchase ? 'Tax %' : 'GST %'}</th>
+                          <th scope="col">{isSupplierDocument ? 'Price / unit (₹)' : 'Rate (₹)'}</th>
+                          <th scope="col">{isSupplierDocument ? 'Tax %' : 'GST %'}</th>
                         <th scope="col">Amount</th>
                         <th scope="col">
                           <span className="sr-only">Remove</span>
@@ -771,7 +833,7 @@ export default function DocumentForm({
                               onChange={(e) => updateLine(line.key, { description: e.target.value })}
                             />
                           </td>
-                          {!isPurchase && (
+                          {!isSupplierDocument && (
                             <td>
                               <input
                                 aria-label={`HSN ${index + 1}`}
@@ -794,7 +856,7 @@ export default function DocumentForm({
                             />
                           </td>
                           <td>
-                            {isPurchase ? (
+                            {isSupplierDocument ? (
                               <select
                                 aria-label={`Unit ${index + 1}`}
                                 className={`${styles.cellInput} ${styles.purchaseSelect}`}
@@ -823,11 +885,13 @@ export default function DocumentForm({
                               step="0.01"
                               className={styles.cellInput}
                               value={isNaN(line.unitPrice) ? '' : line.unitPrice}
+                              readOnly={!isSupplierDocument && !transactionPrefs.editPriceOnInvoice && Boolean(line.itemId)}
+                              title={!isSupplierDocument && !transactionPrefs.editPriceOnInvoice && line.itemId ? 'Price editing is turned off in Transaction settings' : undefined}
                               onChange={(e) => updateLine(line.key, { unitPrice: parseFloat(e.target.value) || 0 })}
                             />
                           </td>
                           <td>
-                            {isPurchase ? (
+                            {isSupplierDocument ? (
                               <select
                                 aria-label={`Tax ${index + 1}`}
                                 className={`${styles.cellInput} ${styles.purchaseSelect} ${styles.taxSelect}`}
@@ -879,9 +943,19 @@ export default function DocumentForm({
                   >
                     <Plus size={16} /> {isPurchase ? 'Add row' : 'Add line'}
                   </button>
+                  {transactionPrefs.additionalCharges && (
+                    <button
+                      type="button"
+                      className={styles.addButton}
+                      disabled={lines.length >= 200}
+                      onClick={() => setLines((current) => [...current, { ...emptyLine(), description: 'Additional charge' }])}
+                    >
+                      <Plus size={16} /> Add charge
+                    </button>
+                  )}
                   <span>{totals.quantity} total quantity</span>
                 </div>
-                {!isPurchase && !gstRegistered && !loading && (
+                {!isSupplierDocument && !gstRegistered && !loading && (
                   <p className={styles.taxNote}>Tax is not applied because this business is not GST registered.</p>
                 )}
               </section>
@@ -1146,7 +1220,7 @@ export default function DocumentForm({
             {saving === 'DRAFT' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             <span>{saving === 'DRAFT' ? 'Saving…' : 'Save as draft'}</span>
           </button>
-          {isPurchase && (
+          {(
             <div
               className={styles.shareDropdown}
               onBlur={(event) => {
@@ -1166,11 +1240,11 @@ export default function DocumentForm({
               </button>
               {shareMenuOpen && (
                 <div className={styles.shareMenu} role="menu">
-                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'pdf')}><Download size={16} /><span>PDF<small>Download printable bill</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'pdf')}><Download size={16} /><span>PDF<small>Download printable PDF</small></span></button>
                   <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'document')}><FileIcon size={16} /><span>Document<small>Download editable Word file</small></span></button>
                   <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'excel')}><FileSpreadsheet size={16} /><span>Excel<small>Download spreadsheet</small></span></button>
-                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'whatsapp')}><MessageCircle size={16} /><span>WhatsApp<small>Share with supplier</small></span></button>
-                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'email')}><Mail size={16} /><span>Email<small>Send to supplier email</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'whatsapp')}><MessageCircle size={16} /><span>WhatsApp<small>{`Share with ${partyLabel.toLowerCase()}`}</small></span></button>
+                  <button type="button" role="menuitem" onClick={() => void submit('ISSUED', 'email')}><Mail size={16} /><span>Email<small>{`Send to ${partyLabel.toLowerCase()} email`}</small></span></button>
                 </div>
               )}
             </div>

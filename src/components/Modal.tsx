@@ -8,7 +8,7 @@ type ModalProps = {
   title: string;
   children: ReactNode;
   onClose: () => void;
-  size?: 'sm' | 'md' | 'lg' | 'full';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   className?: string;
   initialFocusRef?: RefObject<HTMLElement>;
 };
@@ -73,7 +73,7 @@ export default function Modal({ title, children, onClose, size = 'md', className
         aria-modal="true"
         aria-labelledby={titleId}
         onMouseDown={(event) => event.stopPropagation()}
-        className={`max-h-full w-full overflow-y-auto bg-white p-5 shadow-2xl ${size === 'full' ? 'h-full max-w-none rounded-xl border border-white/70 sm:p-6' : `rounded-2xl border border-white/70 ${size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-3xl' : 'max-w-md'}`} ${className}`}
+        className={`max-h-full w-full overflow-y-auto bg-white p-5 shadow-2xl ${size === 'full' ? 'h-full max-w-none rounded-xl border border-white/70 sm:p-6' : `rounded-2xl border border-white/70 ${size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-3xl' : size === 'xl' ? 'max-w-6xl' : 'max-w-md'}`} ${className}`}
       >
         <div className={`mb-4 flex items-center justify-between gap-4 ${size === 'full' ? 'mx-auto max-w-6xl' : ''}`}>
           <h2 id={titleId} className="text-lg font-bold tracking-tight text-slate-950">{title}</h2>

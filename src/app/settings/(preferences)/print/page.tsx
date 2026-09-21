@@ -5,30 +5,20 @@ import { ImageUp, Maximize2, Printer, Receipt, X } from 'lucide-react';
 import { getActiveBusinessId, getAllPages } from '@/lib/api';
 import type { Business } from '@/types';
 import Modal from '@/components/Modal';
-import { useLocalSettings } from '@/components/settings/useLocalSettings';
-import { LinkRow, NumberRow, OptionCardRow, SavedNote, SelectRow, SettingsCard, SubHeading, TextRow, ToggleRow } from '@/components/settings/SettingsControls';
+import { useCompanySettings } from '@/lib/useGeneralPreferences';
+import { imageToDataUrl } from '@/lib/imageCompression';
+import { LinkRow, NumberRow, OptionCardRow, SavedNote, SelectRow, SettingsCard, SubHeading, TextRow, ToggleRow, UnavailableRow } from '@/components/settings/SettingsControls';
 import { RegularInvoicePreview, ThermalReceiptPreview } from '@/components/settings/PrintPreview';
 import {
-  ITEM_TABLE_COLUMN_DEFAULTS,
-  REGULAR_PRINT_DEFAULTS,
   TEXT_SIZE_LABELS,
   THERMAL_PAGE_SIZES,
-  THERMAL_PRINT_DEFAULTS,
-  TRANSACTION_NAME_DEFAULTS,
   TRANSACTION_NAME_FIELDS,
   type ThermalTheme,
 } from '@/components/settings/printSettingsTypes';
 
 const THERMAL_THEMES: ThermalTheme[] = [1, 2, 3, 4, 5];
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
+const readFileAsDataUrl = (file: File) => imageToDataUrl(file);
 
 export default function PrintSettingsPage() {
   const [printerType, setPrinterType] = useState<'regular' | 'thermal'>('regular');
@@ -40,10 +30,10 @@ export default function PrintSettingsPage() {
   const signatureInputRef = useRef<HTMLInputElement>(null);
   const thermalLogoInputRef = useRef<HTMLInputElement>(null);
 
-  const regular = useLocalSettings('print-regular', REGULAR_PRINT_DEFAULTS);
-  const thermal = useLocalSettings('print-thermal', THERMAL_PRINT_DEFAULTS);
-  const transactionNames = useLocalSettings('print-transaction-names', TRANSACTION_NAME_DEFAULTS);
-  const itemTableColumns = useLocalSettings('print-item-table-columns', ITEM_TABLE_COLUMN_DEFAULTS);
+  const regular = useCompanySettings('printRegular');
+  const thermal = useCompanySettings('printThermal');
+  const transactionNames = useCompanySettings('printNames');
+  const itemTableColumns = useCompanySettings('printColumns');
 
   useEffect(() => {
     let active = true;
@@ -107,7 +97,6 @@ export default function PrintSettingsPage() {
         {printerType === 'regular' ? (
           <div className="space-y-4">
             <SettingsCard title="Print company info / header">
-              <ToggleRow label="Make regular printer default" checked={regular.value.makeDefault} onChange={(checked) => regular.update('makeDefault', checked)} />
               <ToggleRow label="Print repeat header in all pages" checked={regular.value.repeatHeader} onChange={(checked) => regular.update('repeatHeader', checked)} />
               <ToggleRow label="Company name" description={business?.name ? `Shown as "${business.name}" — edit in Business profile.` : 'Add your business name in Business profile.'} checked={regular.value.showCompanyName} onChange={(checked) => regular.update('showCompanyName', checked)} />
 
@@ -215,6 +204,7 @@ export default function PrintSettingsPage() {
           </div>
         ) : (
           <div className="space-y-4">
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">Thermal receipt printing is not available yet. These options are saved for your company but no thermal receipt is produced from them.</p>
             <SettingsCard title="Theme">
               <div className="flex gap-2 py-1">
                 {THERMAL_THEMES.map((theme) => (
@@ -375,7 +365,7 @@ export default function PrintSettingsPage() {
         <Modal title="Item Table Customization" onClose={() => setItemTableOpen(false)}>
           <div className="divide-y divide-slate-100">
             <ToggleRow label="HSN/SAC column" checked={itemTableColumns.value.showHsnColumn} onChange={(checked) => itemTableColumns.update('showHsnColumn', checked)} />
-            <ToggleRow label="Discount column" checked={itemTableColumns.value.showDiscountColumn} onChange={(checked) => itemTableColumns.update('showDiscountColumn', checked)} />
+            <UnavailableRow label="Discount column" description="Discounts are entered once per invoice, not per line, so there is no column to show." />
             <ToggleRow label="GST column" checked={itemTableColumns.value.showGstColumn} onChange={(checked) => itemTableColumns.update('showGstColumn', checked)} />
             <ToggleRow label="Item code" description="Show the item's code next to its name." checked={itemTableColumns.value.showItemCode} onChange={(checked) => itemTableColumns.update('showItemCode', checked)} />
             <ToggleRow label="Item description" description="Show the item's description under its name." checked={itemTableColumns.value.showItemDescription} onChange={(checked) => itemTableColumns.update('showItemDescription', checked)} />

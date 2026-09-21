@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig, isAxiosError } from 'axios';
+import axios, { AxiosHeaders, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig, isAxiosError } from 'axios';
+import type { RawAxiosHeaders } from 'axios';
 import type { Branch, Business, Role } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
@@ -22,26 +23,34 @@ const pageRequests = new Map<string, Promise<AxiosResponse<unknown[]>>>();
 let pageCacheVersion = 0;
 
 /**
- * Parties and items are workspace-wide master data shared by every company.
+ * Parties (including suppliers) and items are company-wide master data. They
+ * are shared by branches inside one company, never across different companies.
  * A party ledger is deliberately excluded because its transactions belong to
  * the currently selected company and branch.
  */
 function isSharedMasterRequest(url: string) {
   const path = url.split('?')[0];
   if (path === '/items' || path.startsWith('/items/')) return true;
+  if (path === '/suppliers' || path.startsWith('/suppliers/')) return true;
   if (path === '/parties') return true;
   return /^\/parties\/[^/]+$/.test(path);
 }
 
 function getPageCacheKey(url: string, config: AxiosRequestConfig) {
+  const headers = AxiosHeaders.from(
+    config.headers as RawAxiosHeaders | AxiosHeaders | undefined,
+  );
+  const requestedBusinessId = headers.get('X-Business-Id')?.toString();
+  const requestedBranchId = headers.get('X-Branch-Id')?.toString();
+  const businessId = requestedBusinessId || (typeof window === 'undefined' ? '' : getActiveBusinessId() ?? '');
+
   if (isSharedMasterRequest(url)) {
     // Party totals are calculated from the active company's transactions, so
     // master records are shared but each company's derived view is cached apart.
-    const businessId = typeof window === 'undefined' ? '' : getActiveBusinessId() ?? '';
-    return `${businessId}:shared:${url}:${JSON.stringify(config.params ?? {})}`;
+    const branchId = requestedBranchId || (typeof window === 'undefined' ? '' : getActiveBranchId(businessId) ?? '');
+    return `${businessId}:${branchId}:branch-master:${url}:${JSON.stringify(config.params ?? {})}`;
   }
-  const businessId = typeof window === 'undefined' ? '' : getActiveBusinessId() ?? '';
-  const branchId = typeof window === 'undefined' ? '' : getActiveBranchId(businessId) ?? '';
+  const branchId = requestedBranchId || (typeof window === 'undefined' ? '' : getActiveBranchId(businessId) ?? '');
   return `${businessId}:${branchId}:${url}:${JSON.stringify(config.params ?? {})}`;
 }
 
@@ -128,6 +137,7 @@ let businessRequest: Promise<string | null> | null = null;
 let branchRequest: Promise<string | null> | null = null;
 
 const ACTIVE_BUSINESS_KEY = 'activeBusinessId';
+const ACTIVE_WORKSPACE_BRANCH_KEY = 'activeWorkspaceBranchId';
 const ACTIVE_BRANCH_PREFIX = 'activeBranchId:';
 
 function getPageScopedBusinessId() {
@@ -176,11 +186,13 @@ api.interceptors.request.use(async (config) => {
     throw new axios.Cancel('No business selected');
   }
 
-  // The API requires a business for authorization, even for shared masters.
-  // Send the company header but omit the branch header so these records remain
-  // common across the company's branches.
+  // Master records are branch-scoped. A company is still required for access,
+  // while the selected branch decides which parties, suppliers and items load.
   if (isSharedMasterRequest(url)) {
+    const branchId = config.headers.get('X-Branch-Id')?.toString() || getActiveBranchId(businessId);
+    if (!branchId || branchId === 'all') throw new axios.Cancel('Select a specific branch to manage master data');
     config.headers['X-Business-Id'] = businessId;
+    config.headers['X-Branch-Id'] = branchId;
     return config;
   }
 
@@ -217,7 +229,10 @@ api.interceptors.request.use(async (config) => {
 
   const isOperational = ['/invoices', '/documents', '/production-orders'].some(
     (prefix) => url === prefix || url.startsWith(`${prefix}/`),
-  );
+  ) || url === '/purchase-orders' || url.startsWith('/purchase-orders/');
+  // Operational registers belong to the selected company. The concrete branch
+  // is still recorded on creates/updates for audit, but reads combine branches.
+  if (isOperational && config.method?.toLowerCase() === 'get' && !url.endsWith('/next-number')) branchId = 'all';
   if (branchId === 'all' && isOperational && config.method?.toLowerCase() !== 'get') {
     throw new axios.Cancel('Select a specific branch before creating or changing records');
   }
@@ -289,6 +304,17 @@ export function getActiveBusinessId() {
   return localStorage.getItem(ACTIVE_BUSINESS_KEY);
 }
 
+export function getActiveWorkspaceBranchId() {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(ACTIVE_WORKSPACE_BRANCH_KEY);
+}
+
+export function setActiveWorkspaceBranchId(branchId: string) {
+  if (typeof window === 'undefined') return;
+  if (getActiveWorkspaceBranchId() !== branchId) clearApiCache();
+  localStorage.setItem(ACTIVE_WORKSPACE_BRANCH_KEY, branchId);
+}
+
 export function setActiveBusinessId(businessId: string) {
   if (typeof window === 'undefined') return;
   if (localStorage.getItem(ACTIVE_BUSINESS_KEY) !== businessId) clearApiCache();
@@ -316,6 +342,7 @@ export function clearActiveBusiness() {
   if (typeof window === 'undefined') return;
   clearActiveBranch();
   localStorage.removeItem(ACTIVE_BUSINESS_KEY);
+  localStorage.removeItem(ACTIVE_WORKSPACE_BRANCH_KEY);
   clearApiCache();
 }
 
