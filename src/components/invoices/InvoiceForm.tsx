@@ -3,14 +3,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { AlertCircle, ArrowLeft, ArrowRight, Camera, Check, FileCheck2, FilePlus2, FileText, Loader2, Phone, Plus, ReceiptText, Save, Share2, Trash2, UserRound, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, Camera, Check, ChevronDown, Download, File as FileIcon, FileCheck2, FilePlus2, FileSpreadsheet, FileText, Loader2, Mail, MessageCircle, Phone, Plus, ReceiptText, Save, Share2, Trash2, UserRound, X } from 'lucide-react';
 import { api, getActiveBusinessId, getAllPages, getApiError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
+import { prepareUploads } from '@/lib/imageCompression';
 import type { Business, Invoice, Item, Party } from '@/types';
 import { useEmbeddedForm } from '@/components/EmbeddedFormContext';
 import DocumentCompanyPicker from '@/components/DocumentCompanyPicker';
-import { calculateInvoice, type InvoiceDraftLine } from './invoiceTotals';
+import { calculateInvoice, totalsOptionsFor, type InvoiceDraftLine } from './invoiceTotals';
+import { usePreferences } from '@/lib/useGeneralPreferences';
+import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
 import styles from './InvoiceForm.module.css';
+
+type InvoiceShareTarget = 'pdf' | 'document' | 'excel' | 'whatsapp' | 'email';
+
+function escapeMarkup(value: string | number) {
+  return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+}
+
+function downloadFile(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = window.document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 const generateLineId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -56,6 +74,9 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   const [saleMode, setSaleMode] = useState<'CREDIT' | 'CASH'>('CREDIT');
   const [invoiceDate, setInvoiceDate] = useState(today);
   const [invoiceNumber, setInvoiceNumber] = useState('Assigned on save');
+  const [manualNumberMode, setManualNumberMode] = useState(false);
+  const [manualNumber, setManualNumber] = useState('');
+  const dueDateEdited = useRef(false);
   const [dueDate, setDueDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [terms, setTerms] = useState('');
@@ -65,10 +86,14 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   const [lines, setLines] = useState<InvoiceDraftLine[]>(() => [emptyLine()]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [saving, setSaving] = useState<'SAVE' | 'SHARE' | ''>('');
+  const [saving, setSaving] = useState<'SAVE' | `SHARE_${InvoiceShareTarget}` | ''>('');
   const [error, setError] = useState('');
   const [savedId, setSavedId] = useState('');
   const [loadVersion, setLoadVersion] = useState(0);
+  const transactionPrefs = usePreferences('transaction');
+  const taxPrefs = usePreferences('taxes');
+  const partyPrefs = usePreferences('party');
+  const messagePrefs = usePreferences('message');
   const busyRef = useRef(false);
   const errorRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -126,10 +151,11 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
 
   useEffect(() => {
     const controller = new AbortController();
-    void api.get<{ invoiceNumber: string }>('/invoices/next-number', { signal: controller.signal, headers: businessId ? { 'X-Business-Id': businessId } : undefined })
+    void api.get<{ invoiceNumber: string; manual?: boolean }>('/invoices/next-number', { signal: controller.signal, headers: businessId ? { 'X-Business-Id': businessId } : undefined })
       .then(({ data }) => {
         if (!controller.signal.aborted && data?.invoiceNumber) {
           setInvoiceNumber(data.invoiceNumber);
+          setManualNumberMode(Boolean(data.manual));
         }
       })
       .catch(() => undefined);
@@ -139,6 +165,16 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
+
+  // Default due date = invoice date + the company's payment term, until the user picks one.
+  useEffect(() => {
+    if (dueDateEdited.current || !invoiceDate) return;
+    const days = partyPrefs.defaultPaymentTermDays;
+    if (days <= 0) { setDueDate(''); return; }
+    const due = new Date(`${invoiceDate}T00:00:00`);
+    due.setDate(due.getDate() + days);
+    setDueDate(`${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`);
+  }, [invoiceDate, partyPrefs.defaultPaymentTermDays]);
 
   useEffect(() => { attachmentsRef.current = attachments; }, [attachments]);
 
@@ -207,9 +243,20 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
     });
   }
 
-  const totals = useMemo(() => calculateInvoice(lines, discount, true), [lines, discount]);
+  const totalOptions = useMemo(() => totalsOptionsFor(transactionPrefs, taxPrefs), [transactionPrefs, taxPrefs]);
+  const totals = useMemo(() => calculateInvoice(lines, discount, gstRegistered, totalOptions), [lines, discount, gstRegistered, totalOptions]);
   const selectedParty = parties.find(({ id }) => id === partyId);
   const disabled = loading || Boolean(loadError) || Boolean(saving) || Boolean(savedId);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+
+  function invoiceMessage(invoice: Invoice) {
+    return renderMessage(messagePrefs.invoiceMessage, {
+      FirmName: businesses.find(({ id }) => id === businessId)?.name ?? '',
+      PartyName: selectedParty?.name ?? '',
+      InvoiceNumber: invoice.invoiceNumber,
+      Amount: formatCurrency(invoice.grandTotal),
+    });
+  }
 
   async function shareWithAttachments(invoice: Invoice) {
     if (!attachments.length || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
@@ -224,17 +271,49 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
     if (typeof navigator.canShare === 'function' && !navigator.canShare({ files })) return false;
     await navigator.share({
       title: `Invoice ${invoice.invoiceNumber}`,
-      text: `${selectedParty?.name || 'Customer'} · ${formatCurrency(invoice.grandTotal)}`,
+      text: invoiceMessage(invoice),
       files,
     });
     return true;
   }
 
-  async function submit(action: 'SAVE' | 'SHARE') {
+  function invoiceExportMarkup(invoice: Invoice, enteredLines: InvoiceDraftLine[]) {
+    const rows = enteredLines.map((line, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${escapeMarkup(line.description)}</td>
+          <td>${escapeMarkup(line.quantity)}</td>
+          <td>${escapeMarkup(line.unitPrice)}</td>
+          <td>${escapeMarkup(line.taxRate)}%</td>
+          <td>${escapeMarkup(calculateInvoice([line], 0, gstRegistered, { noTax: totalOptions.noTax }).total)}</td>
+        </tr>`).join('');
+    return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#172033}h1{font-size:22px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccd3dc;padding:8px;text-align:left}th{background:#eef3f8}.total{text-align:right;font-size:18px;font-weight:700;margin-top:16px}</style></head><body><h1>Sale Invoice</h1><p><strong>Invoice:</strong> ${escapeMarkup(invoice.invoiceNumber)}</p><p><strong>Customer:</strong> ${escapeMarkup(selectedParty?.name || '')}</p><p><strong>Date:</strong> ${escapeMarkup(invoiceDate)}</p><table><thead><tr><th>#</th><th>Item details</th><th>Qty</th><th>Price / unit</th><th>Tax</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table><p class="total">Total: ${escapeMarkup(invoice.grandTotal)}</p></body></html>`;
+  }
+
+  async function runInvoiceShare(target: InvoiceShareTarget, invoice: Invoice, enteredLines: InvoiceDraftLine[]) {
+    const fileBase = invoice.invoiceNumber || 'sale-invoice';
+    if (target === 'pdf') {
+      const { data } = await api.get<Blob>(`/invoices/${invoice.id}/pdf`, { responseType: 'blob', headers: { 'X-Business-Id': businessId } });
+      downloadFile(new Blob([data], { type: 'application/pdf' }), `${fileBase}.pdf`);
+      return;
+    }
+    if (target === 'document') return downloadFile(new Blob([invoiceExportMarkup(invoice, enteredLines)], { type: 'application/msword;charset=utf-8' }), `${fileBase}.doc`);
+    if (target === 'excel') return downloadFile(new Blob([invoiceExportMarkup(invoice, enteredLines)], { type: 'application/vnd.ms-excel;charset=utf-8' }), `${fileBase}.xls`);
+    if (target === 'email') {
+      const message = invoiceMessage(invoice);
+      window.open(`mailto:${encodeURIComponent(selectedParty?.email || '')}?subject=${encodeURIComponent(`Invoice ${invoice.invoiceNumber}`)}&body=${encodeURIComponent(message)}`, '_blank');
+      return;
+    }
+    const sharedFromDevice = await shareWithAttachments(invoice);
+    if (!sharedFromDevice) window.open(whatsappLink(selectedParty?.phone || customerPhone, invoiceMessage(invoice)), '_blank', 'noopener,noreferrer');
+  }
+
+  async function submit(action: 'SAVE' | InvoiceShareTarget) {
     if (busyRef.current || disabled) return;
     setError('');
     const enteredLines = lines.filter((line) => (line.description || '').trim() || line.itemId || (line.unitPrice ?? 0) !== 0);
     if (!partyId) return setError('Select a customer before saving this invoice.');
+    if (manualNumberMode && !manualNumber.trim()) return setError('Enter an invoice number.');
     const normalizedPhone = customerPhone.replace(/[\s()-]/g, '');
     if (normalizedPhone && !/^\+?[0-9]{7,15}$/.test(normalizedPhone)) {
       return setError('Enter a valid customer phone number with 7 to 15 digits.');
@@ -268,7 +347,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
     if (invoiceNotes.length > 5000) return setError('Notes and terms together must be 5,000 characters or fewer.');
 
     setBusy(true);
-    setSaving(action);
+    setSaving(action === 'SAVE' ? 'SAVE' : `SHARE_${action}`);
     let createdId = '';
     try {
       const requestConfig = { headers: { 'X-Business-Id': businessId } };
@@ -282,6 +361,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
       }
       const { data } = await api.post<Invoice>('/invoices', {
         partyId,
+        invoiceNumber: manualNumberMode ? manualNumber.trim() : undefined,
         issueDate: invoiceDate,
         dueDate: dueDate || undefined,
         discount: safeDiscount,
@@ -299,7 +379,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
       setSavedId(data.id);
       if (attachments.length) {
         const formData = new FormData();
-        attachments.forEach(({ file }) => formData.append('files', file, file.name));
+        (await prepareUploads(attachments.map(({ file }) => file))).forEach((file) => formData.append('files', file, file.name));
         await api.post(`/invoices/${data.id}/attachments`, formData, {
           headers: { 'X-Business-Id': businessId, 'Content-Type': 'multipart/form-data' },
           timeout: 120000,
@@ -308,14 +388,8 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
       if (saleMode === 'CASH' && Number(data.grandTotal) > 0) {
         await api.post(`/invoices/${data.id}/payments`, { amount: Number(data.grandTotal), method: paymentMethod }, requestConfig);
       }
-      if (action === 'SHARE') {
-        const sharedFromDevice = await shareWithAttachments(data);
-        if (!sharedFromDevice) {
-          const { data: attempts } = await api.post<Array<{ status: string }>>(`/invoices/${data.id}/deliver`, { channels: ['WHATSAPP'] }, requestConfig);
-          if (attempts.some(({ status }) => status === 'FAILED')) throw new Error('WhatsApp delivery failed.');
-        }
-      }
-      router.push(`/invoices/${data.id}?companyId=${encodeURIComponent(businessId)}`);
+      if (action !== 'SAVE') await runInvoiceShare(action, data, enteredLines);
+      router.push(`/invoices/${data.id}?companyId=${encodeURIComponent(businessId)}${action === 'SAVE' && messagePrefs.autoShareOnSave ? '&share=whatsapp' : ''}`);
     } catch (saveFailure) {
       setError(
         createdId
@@ -372,7 +446,19 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
               setGstRegistered(Boolean(businesses.find(({ id }) => id === nextId)?.gstRegistered));
             }}
           />
-          <span className={styles.invoiceNumber}>{invoiceNumber}</span>
+          {manualNumberMode ? (
+            <input
+              aria-label="Invoice number"
+              className={styles.invoiceNumber}
+              value={manualNumber}
+              maxLength={40}
+              placeholder="Invoice no. *"
+              disabled={Boolean(saving) || Boolean(savedId)}
+              onChange={(event) => setManualNumber(event.target.value)}
+            />
+          ) : (
+            <span className={styles.invoiceNumber}>{invoiceNumber}</span>
+          )}
           <button type="button" className={styles.iconButton} onClick={onClose} disabled={Boolean(saving)} aria-label="Close invoice editor">
             <X size={20} />
           </button>
@@ -548,6 +634,8 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                               step="0.01"
                               className={styles.cellInput}
                               value={isNaN(line.unitPrice) ? '' : line.unitPrice}
+                              readOnly={!transactionPrefs.editPriceOnInvoice && Boolean(line.itemId)}
+                              title={!transactionPrefs.editPriceOnInvoice && line.itemId ? 'Price editing is turned off in Transaction settings' : undefined}
                               onChange={(event) => updateLine(line.key, { unitPrice: parseFloat(event.target.value) || 0 })}
                             />
                           </td>
@@ -590,6 +678,16 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                   >
                     <Plus size={16} /> Add item
                   </button>
+                  {transactionPrefs.additionalCharges && (
+                    <button
+                      type="button"
+                      className={styles.addButton}
+                      disabled={lines.length >= 200}
+                      onClick={() => setLines((current) => [...current, { ...emptyLine(), description: 'Additional charge' }])}
+                    >
+                      <Plus size={16} /> Add charge
+                    </button>
+                  )}
                   <span>{totals.quantity} total quantity</span>
                 </div>
               </section>
@@ -703,7 +801,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                         className={styles.input}
                         min={invoiceDate}
                         value={dueDate}
-                        onChange={(event) => setDueDate(event.target.value)}
+                        onChange={(event) => { dueDateEdited.current = true; setDueDate(event.target.value); }}
                       />
                     </Field>
                   </div>
@@ -785,13 +883,36 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
           <button type="button" onClick={onClose} disabled={Boolean(saving)} className={styles.cancelButton}>
             Cancel
           </button>
-          <button type="button" disabled={disabled} onClick={() => void submit('SHARE')} className={styles.secondaryButton}>
-            {saving === 'SHARE' ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
-            <span>{saving === 'SHARE' ? 'Sharing…' : 'Save & share'}</span>
-          </button>
+          <div
+            className={styles.shareDropdown}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) setShareMenuOpen(false);
+            }}
+          >
+            <button
+              type="button"
+              disabled={disabled}
+              className={styles.shareButton}
+              aria-haspopup="menu"
+              aria-expanded={shareMenuOpen}
+              onClick={() => setShareMenuOpen((open) => !open)}
+            >
+              {saving.startsWith('SHARE_') ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
+              Share <ChevronDown size={15} />
+            </button>
+            {shareMenuOpen && (
+              <div className={styles.shareMenu} role="menu">
+                <button type="button" role="menuitem" onClick={() => void submit('pdf')}><Download size={16} /><span>PDF<small>Download printable PDF</small></span></button>
+                <button type="button" role="menuitem" onClick={() => void submit('document')}><FileIcon size={16} /><span>Document<small>Download editable Word file</small></span></button>
+                <button type="button" role="menuitem" onClick={() => void submit('excel')}><FileSpreadsheet size={16} /><span>Excel<small>Download spreadsheet</small></span></button>
+                <button type="button" role="menuitem" onClick={() => void submit('whatsapp')}><MessageCircle size={16} /><span>WhatsApp<small>Share with customer</small></span></button>
+                <button type="button" role="menuitem" onClick={() => void submit('email')}><Mail size={16} /><span>Email<small>Send to customer email</small></span></button>
+              </div>
+            )}
+          </div>
           <button type="button" disabled={disabled} onClick={() => void submit('SAVE')} className={styles.saveButton}>
             {saving === 'SAVE' ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />}
-            <span>{saving === 'SAVE' ? 'Saving…' : 'Save invoice'}</span>
+            <span>{saving === 'SAVE' ? 'Saving…' : 'Save and issue'}</span>
           </button>
         </div>
       </footer>

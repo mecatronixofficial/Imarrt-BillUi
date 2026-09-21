@@ -25,7 +25,8 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import StatusBadge from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
 import { api, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatQuantity } from '@/lib/format';
+import { useGeneralPreferences, usePreferences } from '@/lib/useGeneralPreferences';
 import type { BusinessDocument, Invoice, Item } from '@/types';
 import InvoiceModal from '@/components/invoices/InvoiceModal';
 import DocumentModal from '@/components/documents/DocumentModal';
@@ -56,6 +57,9 @@ type TransactionSources = {
 /* ========================================================================== */
 
 export function ItemWorkspace({ itemId }: { itemId?: string }) {
+  const { itemDescription: showDescription } = useGeneralPreferences();
+  const itemPrefs = usePreferences('item');
+  const isLowStock = (quantity: number) => itemPrefs.lowStockAlert && quantity <= itemPrefs.lowStockThreshold;
   const router = useRouter();
 
   const [items, setItems] = useState<Item[]>([]);
@@ -243,9 +247,9 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
     const term = search.trim().toLowerCase();
 
     return term
-      ? items.filter((entry) => [entry.name, entry.sku, entry.description].some((value) => value?.toLowerCase().includes(term)))
+      ? items.filter((entry) => [entry.name, entry.sku, showDescription ? entry.description : undefined, itemPrefs.itemCategories ? entry.category : undefined].some((value) => value?.toLowerCase().includes(term)))
       : items;
-  }, [items, search]);
+  }, [items, search, showDescription, itemPrefs.itemCategories]);
 
   const salesQty = Math.abs(
     transactions
@@ -258,7 +262,7 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
     .reduce((sum, transaction) => sum + transaction.quantity, 0);
 
   const totalStockValue = items.reduce((sum, entry) => sum + Number(entry.stockQty) * Number(entry.salePrice), 0);
-  const lowStockCount = items.filter((entry) => Number(entry.stockQty) <= 5).length;
+  const lowStockCount = items.filter((entry) => isLowStock(Number(entry.stockQty))).length;
 
   /* ====================================================================== */
   /* ACTIONS                                                                */
@@ -357,10 +361,10 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
                       <div className="mb-1.5 flex flex-wrap items-center gap-2">
                         <span
                           className={`rounded-md px-2 py-1 text-[7px] font-black uppercase tracking-[0.1em] ${
-                            Number(item.stockQty) <= 5 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                            isLowStock(Number(item.stockQty)) ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
                           }`}
                         >
-                          {Number(item.stockQty) <= 5 ? 'Low Stock' : 'In Stock'}
+                          {isLowStock(Number(item.stockQty)) ? 'Low Stock' : 'In Stock'}
                         </span>
                       </div>
 
@@ -389,7 +393,8 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
                         )}
                       </div>
 
-                      <p className="mt-1 max-w-2xl truncate text-[9px] text-slate-500">{item.description || 'No description added'}</p>
+                      {itemPrefs.itemCategories && item.category && <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-blue-600">{item.category}</p>}
+                      {showDescription && <p className="mt-1 max-w-2xl truncate text-[9px] text-slate-500">{item.description || 'No description added'}</p>}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -447,9 +452,9 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
                     </div>
 
                     <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-                      <StockRow label="Current Stock" value={`${Number(item.stockQty).toLocaleString('en-IN')} ${item.unit}`} type="normal" />
-                      <StockRow label="Purchased" value={`+${purchaseQty.toLocaleString('en-IN')} ${item.unit}`} type="positive" />
-                      <StockRow label="Sold" value={`-${salesQty.toLocaleString('en-IN')} ${item.unit}`} type="negative" />
+                      <StockRow label="Current Stock" value={`${formatQuantity(item.stockQty)} ${item.unit}`} type="normal" />
+                      <StockRow label="Purchased" value={`+${formatQuantity(purchaseQty)} ${item.unit}`} type="positive" />
+                      <StockRow label="Sold" value={`-${formatQuantity(salesQty)} ${item.unit}`} type="negative" />
                     </div>
                   </div>
                 </div>
@@ -593,11 +598,11 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
               <InventoryMetric
                 icon={Boxes}
                 label="Stock Units"
-                value={items.reduce((total, entry) => total + Number(entry.stockQty), 0).toLocaleString('en-IN')}
+                value={formatQuantity(items.reduce((total, entry) => total + Number(entry.stockQty), 0))}
                 helper="Current quantity"
                 tone="violet"
               />
-              <InventoryMetric icon={TrendingDown} label="Low Stock" value={lowStockCount.toLocaleString('en-IN')} helper="Five units or less" tone="amber" />
+              <InventoryMetric icon={TrendingDown} label="Low Stock" value={lowStockCount.toLocaleString('en-IN')} helper={itemPrefs.lowStockAlert ? `${itemPrefs.lowStockThreshold} units or less` : 'Alerts are turned off'} tone="amber" />
               <InventoryMetric icon={WalletCards} label="Stock Value" value={formatCurrency(totalStockValue)} helper="Based on sale price" tone="emerald" />
             </section>
 
@@ -695,6 +700,8 @@ function ItemRegisterTable({
   error: string;
   onRetry: () => void;
 }) {
+  const { itemDescription: showDescription } = useGeneralPreferences();
+  const itemPrefs = usePreferences('item');
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_28px_rgba(15,23,42,0.05)]">
       <div className="grid items-end gap-2 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-blue-50/50 px-3 py-3 sm:grid-cols-[180px_minmax(220px,1fr)] sm:px-4">
@@ -712,7 +719,7 @@ function ItemRegisterTable({
             value={search}
             onChange={(event) => onSearch(event.target.value)}
             className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-7 pr-3 text-[9px] font-medium text-slate-700 outline-none transition-all placeholder:text-slate-400 hover:border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-            placeholder="Search item name, SKU or description..."
+            placeholder={showDescription ? 'Search item name, SKU or description...' : 'Search item name or SKU...'}
             aria-label="Search items"
           />
         </div>
@@ -744,7 +751,7 @@ function ItemRegisterTable({
             <tbody>
               {items.map((entry, index) => {
                 const stock = Number(entry.stockQty);
-                const lowStock = stock <= 5;
+                const lowStock = itemPrefs.lowStockAlert && stock <= itemPrefs.lowStockThreshold;
 
                 return (
                   <tr
@@ -756,7 +763,8 @@ function ItemRegisterTable({
                   >
                     <td className="min-w-0 border-r border-slate-100 px-3 py-3">
                       <p className="truncate text-[10px] font-extrabold text-slate-900 transition-colors group-hover:text-blue-700">{entry.name}</p>
-                      {entry.description && <p className="mt-0.5 hidden truncate text-[7px] text-slate-400 sm:block">{entry.description}</p>}
+                      {itemPrefs.itemCategories && entry.category && <p className="mt-0.5 truncate text-[7px] font-bold uppercase tracking-wide text-blue-500">{entry.category}</p>}
+                      {showDescription && entry.description && <p className="mt-0.5 hidden truncate text-[7px] text-slate-400 sm:block">{entry.description}</p>}
                     </td>
 
                     <td className="hidden border-r border-slate-100 px-3 py-3 font-mono text-[9px] text-slate-500 md:table-cell">{entry.sku || '—'}</td>
@@ -775,7 +783,7 @@ function ItemRegisterTable({
                           lowStock ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
                         }`}
                       >
-                        {stock.toLocaleString('en-IN')} {entry.unit}
+                        {formatQuantity(stock)} {entry.unit}
                       </span>
                     </td>
 
@@ -847,7 +855,7 @@ function TransactionRow({ transaction, unit }: { transaction: ItemTransaction; u
 
       <td className={`border-r border-slate-100 px-3 py-3 text-right text-[9px] font-black ${purchase ? 'text-emerald-600' : 'text-red-600'}`}>
         {purchase ? '+' : '-'}
-        {Math.abs(transaction.quantity).toLocaleString('en-IN')} {unit}
+        {formatQuantity(Math.abs(transaction.quantity))} {unit}
       </td>
 
       <td className="hidden whitespace-nowrap border-r border-slate-100 px-3 py-3 text-right text-[8px] font-semibold text-slate-600 lg:table-cell">{formatCurrency(transaction.rate)}</td>
@@ -943,8 +951,12 @@ function StockRow({ label, value, type }: { label: string; value: string; type: 
 /* ========================================================================== */
 
 function ItemFormModal({ item, onClose, onSaved }: { item: Item | null; onClose: () => void; onSaved: (item: Item) => void }) {
+  const { itemDescription: showDescription } = useGeneralPreferences();
+  const { itemCategories: showCategory, wholesalePrice: showWholesale } = usePreferences('item');
   const [form, setForm] = useState({
     name: item?.name ?? '',
+    category: item?.category ?? '',
+    wholesalePrice: item?.wholesalePrice === null || item?.wholesalePrice === undefined ? '' : String(item.wholesalePrice),
     sku: item?.sku ?? '',
     description: item?.description ?? '',
     unit: item?.unit ?? 'pcs',
@@ -968,6 +980,9 @@ function ItemFormModal({ item, onClose, onSaved }: { item: Item | null; onClose:
         name: form.name.trim(),
         sku: form.sku.trim() || undefined,
         description: form.description.trim() || undefined,
+        // Hidden fields are left out so turning a setting off never wipes saved data.
+        ...(showCategory ? { category: form.category.trim() || undefined } : {}),
+        ...(showWholesale ? { wholesalePrice: form.wholesalePrice.trim() === '' ? null : Number(form.wholesalePrice) } : {}),
         unit: form.unit.trim(),
         salePrice: Number(form.salePrice),
         taxRate: Number(form.taxRate),
@@ -1016,16 +1031,18 @@ function ItemFormModal({ item, onClose, onSaved }: { item: Item | null; onClose:
           </FormField>
         </div>
 
-        <FormField label="Description">
-          <textarea
-            id="item-description"
-            rows={2}
-            className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[10px] font-medium text-slate-800 outline-none transition-all hover:border-slate-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-            value={form.description}
-            onChange={(event) => setForm({ ...form, description: event.target.value })}
-            placeholder="Short item description"
-          />
-        </FormField>
+        {showDescription && (
+          <FormField label="Description">
+            <textarea
+              id="item-description"
+              rows={2}
+              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[10px] font-medium text-slate-800 outline-none transition-all hover:border-slate-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
+              value={form.description}
+              onChange={(event) => setForm({ ...form, description: event.target.value })}
+              placeholder="Short item description"
+            />
+          </FormField>
+        )}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <FormField label="Unit" required>
@@ -1050,6 +1067,34 @@ function ItemFormModal({ item, onClose, onSaved }: { item: Item | null; onClose:
               onChange={(event) => setForm({ ...form, salePrice: event.target.value })}
             />
           </FormField>
+
+          {showCategory && (
+            <FormField label="Category">
+              <input
+                id="item-category"
+                maxLength={80}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
+                value={form.category}
+                onChange={(event) => setForm({ ...form, category: event.target.value })}
+                placeholder="e.g. Fabric"
+              />
+            </FormField>
+          )}
+
+          {showWholesale && (
+            <FormField label="Wholesale Price">
+              <input
+                id="item-wholesale"
+                type="number"
+                step="0.01"
+                min="0"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
+                value={form.wholesalePrice}
+                onChange={(event) => setForm({ ...form, wholesalePrice: event.target.value })}
+                placeholder="Optional"
+              />
+            </FormField>
+          )}
 
           <FormField label="Tax %">
             <input

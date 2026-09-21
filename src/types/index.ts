@@ -6,18 +6,21 @@ export interface Business {
   legalName?: string;
   gstRegistered: boolean;
   gstin?: string;
+  tin?: string | null;
   address?: string;
   stateCode?: string;
   phone?: string;
   email?: string;
   isActive: boolean;
   createdAt: string;
+  workspaceBranchId?: string;
   _count?: { members: number; invoices: number; branches?: number };
 }
 
 export interface Branch {
   id: string;
   businessId: string;
+  parentId?: string | null;
   name: string;
   code: string;
   address?: string;
@@ -52,6 +55,7 @@ export interface Party {
   invoiceDeliveryChannel?: 'EMAIL' | 'WHATSAPP' | 'BOTH';
   gstType?: 'REGISTERED_REGULAR' | 'REGISTERED_COMPOSITION' | 'UNREGISTERED' | 'CONSUMER' | 'OVERSEAS' | 'SEZ';
   gstin?: string;
+  tin?: string | null;
   billingAddr?: string;
   shippingAddr?: string;
   creditLimit?: string | number;
@@ -94,6 +98,8 @@ export interface Item {
   name: string;
   sku?: string;
   description?: string;
+  category?: string | null;
+  wholesalePrice?: string | number | null;
   unit: string;
   salePrice: string;
   taxRate: string;
@@ -129,6 +135,7 @@ export interface Invoice {
   party: Party;
   status: InvoiceStatus;
   issueDate: string;
+  createdAt?: string;
   dueDate?: string;
   subTotal: string;
   taxTotal: string;
@@ -238,14 +245,44 @@ export interface BusinessDocument {
   subTotal: string;
   taxTotal: string;
   discount: string;
-    grandTotal: string;
+  grandTotal: string;
+  paidAmount?: string;
     stockAdjusted?: boolean;
   createdAt: string;
   updatedAt: string;
   items?: BusinessDocumentItem[];
   attachments?: BusinessDocumentAttachment[];
+  payments?: PurchasePayment[];
   business?: Business;
   createdBy?: Pick<User, 'id' | 'name' | 'email'>;
+}
+
+export interface PurchasePayment {
+  id: string;
+  documentId: string;
+  amount: string;
+  method: string;
+  reference?: string;
+  notes?: string;
+  paidAt: string;
+  createdAt: string;
+  document: Pick<BusinessDocument, 'id' | 'documentNumber' | 'referenceNumber' | 'grandTotal' | 'paidAmount'> & {
+    supplier?: Pick<Supplier, 'id' | 'name'>;
+  };
+}
+
+export interface WorkspaceBranch {
+  id: string;
+  name: string;
+  code: string;
+  address?: string;
+  stateCode?: string;
+  phone?: string;
+  email?: string;
+  isActive: boolean;
+  createdAt: string;
+  businesses: Business[];
+  _count?: { businesses: number };
 }
 
 export interface BusinessDocumentAttachment {
@@ -349,4 +386,12 @@ export interface ProductionOrder {
   costs: ProductionCost[];
   images?: Array<{ id: string; stageType?: ProductionStageType | null; displayName?: string; color?: string; sizeLabel?: string; details?: string; fileName: string; mimeType: string; size: number; createdAt: string }>;
   summary: ProductionSummary;
+}
+
+export type PurchaseOrderStatus = 'DRAFT' | 'SENT' | 'CONFIRMED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED' | 'CLOSED';
+export interface PurchaseOrderItem { id: string; itemId?: string; description: string; quantity: string; unit: string; unitPrice: string; taxRate: string; lineTotal: string; }
+export interface PurchaseOrder {
+  id: string; orderNumber: string; orderDate: string; expectedDeliveryDate?: string; deliveryLocation?: string;
+  paymentTerms?: string; notes?: string; status: PurchaseOrderStatus; subTotal: string; taxTotal: string;
+  discount: string; grandTotal: string; supplier: Supplier; items: PurchaseOrderItem[];
 }

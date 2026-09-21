@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import NextImage from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowRight,
@@ -32,6 +33,7 @@ import StatusBadge from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
 import { api, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { prepareUploads } from '@/lib/imageCompression';
 import type {
   Party,
   ProductionCostCategory,
@@ -797,14 +799,19 @@ function ProductionImages({ order, onUpdated }: { order: ProductionOrder; onUpda
     return () => { active = false; urls.forEach((url) => URL.revokeObjectURL(url)); };
   }, [order.id, order.images]);
 
-  async function upload(file?: File) {
-    if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+  async function upload(original?: File) {
+    if (!original) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(original.type)) {
       setError('Choose a JPG, PNG, or WEBP image under 5 MB.');
       return;
     }
     setBusy(true); setError('');
     try {
+      const [file] = await prepareUploads([original]);
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Choose a JPG, PNG, or WEBP image under 5 MB.');
+        return;
+      }
       const body = new FormData();
       body.append('image', file);
       body.append('stageType', stageType);
@@ -832,7 +839,7 @@ function ProductionImages({ order, onUpdated }: { order: ProductionOrder; onUpda
     <div className="mt-3 flex flex-wrap gap-2"><select aria-label="Image process" className="input-field max-w-56" value={stageType} onChange={(event) => setStageType(event.target.value as ProductionStageType)}>{PRODUCTION_PIPELINE.map((type) => <option key={type} value={type}>{STAGE_META[type].label}</option>)}</select><label className="btn-secondary inline-flex cursor-pointer items-center gap-2"><ImagePlus aria-hidden="true" size={15} />{busy ? 'Uploading...' : 'Add image'}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy} onChange={(event) => { void upload(event.target.files?.[0]); event.target.value = ''; }} /></label></div>
     {error && <p role="alert" className="mt-2 text-xs text-red-600">{error}</p>}
     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {(order.images ?? []).map((image) => <div key={image.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200"><div className="aspect-square bg-slate-100">{previews[image.id] && <img src={previews[image.id]} alt={image.displayName || image.fileName} className="h-full w-full object-cover" />}</div><div className="p-2"><p className="truncate text-[10px] font-semibold text-slate-700" title={image.fileName}>{image.displayName || image.fileName}</p><p className="text-[9px] text-slate-400">{image.stageType ? STAGE_META[image.stageType].shortLabel : 'Order'} {image.color} {image.sizeLabel}</p>{image.details && <p className="mt-1 text-[10px] text-slate-500">{image.details}</p>}<button type="button" disabled={busy} onClick={() => void remove(image.id)} className="mt-1 text-[10px] font-semibold text-red-600">Remove</button></div></div>)}
+      {(order.images ?? []).map((image) => <div key={image.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200"><div className="relative aspect-square bg-slate-100">{previews[image.id] && <NextImage unoptimized fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" src={previews[image.id]} alt={image.displayName || image.fileName} className="object-cover" />}</div><div className="p-2"><p className="truncate text-[10px] font-semibold text-slate-700" title={image.fileName}>{image.displayName || image.fileName}</p><p className="text-[9px] text-slate-400">{image.stageType ? STAGE_META[image.stageType].shortLabel : 'Order'} {image.color} {image.sizeLabel}</p>{image.details && <p className="mt-1 text-[10px] text-slate-500">{image.details}</p>}<button type="button" disabled={busy} onClick={() => void remove(image.id)} className="mt-1 text-[10px] font-semibold text-red-600">Remove</button></div></div>)}
     </div>
     {!order.images?.length && <p className="mt-3 text-xs text-slate-400">No images yet.</p>}
   </section>;

@@ -1,36 +1,25 @@
 'use client';
 
 import { Package } from 'lucide-react';
-import { useLocalSettings } from '@/components/settings/useLocalSettings';
-import { NumberRow, SavedNote, SettingsCard, ToggleRow } from '@/components/settings/SettingsControls';
-
-const DEFAULTS = {
-  itemCategories: true,
-  batchAndExpiry: false,
-  serialNumberTracking: false,
-  lowStockAlert: true,
-  lowStockThreshold: 5,
-  wholesalePrice: false,
-  multipleUnits: false,
-  showImagesOnInvoice: false,
-};
+import { useCompanySettings } from '@/lib/useGeneralPreferences';
+import { NumberRow, SavedNote, SettingsCard, ToggleRow, UnavailableRow } from '@/components/settings/SettingsControls';
 
 export default function ItemSettingsPage() {
-  const { value, update } = useLocalSettings('item', DEFAULTS);
+  const { value, update } = useCompanySettings('item');
 
   return (
     <>
-      <SettingsCard title="Item tracking" description="Applied when a new item is added." icon={<Package size={17} />}>
-        <ToggleRow label="Enable item categories" description="Group items by category for filtering and reports." checked={value.itemCategories} onChange={(checked) => update('itemCategories', checked)} />
-        <ToggleRow label="Enable batch & expiry tracking" checked={value.batchAndExpiry} onChange={(checked) => update('batchAndExpiry', checked)} />
-        <ToggleRow label="Enable serial number tracking" checked={value.serialNumberTracking} onChange={(checked) => update('serialNumberTracking', checked)} />
-        <ToggleRow label="Enable multiple units" description="Allow items to be sold in a secondary unit, e.g. box of 12 pieces." checked={value.multipleUnits} onChange={(checked) => update('multipleUnits', checked)} />
-        <ToggleRow label="Enable wholesale price" description="Show a second price that applies above a minimum quantity." checked={value.wholesalePrice} onChange={(checked) => update('wholesalePrice', checked)} />
-        <ToggleRow label="Show item images on invoice print" checked={value.showImagesOnInvoice} onChange={(checked) => update('showImagesOnInvoice', checked)} />
+      <SettingsCard title="Item tracking" description="Applied on the item form and item list." icon={<Package size={17} />}>
+        <ToggleRow label="Enable item categories" description="Show the category field on the item form and a category column in the item list." checked={value.itemCategories} onChange={(checked) => update('itemCategories', checked)} />
+        <ToggleRow label="Enable wholesale price" description="Show a wholesale price field on the item form." checked={value.wholesalePrice} onChange={(checked) => update('wholesalePrice', checked)} />
+        <UnavailableRow label="Enable batch & expiry tracking" description="Needs batch-wise stock, which is not built yet." />
+        <UnavailableRow label="Enable serial number tracking" description="Needs unit-wise stock, which is not built yet." />
+        <UnavailableRow label="Enable multiple units" description="Needs unit conversion, which is not built yet." />
+        <UnavailableRow label="Show item images on invoice print" description="Items cannot have images yet." />
       </SettingsCard>
 
       <SettingsCard title="Stock alerts">
-        <ToggleRow label="Enable low stock alert" checked={value.lowStockAlert} onChange={(checked) => update('lowStockAlert', checked)} />
+        <ToggleRow label="Enable low stock alert" description="Flag low items in the item list and on the dashboard." checked={value.lowStockAlert} onChange={(checked) => update('lowStockAlert', checked)} />
         <NumberRow label="Low stock threshold" description="Flag an item when stock falls at or below this quantity." min={0} max={1000} value={value.lowStockThreshold} onChange={(lowStockThreshold) => update('lowStockThreshold', lowStockThreshold)} />
       </SettingsCard>
 

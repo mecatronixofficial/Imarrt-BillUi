@@ -12,6 +12,8 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import type { Party, ProductionOrder, ProductionOrderStatus, Supplier } from '@/types';
 
 type Filter = 'ALL' | 'OPEN' | 'OVERDUE' | ProductionOrderStatus;
+const isOpen = (order: ProductionOrder) => !['COMPLETED', 'CANCELLED'].includes(order.status);
+const isOverdueOn = (order: ProductionOrder, today: string) => Boolean(order.dueDate && order.dueDate.slice(0, 10) < today && isOpen(order));
 const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'ALL', label: 'All' }, { value: 'OPEN', label: 'Open' }, { value: 'OVERDUE', label: 'Overdue' },
   { value: 'CONFIRMED', label: 'Confirmed' }, { value: 'IN_PRODUCTION', label: 'In production' },
@@ -41,8 +43,7 @@ export default function SalesOrderRegister() {
   useEffect(() => { void loadOrders(); }, [loadOrders]);
 
   const today = new Date().toISOString().slice(0, 10);
-  const isOpen = (order: ProductionOrder) => !['COMPLETED', 'CANCELLED'].includes(order.status);
-  const isOverdue = (order: ProductionOrder) => Boolean(order.dueDate && order.dueDate.slice(0, 10) < today && isOpen(order));
+  const isOverdue = useCallback((order: ProductionOrder) => isOverdueOn(order, today), [today]);
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     return orders.filter((order) => {
@@ -50,7 +51,7 @@ export default function SalesOrderRegister() {
       const matchesFilter = filter === 'ALL' || (filter === 'OPEN' && isOpen(order)) || (filter === 'OVERDUE' && isOverdue(order)) || order.status === filter;
       return matchesSearch && matchesFilter;
     });
-  }, [filter, orders, query, today]);
+  }, [filter, isOverdue, orders, query]);
   const totalValue = orders.reduce((sum, order) => sum + Number(order.saleRate) * order.orderedQty, 0);
   const openValue = orders.filter(isOpen).reduce((sum, order) => sum + Number(order.saleRate) * order.orderedQty, 0);
 

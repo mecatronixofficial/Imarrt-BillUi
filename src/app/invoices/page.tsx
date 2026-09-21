@@ -7,7 +7,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import StatusBadge from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
 import { api, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatTransactionDate } from '@/lib/format';
 import type { Invoice } from '@/types';
 
 export default function InvoicesPage() {
@@ -92,25 +92,7 @@ export default function InvoicesPage() {
     <div className="relative">
       <Link
         href="/invoices/new"
-        className="
-          group
-          inline-flex
-          h-10
-          items-center
-          gap-2
-          rounded-xl
-          bg-blue-600
-          px-4
-          text-[11px]
-          font-extrabold
-          text-white
-          shadow-[0_8px_20px_rgba(37,99,235,0.22)]
-          transition-all
-          duration-300
-          hover:-translate-y-0.5
-          hover:bg-blue-700
-          hover:shadow-[0_12px_26px_rgba(37,99,235,0.30)]
-        "
+        className="group inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-[11px] font-extrabold text-white shadow-[0_8px_20px_rgba(37,99,235,0.22)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-[0_12px_26px_rgba(37,99,235,0.30)]"
       >
         <Plus
           size={15}
@@ -161,7 +143,7 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-5 py-3 text-slate-700">{invoice.party?.name ?? 'Unknown party'}</td>
                       <td className="px-5 py-3 text-slate-600">{invoice.business?.name ?? 'Selected company'}</td>
-                      <td className="whitespace-nowrap px-5 py-3 text-slate-600">{formatDate(invoice.issueDate)}</td>
+                      <td className="whitespace-nowrap px-5 py-3 text-slate-600">{formatTransactionDate(invoice.issueDate, invoice.createdAt)}</td>
                       <td className="px-5 py-3"><StatusBadge status={invoice.status} /></td>
                       <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-slate-800">{formatCurrency(invoice.grandTotal)}</td>
                       <td className="whitespace-nowrap px-5 py-3 text-right text-slate-600">{formatCurrency(balance)}</td>

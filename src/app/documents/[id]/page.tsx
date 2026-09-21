@@ -24,7 +24,9 @@ import StatusBadge from '@/components/StatusBadge';
 import { ErrorState, LoadingState } from '@/components/ContentState';
 import { api, getApiError } from '@/lib/api';
 import { DOCUMENT_CONFIG } from '@/lib/documents';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatQuantity, formatTransactionDate } from '@/lib/format';
+import { getPreferences } from '@/lib/preferences';
+import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
 import type { BusinessDocument, BusinessDocumentStatus, Invoice } from '@/types';
 
 export default function DocumentDetailPage() {
@@ -35,6 +37,12 @@ export default function DocumentDetailPage() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [offerShare, setOfferShare] = useState(false);
+
+  // Set by the document form when the company wants a WhatsApp share offered right after saving.
+  useEffect(() => {
+    setOfferShare(new URLSearchParams(window.location.search).get('share') === 'whatsapp');
+  }, []);
 
   const loadDocument = useCallback(async () => {
     setLoading(true); setError('');
@@ -89,6 +97,17 @@ export default function DocumentDetailPage() {
   function shareText() {
     if (!document) return '';
     const party = document.party?.name || document.supplier?.name || 'Party';
+    if (document.party) {
+      const message = getPreferences('message');
+      const estimate = document.type === 'QUOTATION' || document.type === 'PROFORMA_INVOICE';
+      return renderMessage(estimate ? message.estimateMessage : message.invoiceMessage, {
+        FirmName: document.business?.legalName || document.business?.name || '',
+        PartyName: document.party.name,
+        InvoiceNumber: document.documentNumber,
+        EstimateNumber: document.documentNumber,
+        Amount: formatCurrency(document.grandTotal),
+      });
+    }
     return `${DOCUMENT_CONFIG[document.type].label} ${document.documentNumber}\n${party}\nTotal: ${formatCurrency(document.grandTotal)}\nIssued: ${formatDate(document.issueDate)}`;
   }
 
@@ -110,9 +129,7 @@ export default function DocumentDetailPage() {
   function shareWhatsApp() {
     if (!document) return;
     const party = document.party || document.supplier;
-    const rawNumber = ((document.party?.whatsappNumber || party?.phone) ?? '').replace(/\D/g, '');
-    const number = rawNumber.length === 10 ? `91${rawNumber}` : rawNumber;
-    window.open(`https://wa.me/${number}?text=${encodeURIComponent(shareText())}`, '_blank', 'noopener,noreferrer');
+    window.open(whatsappLink(document.party?.whatsappNumber || party?.phone, shareText()), '_blank', 'noopener,noreferrer');
   }
 
   function shareEmail() {
@@ -164,6 +181,12 @@ export default function DocumentDetailPage() {
         action={<div className="flex flex-wrap items-center justify-end gap-2"><Link href="/documents" className="btn-secondary inline-flex items-center gap-2"><ArrowLeft size={15} /> Back</Link><button type="button" onClick={() => void downloadPdf()} disabled={Boolean(busy)} className="btn-primary inline-flex items-center gap-2">{busy === 'download' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} PDF</button></div>}
       />
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {offerShare && document.party && (
+        <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <span className="font-semibold">{config.label} saved. Share it with {document.party.name} on WhatsApp?</span>
+          <span className="flex gap-2"><button type="button" onClick={() => { shareWhatsApp(); setOfferShare(false); }} className="btn-secondary inline-flex items-center gap-2 text-emerald-700"><MessageCircle aria-hidden="true" size={15} /> Share on WhatsApp</button><button type="button" onClick={() => setOfferShare(false)} className="btn-secondary">Not now</button></span>
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <article className="card overflow-hidden">
@@ -171,7 +194,7 @@ export default function DocumentDetailPage() {
           <div className="p-5 sm:p-7">
             <header className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-6 sm:flex-row">
               <div><p className={`text-xs font-bold uppercase tracking-[0.16em] ${config.accent}`}>{document.business?.name || 'Business document'}</p><h1 className="mt-2 text-2xl font-black text-slate-950">{config.label}</h1><p className="mt-1 font-mono text-sm font-semibold text-slate-500">{document.documentNumber}</p></div>
-              <div className="text-left sm:text-right"><StatusBadge status={document.status} /><p className="mt-3 text-xs text-slate-500">Issue date</p><p className="font-semibold text-slate-800">{formatDate(document.issueDate)}</p></div>
+              <div className="text-left sm:text-right"><StatusBadge status={document.status} /><p className="mt-3 text-xs text-slate-500">Issue date</p><p className="font-semibold text-slate-800">{formatTransactionDate(document.issueDate, document.createdAt)}</p></div>
             </header>
 
             <div className="grid gap-5 border-b border-slate-200 py-6 sm:grid-cols-2">
@@ -182,7 +205,7 @@ export default function DocumentDetailPage() {
             {(document.transportName || document.vehicleNumber || document.eWayBillNumber) && <div className="grid grid-cols-3 gap-4 border-b border-slate-200 py-5"><Info label="Transport" value={document.transportName || '—'} /><Info label="Vehicle" value={document.vehicleNumber || '—'} /><Info label="E-way bill" value={document.eWayBillNumber || '—'} /></div>}
 
             <div className="my-6 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-900 text-left text-[10px] uppercase tracking-wider text-slate-300"><tr><th className="px-4 py-3">#</th><th className="px-4 py-3">Description</th><th className="px-4 py-3 text-right">Qty</th><th className="px-4 py-3 text-right">Rate</th><th className="px-4 py-3 text-right">Tax</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-slate-100">{document.items?.map((item, index) => <tr key={item.id}><td className="px-4 py-3 text-slate-400">{index + 1}</td><td className="px-4 py-3"><p className="font-semibold text-slate-800">{item.description}</p>{item.hsnSac && <p className="mt-0.5 text-[10px] text-slate-400">HSN/SAC {item.hsnSac}</p>}</td><td className="px-4 py-3 text-right text-slate-600">{Number(item.quantity)} {item.unit}</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td><td className="px-4 py-3 text-right text-slate-600">{Number(item.taxRate).toFixed(2)}%</td><td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(item.lineTotal)}</td></tr>)}</tbody></table>
+              <table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-900 text-left text-[10px] uppercase tracking-wider text-slate-300"><tr><th className="px-4 py-3">#</th><th className="px-4 py-3">Description</th><th className="px-4 py-3 text-right">Qty</th><th className="px-4 py-3 text-right">Rate</th><th className="px-4 py-3 text-right">Tax</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-slate-100">{document.items?.map((item, index) => <tr key={item.id}><td className="px-4 py-3 text-slate-400">{index + 1}</td><td className="px-4 py-3"><p className="font-semibold text-slate-800">{item.description}</p>{item.hsnSac && <p className="mt-0.5 text-[10px] text-slate-400">HSN/SAC {item.hsnSac}</p>}</td><td className="px-4 py-3 text-right text-slate-600">{formatQuantity(item.quantity)} {item.unit}</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td><td className="px-4 py-3 text-right text-slate-600">{Number(item.taxRate).toFixed(2)}%</td><td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(item.lineTotal)}</td></tr>)}</tbody></table>
             </div>
 
             {document.attachments?.length ? (

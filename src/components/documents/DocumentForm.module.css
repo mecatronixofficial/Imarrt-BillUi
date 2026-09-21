@@ -923,24 +923,6 @@ textarea.input {
   background: #f4f5f7;
 }
 
-.purchaseEditor .header {
-  min-height: 3.5rem;
-  padding: 0.625rem 1.75rem;
-  box-shadow: none;
-}
-
-.purchaseEditor .headerIcon,
-.purchaseEditor .draft,
-.purchaseEditor .heading p,
-.purchaseEditor .documentNumber {
-  display: none;
-}
-
-.purchaseEditor .titleRow h1 {
-  font-size: 1.125rem;
-  font-weight: 800;
-}
-
 .purchaseEditor .scrollArea {
   padding: 1rem 1.25rem;
   background: #f4f5f7;
@@ -949,10 +931,6 @@ textarea.input {
 .purchaseEditor .workspace {
   max-width: none;
   gap: 0.75rem;
-}
-
-.purchaseEditor .intro {
-  display: none;
 }
 
 .purchaseLayout {
@@ -1316,7 +1294,10 @@ textarea.input {
   }
 
   .purchaseEditor .headerEnd > label,
-  .purchaseEditor .footerTotal {
+  .purchaseEditor .footerTotal,
+  .purchaseEditor .headerIcon,
+  .purchaseEditor .heading p,
+  .purchaseEditor .documentNumber {
     display: none;
   }
 

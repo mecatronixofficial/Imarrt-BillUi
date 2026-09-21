@@ -1,42 +1,33 @@
 'use client';
 
 import { Building2, Globe2, Hash, SlidersHorizontal } from 'lucide-react';
-import { useLocalSettings } from '@/components/settings/useLocalSettings';
+import { formatCurrency, formatDate, formatQuantity } from '@/lib/format';
+import type { GeneralPreferences } from '@/lib/preferences';
+import { useCompanySettings } from '@/lib/useGeneralPreferences';
 import { NumberRow, SavedNote, SelectRow, SettingsCard, ToggleRow } from '@/components/settings/SettingsControls';
 
-const DEFAULTS = {
-  tinNumber: false,
-  itemDescription: true,
-  compressImages: true,
-  ownerNameOnPrint: false,
-  quantityDecimals: 2,
-  amountDecimals: 2,
-  dateFormat: 'dd-mm-yyyy',
-  language: 'english',
-};
-
 export default function GeneralSettingsPage() {
-  const { value, update } = useLocalSettings('general', DEFAULTS);
+  const { value, update } = useCompanySettings('general');
 
   return (
     <>
       <SettingsCard title="Business behaviour" description="Core toggles that affect how invoices and items behave app-wide." icon={<SlidersHorizontal size={17} />}>
-        <ToggleRow label="Enable TIN number" description="Show a TIN field on business and party profiles." checked={value.tinNumber} onChange={(checked) => update('tinNumber', checked)} />
-        <ToggleRow label="Enable item description" description="Allow a free-text description on each item and invoice line." checked={value.itemDescription} onChange={(checked) => update('itemDescription', checked)} />
-        <ToggleRow label="Compress images" description="Automatically compress uploaded item and document images to save space." checked={value.compressImages} onChange={(checked) => update('compressImages', checked)} />
-        <ToggleRow label="Show owner's name on print" description="Print the business owner's name in the invoice footer." checked={value.ownerNameOnPrint} onChange={(checked) => update('ownerNameOnPrint', checked)} />
+        <ToggleRow label="Enable TIN number" description="Show a TIN field on business and party profiles, and print it on invoices." checked={value.tinNumber} onChange={(checked) => update('tinNumber', checked)} />
+        <ToggleRow label="Enable item description" description="Show a free-text description field on items and in the item list." checked={value.itemDescription} onChange={(checked) => update('itemDescription', checked)} />
+        <ToggleRow label="Compress images" description="Automatically compress uploaded production and attachment images to save space." checked={value.compressImages} onChange={(checked) => update('compressImages', checked)} />
+        <ToggleRow label="Show owner's name on print" description="Print the business owner's name as the authorised signatory on invoices and documents." checked={value.ownerNameOnPrint} onChange={(checked) => update('ownerNameOnPrint', checked)} />
       </SettingsCard>
 
-      <SettingsCard title="Number formatting" description="Decimal precision used across quantities and amounts." icon={<Hash size={17} />}>
+      <SettingsCard title="Number formatting" description={`Decimal precision used across quantities and amounts. Preview: ${formatQuantity(1234.5678)} units · ${formatCurrency(1234.5678)}`} icon={<Hash size={17} />}>
         <NumberRow label="Decimal places for quantity" min={0} max={4} value={value.quantityDecimals} onChange={(quantityDecimals) => update('quantityDecimals', quantityDecimals)} />
         <NumberRow label="Decimal places for amount" min={0} max={4} value={value.amountDecimals} onChange={(amountDecimals) => update('amountDecimals', amountDecimals)} />
       </SettingsCard>
 
-      <SettingsCard title="Regional" description="Date format and print language." icon={<Globe2 size={17} />}>
+      <SettingsCard title="Regional" description={`Date format and print language. Today looks like ${formatDate(new Date().toISOString())}.`} icon={<Globe2 size={17} />}>
         <SelectRow
           label="Date format"
           value={value.dateFormat}
-          onChange={(dateFormat) => update('dateFormat', dateFormat)}
+          onChange={(dateFormat) => update('dateFormat', dateFormat as GeneralPreferences['dateFormat'])}
           options={[
             { value: 'dd-mm-yyyy', label: 'DD-MM-YYYY' },
             { value: 'mm-dd-yyyy', label: 'MM-DD-YYYY' },
@@ -45,8 +36,9 @@ export default function GeneralSettingsPage() {
         />
         <SelectRow
           label="Print language"
+          description="Language of the labels on downloaded and shared PDFs."
           value={value.language}
-          onChange={(language) => update('language', language)}
+          onChange={(language) => update('language', language as GeneralPreferences['language'])}
           options={[
             { value: 'english', label: 'English' },
             { value: 'hindi', label: 'Hindi' },
