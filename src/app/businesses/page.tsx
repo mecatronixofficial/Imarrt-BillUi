@@ -169,7 +169,7 @@ function LegacyBusinessesPage() {
     const selected =
       data.find(({ code, isActive }) => code === preferredCode && isActive)?.id ??
       (stored === "all" ||
-      data.some(({ id, isActive }) => id === stored && isActive)
+        data.some(({ id, isActive }) => id === stored && isActive)
         ? stored!
         : (data.find(({ isActive }) => isActive)?.id ?? ""));
 
@@ -583,16 +583,14 @@ function LegacyBusinessesPage() {
         {feedback && (
           <div
             role={feedback.type === "error" ? "alert" : "status"}
-            className={`mb-4 flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-semibold shadow-sm ${
-              feedback.type === "error"
+            className={`mb-4 flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-semibold shadow-sm ${feedback.type === "error"
                 ? "border-red-200 bg-red-50/80 text-red-700"
                 : "border-emerald-200 bg-emerald-50/80 text-emerald-700"
-            }`}
+              }`}
           >
             <span
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${
-                feedback.type === "error" ? "bg-red-100" : "bg-emerald-100"
-              }`}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${feedback.type === "error" ? "bg-red-100" : "bg-emerald-100"
+                }`}
             >
               {feedback.type === "error" ? (
                 <AlertCircle size={13} />
@@ -714,19 +712,33 @@ function LegacyBusinessesPage() {
                     <label className="relative block">
                       <span className="sr-only">Search companies</span>
 
-                      <Search
-                        aria-hidden="true"
-                        size={13}
-                        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-                      />
+                      {!search && (
+                        <Search
+                          aria-hidden="true"
+                          size={13}
+                          className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400"
+                        />
+                      )}
 
                       <input
-                        type="search"
+                        type="text"
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         placeholder="Search companies"
-                        className="h-8 w-44 rounded-lg border border-slate-200 bg-white pl-8 pr-2.5 text-xs text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        className={`h-8 w-44 rounded-lg border border-slate-200 bg-white pr-8 text-xs text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 ${search ? "pl-3" : "pl-9"
+                          }`}
                       />
+
+                      {search && (
+                        <button
+                          type="button"
+                          onClick={() => setSearch("")}
+                          aria-label="Clear search"
+                          className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                        >
+                          <X aria-hidden="true" size={12} />
+                        </button>
+                      )}
                     </label>
                   )}
 
@@ -798,11 +810,10 @@ function LegacyBusinessesPage() {
                     </span>
 
                     <span
-                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                        activeBusiness.gstRegistered
+                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${activeBusiness.gstRegistered
                           ? "bg-blue-500/20 text-blue-200"
                           : "bg-violet-500/20 text-violet-200"
-                      }`}
+                        }`}
                     >
                       {activeBusiness.gstRegistered ? "GST Registered" : "Non GST"}
                     </span>
@@ -919,11 +930,10 @@ function LegacyBusinessesPage() {
                 type="button"
                 onClick={() => selectBranch("all")}
                 aria-pressed={activeBranchId === "all"}
-                className={`inline-flex h-8 items-center justify-center rounded-lg border px-3 text-[11px] font-extrabold transition-all ${
-                  activeBranchId === "all"
+                className={`inline-flex h-8 items-center justify-center rounded-lg border px-3 text-[11px] font-extrabold transition-all ${activeBranchId === "all"
                     ? "border-slate-900 bg-slate-900 text-white shadow-md"
                     : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-                }`}
+                  }`}
               >
                 All Branches View
               </button>
@@ -1058,11 +1068,10 @@ function CompanyCard({
 }) {
   return (
     <div
-      className={`group relative min-w-0 overflow-hidden rounded-2xl border transition-all duration-300 ${
-        active
+      className={`group relative min-w-0 overflow-hidden rounded-2xl border transition-all duration-300 ${active
           ? "border-blue-300 bg-gradient-to-br from-blue-50 via-white to-cyan-50 shadow-[0_12px_30px_rgba(37,99,235,0.10)] ring-4 ring-blue-50"
           : "border-slate-200 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.04)] hover:-translate-y-1 hover:border-blue-200 hover:shadow-[0_14px_30px_rgba(37,99,235,0.08)]"
-      }`}
+        }`}
     >
       <button
         type="button"
@@ -1075,11 +1084,10 @@ function CompanyCard({
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span
-                className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${
-                  business.gstRegistered
+                className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${business.gstRegistered
                     ? "bg-blue-50 text-blue-700"
                     : "bg-violet-50 text-violet-700"
-                }`}
+                  }`}
               >
                 {business.gstRegistered ? "GST Registered" : "Non GST"}
               </span>
@@ -1104,11 +1112,10 @@ function CompanyCard({
           </div>
 
           <span
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all duration-300 ${
-              active
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all duration-300 ${active
                 ? "bg-blue-600 text-white"
                 : "bg-slate-100 text-slate-400 group-hover:bg-blue-600 group-hover:text-white"
-            }`}
+              }`}
           >
             {active ? (
               <Check size={14} strokeWidth={3} />
@@ -1155,11 +1162,10 @@ function CompanyCard({
               {branches.map((branch) => (
                 <span
                   key={branch.id}
-                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold ${
-                    branch.isActive
+                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold ${branch.isActive
                       ? "border-blue-100 bg-blue-50 text-blue-700"
                       : "border-slate-200 bg-slate-50 text-slate-400"
-                  }`}
+                    }`}
                 >
                   <MapPin size={9} />
                   {branch.name}
@@ -1182,9 +1188,8 @@ function CompanyCard({
       )}
 
       <span
-        className={`pointer-events-none absolute left-0 top-0 h-[3px] bg-blue-600 transition-all duration-300 ${
-          active ? "w-full" : "w-0 group-hover:w-full"
-        }`}
+        className={`pointer-events-none absolute left-0 top-0 h-[3px] bg-blue-600 transition-all duration-300 ${active ? "w-full" : "w-0 group-hover:w-full"
+          }`}
       />
     </div>
   );
@@ -1226,11 +1231,10 @@ function BranchCard({
 
   return (
     <div
-      className={`group relative min-w-0 overflow-hidden rounded-xl border transition-all duration-300 ${
-        active
+      className={`group relative min-w-0 overflow-hidden rounded-xl border transition-all duration-300 ${active
           ? "border-blue-300 bg-blue-50/60 shadow-[0_8px_22px_rgba(37,99,235,0.08)] ring-2 ring-blue-100"
           : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_10px_24px_rgba(37,99,235,0.07)]"
-      } ${branch.isActive ? "" : "bg-slate-50"} ${depth > 0 ? "border-l-4 border-l-violet-300" : ""}`}
+        } ${branch.isActive ? "" : "bg-slate-50"} ${depth > 0 ? "border-l-4 border-l-violet-300" : ""}`}
     >
       <button
         type="button"
@@ -1243,11 +1247,10 @@ function BranchCard({
           className={`flex items-start gap-3 ${branch.isActive ? "" : "opacity-60"}`}
         >
           <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-300 ${
-              active
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-300 ${active
                 ? "bg-blue-600 text-white"
                 : "bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white"
-            }`}
+              }`}
           >
             <MapPin size={15} />
           </span>
@@ -1305,9 +1308,8 @@ function BranchCard({
 
         {branch._count && (
           <div
-            className={`mt-3 grid grid-cols-3 gap-1 border-t border-slate-100 pt-2.5 ${
-              branch.isActive ? "" : "opacity-60"
-            }`}
+            className={`mt-3 grid grid-cols-3 gap-1 border-t border-slate-100 pt-2.5 ${branch.isActive ? "" : "opacity-60"
+              }`}
           >
             <BranchStat value={branch._count.invoices} label="Invoices" />
 
@@ -1340,9 +1342,8 @@ function BranchCard({
       )}
 
       <span
-        className={`pointer-events-none absolute left-0 top-0 h-[2px] bg-blue-600 transition-all duration-300 ${
-          active ? "w-full" : "w-0 group-hover:w-full"
-        }`}
+        className={`pointer-events-none absolute left-0 top-0 h-[2px] bg-blue-600 transition-all duration-300 ${active ? "w-full" : "w-0 group-hover:w-full"
+          }`}
       />
     </div>
   );
@@ -1373,11 +1374,10 @@ function CardAction({
       disabled={disabled}
       aria-label={ariaLabel}
       onClick={onClick}
-      className={`inline-flex flex-1 items-center justify-center gap-1.5 border-r border-slate-100 py-2 text-[11px] font-bold transition last:border-r-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-        tone === "danger"
+      className={`inline-flex flex-1 items-center justify-center gap-1.5 border-r border-slate-100 py-2 text-[11px] font-bold transition last:border-r-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 ${tone === "danger"
           ? "text-red-600 hover:bg-red-50"
           : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
-      }`}
+        }`}
     >
       <Icon aria-hidden="true" size={12} />
       {label}

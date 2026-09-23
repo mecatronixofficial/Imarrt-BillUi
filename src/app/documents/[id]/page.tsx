@@ -22,6 +22,7 @@ import {
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import { ErrorState, LoadingState } from '@/components/ContentState';
+import { toast } from '@/components/ToastProvider';
 import { api, getApiError } from '@/lib/api';
 import { DOCUMENT_CONFIG } from '@/lib/documents';
 import { formatCurrency, formatDate, formatQuantity, formatTransactionDate } from '@/lib/format';
@@ -67,6 +68,7 @@ export default function DocumentDetailPage() {
       const url = URL.createObjectURL(file);
       const anchor = window.document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success('PDF downloaded', { description: document.documentNumber });
     } catch (downloadError: unknown) { setError(getApiError(downloadError, 'Could not download the PDF.')); }
     finally { setBusy(''); }
   }
@@ -90,6 +92,7 @@ export default function DocumentDetailPage() {
       const url = URL.createObjectURL(data);
       const anchor = window.document.createElement('a'); anchor.href = url; anchor.download = fileName; anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success('Attachment downloaded', { description: fileName });
     } catch (attachmentError: unknown) { setError(getApiError(attachmentError, 'Could not download the attachment.')); }
     finally { setBusy(''); }
   }
@@ -140,13 +143,13 @@ export default function DocumentDetailPage() {
   }
 
   async function copySummary() {
-    await navigator.clipboard.writeText(shareText()); setCopied(true); window.setTimeout(() => setCopied(false), 1800);
+    await navigator.clipboard.writeText(shareText()); setCopied(true); toast.success('Summary copied to clipboard'); window.setTimeout(() => setCopied(false), 1800);
   }
 
   async function changeStatus(status: BusinessDocumentStatus) {
     if (!document) return;
     setBusy(status); setError('');
-    try { await api.patch(`/documents/${document.id}/status`, { status }); await loadDocument(); }
+    try { await api.patch(`/documents/${document.id}/status`, { status }); toast.warning('Document status updated', { description: status.toLowerCase().replaceAll('_', ' ') }); await loadDocument(); }
     catch (statusError: unknown) { setError(getApiError(statusError, 'Could not update document status.')); }
     finally { setBusy(''); }
   }
@@ -157,9 +160,11 @@ export default function DocumentDetailPage() {
     try {
       if (target === 'invoice') {
         const { data } = await api.post<Invoice>(`/documents/${document.id}/convert-to-invoice`);
+        toast.success('Converted to invoice', { description: data.invoiceNumber });
         router.push(`/invoices/${data.id}`);
       } else {
         const { data } = await api.post<BusinessDocument>(`/documents/${document.id}/convert-to-proforma`);
+        toast.success('Converted to proforma invoice', { description: data.documentNumber });
         router.push(`/documents/${data.id}`);
       }
     } catch (convertError: unknown) { setError(getApiError(convertError, `Could not convert to ${target}.`)); }

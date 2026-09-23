@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
@@ -15,7 +16,8 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import { api, getApiError, resetSession } from '@/lib/api';
+import { api, getApiError, getCurrentUser, resetSession } from '@/lib/api';
+import { toast } from '@/components/ToastProvider';
 
 const highlights = [
   {
@@ -74,6 +76,16 @@ export default function LoginPage() {
       }
 
       resetSession();
+      const currentUser = await getCurrentUser().catch(() => null);
+      const role = currentUser?.role === 'SUPER_ADMIN'
+        ? 'Super admin'
+        : currentUser?.role
+          ? currentUser.role.charAt(0) + currentUser.role.slice(1).toLowerCase()
+          : 'member';
+      toast.success(currentUser?.name ? `Welcome, ${currentUser.name}` : 'Welcome back', {
+        description: `Signed in as ${role}.`,
+        duration: 5500,
+      });
       router.replace('/dashboard');
       router.refresh();
     } catch (submitError: unknown) {
@@ -84,7 +96,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex h-screen h-dvh overflow-hidden bg-white text-slate-950">
+    <main className="relative flex min-h-screen min-h-dvh overflow-hidden bg-slate-950 text-slate-950 lg:h-screen lg:bg-white">
       <section className="relative hidden w-1/2 overflow-hidden bg-slate-950 px-10 py-7 text-white lg:flex lg:flex-col xl:px-14 xl:py-9">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(59,130,246,0.32),transparent_35%),radial-gradient(circle_at_85%_80%,rgba(99,102,241,0.28),transparent_38%)]" />
         <div className="absolute inset-0 opacity-[0.12] [background-image:linear-gradient(rgba(255,255,255,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.16)_1px,transparent_1px)] [background-size:44px_44px] [mask-image:linear-gradient(to_bottom,black,transparent_82%)]" />
@@ -137,22 +149,23 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <section className="relative flex flex-1 items-center justify-center overflow-y-auto px-5 py-5 sm:px-10 lg:px-12 xl:px-16">
-        <div className="absolute left-0 top-0 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-50 blur-3xl lg:hidden" />
-        <div className="relative w-full max-w-sm">
-          <div className="mb-6 flex items-center justify-center gap-3 lg:hidden">
+      <section className="relative flex flex-1 items-center justify-center overflow-y-auto px-4 py-5 sm:px-8 sm:py-8 lg:px-12 xl:px-16">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_5%,rgba(37,99,235,0.45),transparent_34%),radial-gradient(circle_at_95%_90%,rgba(14,165,233,0.2),transparent_36%)] lg:hidden" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(255,255,255,0.22)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.22)_1px,transparent_1px)] [background-size:32px_32px] lg:hidden" />
+        <div className="relative w-full max-w-sm rounded-[1.5rem] border border-white/70 bg-white p-5 shadow-[0_24px_70px_-24px_rgba(0,0,0,0.75)] sm:p-7 lg:rounded-none lg:border-0 lg:p-0 lg:shadow-none">
+          <div className="mb-5 flex items-center justify-center gap-3 lg:hidden">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-200">
               <ReceiptText aria-hidden="true" size={19} strokeWidth={2.4} />
             </div>
             <div>
               <p className="text-base font-extrabold tracking-tight">iMart Billing</p>
-              <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-blue-600">Business made simple</p>
+              <p className="whitespace-nowrap text-[7px] font-semibold uppercase tracking-[0.14em] text-blue-600">Business made simple</p>
             </div>
           </div>
 
-          <header className="mb-5">
-            <p className="mb-1 text-xs font-semibold text-blue-600">Welcome back</p>
-            <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">Sign in to your account</h2>
+          <header className="mb-5 text-center lg:text-left">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-600">Welcome back</p>
+            <h2 className="text-xl font-extrabold tracking-tight text-slate-950 sm:text-2xl">Sign in to your account</h2>
             <p className="mt-1.5 text-xs leading-5 text-slate-500">Enter your account details to continue to your dashboard.</p>
           </header>
 
@@ -184,13 +197,16 @@ export default function LoginPage() {
                     if (error) setError('');
                   }}
                   placeholder="you@business.com"
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 lg:h-11 lg:rounded-lg"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor={passwordId} className="mb-1.5 block text-xs font-semibold text-slate-700">Password</label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label htmlFor={passwordId} className="block text-xs font-semibold text-slate-700">Password</label>
+                <Link href="/forgot-password" className="text-xs font-semibold text-blue-600 hover:text-blue-700">Forgot password?</Link>
+              </div>
               <div className="group relative">
                 <LockKeyhole aria-hidden="true" size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-blue-600" />
                 <input
@@ -205,7 +221,7 @@ export default function LoginPage() {
                     if (error) setError('');
                   }}
                   placeholder="Enter your password"
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-100 lg:h-11 lg:rounded-lg"
                 />
                 <button
                   type="button"
@@ -255,7 +271,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !email.trim() || !password || (mfaRequired && !mfaCode.trim())}
-              className="group flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-md shadow-blue-200 transition hover:bg-blue-700 hover:shadow-blue-300 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+              className="group flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 hover:shadow-blue-300 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none lg:h-11 lg:rounded-lg"
             >
               {loading ? (
                 <>

@@ -271,14 +271,19 @@ export default function CommandMenu({ compact = false }: { compact?: boolean }) 
         placeholder="Search invoices, parties, items…"
         autoComplete="off"
         spellCheck={false}
-        className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-16 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100/70"
+        className={`h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100/70 ${compact ? 'pr-20' : 'pr-16'}`}
       />
       {query ? (
-        <button type="button" onClick={() => { setQuery(''); inputRef.current?.focus(); }} aria-label="Clear search" className="absolute right-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+        <button type="button" onClick={() => { setQuery(''); inputRef.current?.focus(); }} aria-label="Clear search" className={`absolute top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 ${compact ? 'right-10' : 'right-2.5'}`}>
           <X aria-hidden="true" size={14} />
         </button>
       ) : (
         <kbd aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-400 md:block">Ctrl K</kbd>
+      )}
+      {compact && (
+        <button type="button" onClick={closeMenu} aria-label="Cancel search" title="Cancel search" className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <X aria-hidden="true" size={16} />
+        </button>
       )}
     </div>
   );
@@ -346,11 +351,8 @@ export default function CommandMenu({ compact = false }: { compact?: boolean }) 
         {/* Portalled: the sticky header uses backdrop blur, which would otherwise trap position:fixed inside it. */}
         {open && createPortal(
           <>
-            <div className="fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-2 border-b border-slate-200 bg-white px-3">
+            <div className="fixed inset-x-0 top-0 z-50 flex h-14 items-center border-b border-slate-200 bg-white px-3">
               {input}
-              <button type="button" onClick={closeMenu} aria-label="Close search" title="Close search" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none">
-                <X aria-hidden="true" size={19} />
-              </button>
             </div>
             {list}
           </>,

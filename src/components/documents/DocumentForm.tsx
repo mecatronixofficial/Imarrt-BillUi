@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { toast } from '@/components/ToastProvider';
 import {
   AlertCircle,
   ArrowLeft,
@@ -544,13 +545,14 @@ export default function DocumentForm({
         });
       }
       if (shareTarget) await runDocumentShare(shareTarget, data);
+      toast.success(shareTarget ? `${config.label} saved and shared` : `${config.label} saved`, { description: data.documentNumber });
       router.push(`/documents/${data.id}?companyId=${encodeURIComponent(businessId)}${!shareTarget && status === 'ISSUED' && messagePrefs.autoShareOnSave && !isSupplierDocument ? '&share=whatsapp' : ''}`);
     } catch (saveError: unknown) {
-      setError(
-        createdId
+      const message = createdId
           ? `${config.label} saved, but an upload or sharing step could not be completed. Open the saved ${config.label.toLowerCase()} to review it.`
-          : getApiError(saveError, `Could not save ${config.label.toLowerCase()}. Your details are still here.`),
-      );
+          : getApiError(saveError, `Could not save ${config.label.toLowerCase()}. Your details are still here.`);
+      setError(message);
+      toast.error(createdId ? `${config.label} partially completed` : `${config.label} was not saved`, { description: message, duration: 7000 });
     } finally {
       setBusy(false);
       setSaving('');

@@ -187,9 +187,6 @@ export function BranchFormModal({
     name: branch?.name ?? "",
     code: branch?.code ?? "",
     address: branch?.address ?? "",
-    stateCode: branch?.stateCode ?? "",
-    phone: branch?.phone ?? "",
-    email: branch?.email ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -211,9 +208,6 @@ export function BranchFormModal({
       name: form.name.trim(),
       code: form.code.trim().toUpperCase(),
       address: text(form.address),
-      stateCode: text(form.stateCode),
-      phone: text(form.phone),
-      email: form.email.trim() ? form.email.trim().toLowerCase() : blank,
     };
 
     try {
@@ -235,25 +229,12 @@ export function BranchFormModal({
         <ModalField id="branch-name" label="Branch name *">
           <input id="branch-name" required autoFocus maxLength={120} className="input-field" value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="e.g. Mumbai Branch" />
         </ModalField>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <ModalField id="branch-code" label="Branch code *">
-            <input id="branch-code" required minLength={2} maxLength={24} pattern="[A-Za-z0-9_\-]{2,24}" title="2-24 letters, numbers, underscores or hyphens" className="input-field uppercase" value={form.code} onChange={(event) => update("code", event.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))} placeholder="MUM" />
-          </ModalField>
-          <ModalField id="branch-state" label="State code">
-            <input id="branch-state" inputMode="numeric" pattern="\d{2}" title="Two digit state code" maxLength={2} className="input-field" value={form.stateCode} onChange={(event) => update("stateCode", event.target.value.replace(/\D/g, ""))} placeholder="27" />
-          </ModalField>
-        </div>
+        <ModalField id="branch-code" label="Branch code *">
+          <input id="branch-code" required minLength={2} maxLength={24} pattern="[A-Za-z0-9_\-]{2,24}" title="2-24 letters, numbers, underscores or hyphens" className="input-field uppercase" value={form.code} onChange={(event) => update("code", event.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))} placeholder="MUM" />
+        </ModalField>
         <ModalField id="branch-address" label="Address">
           <textarea id="branch-address" rows={2} maxLength={1000} className="input-field resize-none" value={form.address} onChange={(event) => update("address", event.target.value)} />
         </ModalField>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <ModalField id="branch-phone" label="Phone">
-            <input id="branch-phone" type="tel" maxLength={20} className="input-field" value={form.phone} onChange={(event) => update("phone", event.target.value)} />
-          </ModalField>
-          <ModalField id="branch-email" label="Email">
-            <input id="branch-email" type="email" maxLength={160} className="input-field" value={form.email} onChange={(event) => update("email", event.target.value)} />
-          </ModalField>
-        </div>
         <p className="rounded-lg bg-blue-50 px-3 py-2 text-[11px] leading-5 text-blue-700">
           Use the same branch code in other companies to make them available under one branch. Parties, suppliers, and items are shared by that branch; transactions stay company-specific.
         </p>

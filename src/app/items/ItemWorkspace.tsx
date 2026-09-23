@@ -2,6 +2,7 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
   ArrowDownLeft,
@@ -24,12 +25,13 @@ import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import StatusBadge from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
+import { toast } from '@/components/ToastProvider';
 import { api, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate, formatQuantity } from '@/lib/format';
 import { useGeneralPreferences, usePreferences } from '@/lib/useGeneralPreferences';
 import type { BusinessDocument, Invoice, Item } from '@/types';
-import InvoiceModal from '@/components/invoices/InvoiceModal';
-import DocumentModal from '@/components/documents/DocumentModal';
+const InvoiceModal = dynamic(() => import('@/components/invoices/InvoiceModal'), { ssr: false });
+const DocumentModal = dynamic(() => import('@/components/documents/DocumentModal'), { ssr: false });
 
 /* ========================================================================== */
 /* TYPES                                                                      */
@@ -293,11 +295,12 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
     try {
       await api.delete(`/items/${target.id}`);
       setItems((current) => current.filter((entry) => entry.id !== target.id));
+      toast.danger('Item deleted', { description: target.name });
       setConfirmDeleteItem(null);
 
       if (itemId === target.id) router.push('/items');
     } catch (deleteError: unknown) {
-      setDeleteItemError(getApiError(deleteError, 'Could not delete item.'));
+      const message = getApiError(deleteError, 'Could not delete item.'); setDeleteItemError(message); toast.error(message);
       setConfirmDeleteItem(null);
     } finally {
       setDeletingItemId('');
@@ -990,9 +993,10 @@ function ItemFormModal({ item, onClose, onSaved }: { item: Item | null; onClose:
       };
 
       const { data } = item ? await api.patch<Item>(`/items/${item.id}`, payload) : await api.post<Item>('/items', payload);
+      (item ? toast.warning : toast.success)(item ? 'Item updated' : 'Item created', { description: data.name });
       onSaved(data);
     } catch (saveError: unknown) {
-      setError(getApiError(saveError, 'Could not save item.'));
+      const message = getApiError(saveError, 'Could not save item.'); setError(message); toast.error(message);
     } finally {
       setSaving(false);
     }
