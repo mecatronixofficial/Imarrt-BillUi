@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -35,12 +35,15 @@ import {
   getActiveBranchId,
   getActiveBusinessId,
   getActiveWorkspaceBranchId,
+  onWorkspaceChanged,
   resetSession,
   setActiveBusinessId,
   setActiveBranchId,
   setActiveWorkspaceBranchId,
 } from '@/lib/api';
 import type { Branch, Business, Role, WorkspaceBranch } from '@/types';
+import { formatRoleLabel } from '@/lib/format';
+import { toast } from '@/components/ToastProvider';
 
 type NavItem = {
   href: string;
@@ -111,9 +114,10 @@ type SidebarProps = {
   onHide?: () => void;
   desktopHidden?: boolean;
   role: Role | null;
+  userName?: string;
 };
 
-export default function Sidebar({ open = false, onClose, onHide, desktopHidden = false, role }: SidebarProps) {
+export default function Sidebar({ open = false, onClose, onHide, desktopHidden = false, role, userName }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const businessMenuRef = useRef<HTMLDivElement>(null);
@@ -162,7 +166,12 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
     };
   }, [businessMenuOpen]);
 
-  useEffect(() => {
+  /**
+   * Loads (or re-syncs) the business/branch picker. Re-running this after another
+   * screen (e.g. the Businesses page) switches the active company or branch keeps
+   * the sidebar in step without needing a full page reload.
+   */
+  const loadWorkspace = useCallback(() => {
     let active = true;
     void Promise.all([getAllPages<Business>('/businesses'), api.get<WorkspaceBranch[]>('/workspace-branches')]).then(async ([{ data }, { data: groups }]) => {
       if (!active) return;
@@ -199,12 +208,15 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
     };
   }, []);
 
+  useEffect(() => loadWorkspace(), [loadWorkspace]);
+  useEffect(() => onWorkspaceChanged(loadWorkspace), [loadWorkspace]);
+
   const canManageTeam = role === 'OWNER' || role === 'SUPER_ADMIN';
   const navItems = NAV_ITEMS.flatMap((item) => {
     if (item.href === '/security' && canManageTeam) return [...OWNER_NAV_ITEMS, item];
     return [item];
   });
-  const roleLabel = role === 'SUPER_ADMIN' ? 'Super admin' : role ? role.charAt(0) + role.slice(1).toLowerCase() : 'Member';
+  const roleLabel = formatRoleLabel(role);
   const activeWorkspaceBranch = workspaceBranches.find(({ id }) => id === workspaceBranchId) ?? workspaceBranches[0];
   const availableBusinesses = activeWorkspaceBranch?.businesses ?? [];
   const activeBusiness = availableBusinesses.find(({ id }) => id === activeBusinessId) ?? availableBusinesses[0];
@@ -214,6 +226,10 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
     try {
       await api.post('/auth/logout');
     } finally {
+      toast.danger(userName ? `See you soon, ${userName}` : 'You have been logged out', {
+        description: 'You have been logged out safely.',
+        duration: 5000,
+      });
       clearActiveBusiness();
       resetSession();
       router.replace('/login');
@@ -223,11 +239,13 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
 
   function handleBusinessChange(businessId: string) {
     if (!businessId || businessId === activeBusinessId) return;
+    const business = businesses.find(({ id }) => id === businessId);
     setActiveBusinessId(businessId);
     const companyBranches = branchesByBusiness[businessId] ?? [];
     const matchingBranch = companyBranches.find(({ isActive }) => isActive);
     if (matchingBranch) setActiveBranchId(matchingBranch.id, businessId);
     setSelectedBusinessId(businessId);
+    toast.queueForNextLoad(business ? `Switched to ${business.name}` : 'Company switched', 'success', { description: `Welcome, ${roleLabel}.` });
     window.location.href = '/dashboard';
   }
 
@@ -240,13 +258,16 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
     setActiveWorkspaceBranchId(id);
     setActiveBusinessId(preferredBusiness.id);
     setActiveBranchId(branch.id, preferredBusiness.id);
+    toast.queueForNextLoad(group ? `Switched to ${group.name}` : 'Branch switched', 'success', { description: `Welcome, ${roleLabel}.` });
     window.location.href = '/dashboard';
   }
 
   function handleBranchChange(branchId: string) {
     if (!branchId || branchId === activeBranchId) return;
+    const branch = branches.find(({ id }) => id === branchId);
     setActiveBranchId(branchId, activeBusinessId);
     setSelectedBranchId(branchId);
+    toast.queueForNextLoad(branch ? `Switched to ${branch.name}` : 'Branch switched');
     window.location.href = '/dashboard';
   }
 
@@ -277,7 +298,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
           </span>
           <span className={collapsed ? 'lg:hidden' : ''}>
             <span className="block text-sm font-extrabold tracking-tight">iMart Billing</span>
-            <span className="block text-[8px] font-semibold uppercase tracking-[0.17em] text-blue-300">Business made simple</span>
+            <span className="block whitespace-nowrap text-[6px] font-medium uppercase text-blue-300/75">Business made simple</span>
           </span>
         </button>
         <div className={clsx('hidden items-center lg:flex', collapsed && 'gap-1')}>
@@ -306,15 +327,15 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
               aria-expanded={businessMenuOpen}
               onClick={() => collapsed ? updateCollapsed(false) : setBusinessMenuOpen((current) => !current)}
               title={collapsed ? activeBusiness.name : undefined}
-              className={clsx('group flex min-h-11 w-full items-center gap-2.5 rounded-lg border border-blue-400/20 bg-blue-500/10 px-3 text-left outline-none transition hover:bg-blue-500/15', collapsed && 'lg:justify-center lg:gap-0 lg:px-1')}
+              className={clsx('group flex min-h-10 w-full items-center gap-2 rounded-lg border border-blue-400/20 bg-blue-500/10 px-2.5 text-left outline-none transition hover:bg-blue-500/15', collapsed && 'lg:justify-center lg:gap-0 lg:px-1')}
             >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-500/20 text-blue-300">
-                <Building2 aria-hidden="true" size={15} />
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-blue-500/20 text-blue-300">
+                <Building2 aria-hidden="true" size={13} />
               </span>
               <span className={clsx('min-w-0 flex-1', collapsed && 'lg:hidden')}>
-                <span className="block truncate text-xs font-semibold text-white">{activeBusiness.name}</span>
-                <span className="mt-0.5 flex items-center gap-1 truncate text-[9px] font-medium uppercase tracking-wider text-slate-400">
-                  <MapPin aria-hidden="true" size={9} /> {activeWorkspaceBranch?.name ?? 'Select branch'}
+                <span className="block truncate text-[11px] font-semibold leading-4 text-white">{activeBusiness.name}</span>
+                <span className="flex items-center gap-1 truncate text-[8px] font-medium uppercase tracking-wide text-slate-400">
+                  <MapPin aria-hidden="true" size={8} /> {activeWorkspaceBranch?.name ?? 'Select branch'}
                 </span>
               </span>
               <ChevronDown aria-hidden="true" size={15} className={clsx('shrink-0 text-slate-400 transition-transform duration-200 group-hover:text-white', businessMenuOpen && 'rotate-180', collapsed && 'lg:hidden')} />
@@ -471,13 +492,9 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
                   className={clsx('transition-all', active ? 'opacity-100' : '-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-70', collapsed && 'lg:hidden')}
                 />
               </Link>
-                  );
-                })}
-                <Link href="/businesses?newCompany=1" className="mt-1 flex w-full items-center gap-2.5 rounded-lg border border-dashed border-blue-400/30 px-2.5 py-2 text-left text-blue-300 transition hover:bg-blue-500/10 hover:text-blue-200">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-500/10"><Plus aria-hidden="true" size={14} /></span>
-                  <span className="text-xs font-semibold">Add company to this branch</span>
-                </Link>
-              </div>
+            );
+          })}
+        </div>
       </nav>
 
       <footer className={clsx('relative shrink-0 border-t border-white/10 p-3', collapsed && 'lg:p-2')}>

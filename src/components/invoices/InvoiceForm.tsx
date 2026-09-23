@@ -10,6 +10,7 @@ import { prepareUploads } from '@/lib/imageCompression';
 import type { Business, Invoice, Item, Party } from '@/types';
 import { useEmbeddedForm } from '@/components/EmbeddedFormContext';
 import DocumentCompanyPicker from '@/components/DocumentCompanyPicker';
+import { toast } from '@/components/ToastProvider';
 import { calculateInvoice, totalsOptionsFor, type InvoiceDraftLine } from './invoiceTotals';
 import { usePreferences } from '@/lib/useGeneralPreferences';
 import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
@@ -389,13 +390,14 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
         await api.post(`/invoices/${data.id}/payments`, { amount: Number(data.grandTotal), method: paymentMethod }, requestConfig);
       }
       if (action !== 'SAVE') await runInvoiceShare(action, data, enteredLines);
+      toast.success(action === 'SAVE' ? 'Invoice saved' : 'Invoice saved and shared', { description: `${data.invoiceNumber} · ${formatCurrency(data.grandTotal)}` });
       router.push(`/invoices/${data.id}?companyId=${encodeURIComponent(businessId)}${action === 'SAVE' && messagePrefs.autoShareOnSave ? '&share=whatsapp' : ''}`);
     } catch (saveFailure) {
-      setError(
-        createdId
+      const message = createdId
           ? 'Invoice saved, but an attachment, payment, or sharing step could not be completed. Open the saved invoice to review it.'
-          : getApiError(saveFailure, 'Could not save the invoice. Your details are still here.'),
-      );
+          : getApiError(saveFailure, 'Could not save the invoice. Your details are still here.');
+      setError(message);
+      toast.error(createdId ? 'Invoice partially completed' : 'Invoice was not saved', { description: message, duration: 7000 });
     } finally {
       setBusy(false);
       setSaving('');

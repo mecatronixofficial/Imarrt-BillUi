@@ -1,5 +1,6 @@
 import { PartyWorkspace } from "../PartyWorkspace";
 
-export default function PartyDetailPage({ params }: { params: { id: string } }) {
-  return <PartyWorkspace partyId={params.id} />;
+export default async function PartyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <PartyWorkspace partyId={id} />;
 }

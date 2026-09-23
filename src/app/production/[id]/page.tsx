@@ -1,5 +1,6 @@
 import { ProductionWorkspace } from '../ProductionWorkspace';
 
-export default function ProductionOrderPage({ params }: { params: { id: string } }) {
-  return <ProductionWorkspace orderId={params.id} />;
+export default async function ProductionOrderPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <ProductionWorkspace orderId={id} />;
 }

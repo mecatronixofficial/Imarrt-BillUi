@@ -22,7 +22,6 @@ import {
   Trash2,
 } from "lucide-react";
 
-import QRCode from "qrcode";
 
 import {
   api,
@@ -278,7 +277,7 @@ export default function SecurityPage() {
       };
     }
 
-    void QRCode.toDataURL(
+    void import("qrcode").then(({ default: QRCode }) => QRCode.toDataURL(
       setup.otpauthUri,
       {
         errorCorrectionLevel:
@@ -290,7 +289,7 @@ export default function SecurityPage() {
           light: "#ffffff",
         },
       },
-    )
+    ))
       .then((url) => {
         if (active) {
           setQrCodeUrl(

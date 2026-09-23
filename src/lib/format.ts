@@ -1,5 +1,12 @@
 import { getGeneralPreferences, getPreferences } from '@/lib/preferences';
 
+/** "OWNER" -> "Owner", "SUPER_ADMIN" -> "Super admin". */
+export function formatRoleLabel(role?: string | null) {
+  if (!role) return 'Member';
+  if (role === 'SUPER_ADMIN') return 'Super admin';
+  return role.charAt(0) + role.slice(1).toLowerCase();
+}
+
 const currencyFormatters = new Map<number, Intl.NumberFormat>();
 
 function currencyFormatter(decimals: number) {

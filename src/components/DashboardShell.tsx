@@ -125,7 +125,7 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
         tabIndex={menuOpen ? 0 : -1}
       />
 
-      <Sidebar open={menuOpen} onClose={closeMenu} onHide={hideSidebar} desktopHidden={sidebarHidden} role={user?.role ?? null} />
+      <Sidebar open={menuOpen} onClose={closeMenu} onHide={hideSidebar} desktopHidden={sidebarHidden} role={user?.role ?? null} userName={user?.name} />
 
       {sidebarHidden && (
         <button

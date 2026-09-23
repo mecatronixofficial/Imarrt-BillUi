@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Building2, Check, ChevronDown, MapPin, Plus } from 'lucide-react';
-import { api, getActiveBranchId, getActiveBusinessId, getActiveWorkspaceBranchId, setActiveBranchId, setActiveBusinessId, setActiveWorkspaceBranchId } from '@/lib/api';
+import { api, getActiveBranchId, getActiveBusinessId, getActiveWorkspaceBranchId, getCurrentUser, onWorkspaceChanged, setActiveBranchId, setActiveBusinessId, setActiveWorkspaceBranchId } from '@/lib/api';
 import type { Branch, WorkspaceBranch } from '@/types';
+import { toast } from '@/components/ToastProvider';
+import { formatRoleLabel } from '@/lib/format';
 
 function Dropdown({ label, icon, value, options, disabled, triggerClass, maxWidth, onSelect }: {
   label: string; icon: ReactNode; value: string; options: { id: string; name: string }[]; disabled: boolean; triggerClass: string; maxWidth: string; onSelect: (id: string) => void;
@@ -43,8 +45,9 @@ export default function WorkspaceCompanyPicker({ compact = false, companyOnly = 
   const [groupId, setGroupId] = useState('');
   const [companyId, setCompanyId] = useState('');
   const [switching, setSwitching] = useState(false);
+  const [roleLabel, setRoleLabel] = useState('');
 
-  useEffect(() => {
+  const load = useCallback(() => {
     void api.get<WorkspaceBranch[]>('/workspace-branches').then(({ data }) => {
       const businessId = getActiveBusinessId();
       const storedGroup = getActiveWorkspaceBranchId();
@@ -53,6 +56,13 @@ export default function WorkspaceCompanyPicker({ compact = false, companyOnly = 
       setGroups(data); setGroupId(group?.id ?? ''); setCompanyId(company?.id ?? '');
       if (group) setActiveWorkspaceBranchId(group.id);
     }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => load(), [load]);
+  // Keeps this picker in sync when the active company/branch is switched from elsewhere (e.g. the Businesses page).
+  useEffect(() => onWorkspaceChanged(load), [load]);
+  useEffect(() => {
+    void getCurrentUser().then((user) => setRoleLabel(formatRoleLabel(user?.role))).catch(() => undefined);
   }, []);
 
   const group = groups.find(({ id }) => id === groupId);
@@ -65,6 +75,7 @@ export default function WorkspaceCompanyPicker({ compact = false, companyOnly = 
     const stored = getActiveBranchId(company.id);
     const operational = data.find(({ id, isActive }) => id === stored && isActive) ?? data.find(({ isActive }) => isActive);
     if (operational) setActiveBranchId(operational.id, company.id);
+    toast.queueForNextLoad(`Switched to ${company.name}`, 'success', { description: `Welcome, ${roleLabel}.` });
     window.location.reload();
   }
 

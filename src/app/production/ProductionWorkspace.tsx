@@ -23,7 +23,9 @@ import {
   Shirt,
   Trash2,
   TrendingUp,
+  Truck,
   Users,
+  X,
 } from 'lucide-react';
 import clsx from 'clsx';
 import PageHeader from '@/components/PageHeader';
@@ -221,45 +223,57 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
   }
 
   return (
-  <>
-    <div className="min-w-0 bg-slate-50/70">
-      <section className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
-        <div>
-          {orderId && <Link href="/production" className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700">Back to all orders</Link>}
-          <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600">Production</p>
-          <h1 className="mt-1 text-xl font-extrabold text-slate-950 sm:text-2xl">{orderId ? selectedOrder?.orderNumber ?? 'Order details' : 'Production orders'}</h1>
-          <p className="mt-1 text-xs text-slate-500">{orderId ? 'Order information, stages and costs' : `${orders.length} total orders · ${stats.active} active`}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {!orderId && <button type="button" onClick={() => setShowSupplierForm(true)} className="btn-secondary inline-flex items-center gap-2"><Building2 size={15} /> Add supplier</button>}
-          <button type="button" onClick={() => setShowOrderForm(true)} className="btn-primary inline-flex items-center gap-2"><Plus size={15} /> New order</button>
-        </div>
-      </section>
-      {loading ? (
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <LoadingState label="Loading production orders..." />
+    <>
+      <div className="min-w-0 bg-slate-50/70">
+        <section className="relative mb-5 overflow-hidden rounded-2xl bg-slate-950 text-white shadow-xl shadow-slate-200">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(37,99,235,0.35),transparent_38%),radial-gradient(circle_at_90%_100%,rgba(124,58,237,0.24),transparent_42%)]" />
+          <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.2)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.2)_1px,transparent_1px)] [background-size:34px_34px]" />
+          <div className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div>
+              {orderId && <Link href="/production" className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-300 hover:text-blue-200">Back to all orders</Link>}
+              <span className="inline-flex items-center gap-2 rounded-full bg-blue-500/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300"><Factory size={13} /> Production</span>
+              <h1 className="mt-2 text-xl font-extrabold tracking-tight sm:text-2xl">{orderId ? selectedOrder?.orderNumber ?? 'Order details' : 'Production orders'}</h1>
+              <p className="mt-1 text-xs text-slate-400">{orderId ? 'Order information, stages and costs' : `${orders.length} total orders · ${stats.active} active`}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {!orderId && <button type="button" onClick={() => setShowSupplierForm(true)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-4 text-xs font-bold text-white transition hover:bg-white/15"><Building2 size={15} /> Add supplier</button>}
+              <button type="button" onClick={() => setShowOrderForm(true)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500"><Plus size={15} /> New order</button>
+            </div>
+          </div>
         </section>
-      ) : error ? (
-        <section className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-sm">
-          <ErrorState
-            message={error}
-            onRetry={loadData}
-          />
-        </section>
-      ) : orders.length === 0 ? (
-        /* Empty */
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
-          <EmptyState
-            icon={Factory}
-            title="No production orders yet"
-            description="Create your first order to start the production workflow."
-          />
+        {!orderId && !loading && !error && orders.length > 0 && (
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <MetricCard icon={TrendingUp} label="Active orders" value={String(stats.active)} tone="blue" />
+            <MetricCard icon={Boxes} label="Pieces in production" value={stats.pieces.toLocaleString('en-IN')} tone="violet" />
+            <MetricCard icon={IndianRupee} label="Total making cost" value={formatCurrency(stats.cost)} tone="amber" />
+            <MetricCard icon={CircleDollarSign} label="Projected profit" value={formatCurrency(stats.profit)} tone="emerald" />
+          </div>
+        )}
+        {loading ? (
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <LoadingState label="Loading production orders..." />
+          </section>
+        ) : error ? (
+          <section className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-sm">
+            <ErrorState
+              message={error}
+              onRetry={loadData}
+            />
+          </section>
+        ) : orders.length === 0 ? (
+          /* Empty */
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
+            <EmptyState
+              icon={Factory}
+              title="No production orders yet"
+              description="Create your first order to start the production workflow."
+            />
 
-          <div className="flex justify-center pb-6">
-            <button
-              type="button"
-              onClick={() => setShowOrderForm(true)}
-              className="
+            <div className="flex justify-center pb-6">
+              <button
+                type="button"
+                onClick={() => setShowOrderForm(true)}
+                className="
                 inline-flex
                 h-10
                 items-center
@@ -277,152 +291,152 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
                 hover:bg-blue-700
                 hover:shadow-[0_12px_26px_rgba(37,99,235,0.28)]
               "
-            >
-              <Plus size={14} />
-              Create First Order
-            </button>
-          </div>
-        </section>
-      ) : (
-        <section className="min-w-0">
-          {orderId ? (
-            selectedOrder ? (
-              <OrderDetail
-                order={selectedOrder}
-                error={actionError}
-                updatingStatus={updatingStatus}
-                onEditStage={setEditingStage}
-                onAddCost={() => setShowCostForm(true)}
-                onRemoveCost={requestRemoveCost}
-                onChangeStatus={(status) => void changeStatus(status)}
-                onUpdated={applyUpdatedOrder}
-                onConfirm={(date) => void confirmOrder(date)}
-                onEditMaster={() => setEditingMaster(selectedOrder)}
-                onDelete={() => requestDeleteOrder(selectedOrder)}
-                deleting={deletingId === selectedOrder.id}
-                canDelete={canDeleteOrder}
-              />
-            ) : <ErrorState message="Production order not found." onRetry={loadData} />
-          ) : (
-            <OrderList orders={orders} onSelect={(id) => router.push(`/production/${id}`)} onEdit={setEditingMaster} onDelete={requestDeleteOrder} deletingId={deletingId} error={actionError} canDelete={canDeleteOrder} />
-          )}
-        </section>
-      )}
-    </div>
+              >
+                <Plus size={14} />
+                Create First Order
+              </button>
+            </div>
+          </section>
+        ) : (
+          <section className="min-w-0">
+            {orderId ? (
+              selectedOrder ? (
+                <OrderDetail
+                  order={selectedOrder}
+                  error={actionError}
+                  updatingStatus={updatingStatus}
+                  onEditStage={setEditingStage}
+                  onAddCost={() => setShowCostForm(true)}
+                  onRemoveCost={requestRemoveCost}
+                  onChangeStatus={(status) => void changeStatus(status)}
+                  onUpdated={applyUpdatedOrder}
+                  onConfirm={(date) => void confirmOrder(date)}
+                  onEditMaster={() => setEditingMaster(selectedOrder)}
+                  onDelete={() => requestDeleteOrder(selectedOrder)}
+                  deleting={deletingId === selectedOrder.id}
+                  canDelete={canDeleteOrder}
+                />
+              ) : <ErrorState message="Production order not found." onRetry={loadData} />
+            ) : (
+              <OrderList orders={orders} onSelect={(id) => router.push(`/production/${id}`)} onEdit={setEditingMaster} onDelete={requestDeleteOrder} deletingId={deletingId} error={actionError} canDelete={canDeleteOrder} />
+            )}
+          </section>
+        )}
+      </div>
 
-    {/* ============================================================ */}
-    {/* MODALS                                                       */}
-    {/* ============================================================ */}
+      {/* ============================================================ */}
+      {/* MODALS                                                       */}
+      {/* ============================================================ */}
 
-    {showOrderForm && (
-      masterSupported ? <MasterOrderForm
-        parties={parties}
-        suppliers={suppliers}
-        onClose={() => setShowOrderForm(false)}
-        onSaved={(order) => { setOrders((current) => [order, ...current]); setSelectedId(order.id); setShowOrderForm(false); router.push(`/production/${order.id}`); }}
-      /> : <OrderFormModal
-        parties={parties}
-        suppliers={suppliers}
-        onClose={() =>
-          setShowOrderForm(false)
-        }
-        onSaved={(order) => {
-          setOrders((current) => [
-            order,
-            ...current,
-          ]);
-
-          setSelectedId(order.id);
-          setShowOrderForm(false);
-          router.push(`/production/${order.id}`);
-        }}
-      />
-    )}
-
-    {editingMaster && <MasterOrderForm
-      parties={parties}
-      suppliers={suppliers}
-      initialOrder={editingMaster}
-      onClose={() => setEditingMaster(null)}
-      onSaved={(order) => { applyUpdatedOrder(order); setEditingMaster(null); }}
-    />}
-
-    {showSupplierForm && (
-      <SupplierFormModal
-        onClose={() =>
-          setShowSupplierForm(false)
-        }
-        onSaved={(supplier) => {
-          setSuppliers((current) =>
-            [...current, supplier].sort(
-              (a, b) =>
-                a.name.localeCompare(
-                  b.name,
-                ),
-            ),
-          );
-
-          setShowSupplierForm(false);
-        }}
-      />
-    )}
-
-    {editingStage &&
-      selectedOrder && (
-        <StageFormModal
-          orderId={selectedOrder.id}
-          stage={editingStage}
-          nextStage={getNextProductionStage(
-            selectedOrder.stages,
-            editingStage.type,
-          )}
-          onClose={() =>
-            setEditingStage(null)
-          }
-          onSaved={(order) => {
-            applyUpdatedOrder(order);
-            setEditingStage(null);
-          }}
-        />
-      )}
-
-    {showCostForm &&
-      selectedOrder && (
-        <CostFormModal
-          orderId={selectedOrder.id}
+      {showOrderForm && (
+        masterSupported ? <MasterOrderForm
+          parties={parties}
+          suppliers={suppliers}
+          onClose={() => setShowOrderForm(false)}
+          onSaved={(order) => { setOrders((current) => [order, ...current]); setSelectedId(order.id); setShowOrderForm(false); router.push(`/production/${order.id}`); }}
+        /> : <OrderFormModal
+          parties={parties}
           suppliers={suppliers}
           onClose={() =>
-            setShowCostForm(false)
+            setShowOrderForm(false)
           }
           onSaved={(order) => {
-            applyUpdatedOrder(order);
-            setShowCostForm(false);
+            setOrders((current) => [
+              order,
+              ...current,
+            ]);
+
+            setSelectedId(order.id);
+            setShowOrderForm(false);
+            router.push(`/production/${order.id}`);
           }}
         />
       )}
 
-    {confirmDeleteOrder && (
-      <ConfirmDialog
-        title="Delete production order?"
-        message={`Delete production order ${confirmDeleteOrder.orderNumber} and all its stages, costs and images? This cannot be undone.`}
-        confirmLabel="Delete"
-        busy={deletingId === confirmDeleteOrder.id}
-        onCancel={() => setConfirmDeleteOrder(null)}
-        onConfirm={() => void performDeleteOrder()}
-      />
-    )}
+      {editingMaster && <MasterOrderForm
+        parties={parties}
+        suppliers={suppliers}
+        initialOrder={editingMaster}
+        onClose={() => setEditingMaster(null)}
+        onSaved={(order) => { applyUpdatedOrder(order); setEditingMaster(null); }}
+      />}
 
-    {confirmDeleteCostId && (
-      <ConfirmDialog
-        title="Remove cost entry?"
-        message="This cost entry will be permanently removed from the order."
-        confirmLabel="Remove"
-        onCancel={() => setConfirmDeleteCostId(null)}
-        onConfirm={() => void performRemoveCost()}
-      />
-    )}
-  </>
-);
+      {showSupplierForm && (
+        <SupplierFormModal
+          onClose={() =>
+            setShowSupplierForm(false)
+          }
+          onSaved={(supplier) => {
+            setSuppliers((current) =>
+              [...current, supplier].sort(
+                (a, b) =>
+                  a.name.localeCompare(
+                    b.name,
+                  ),
+              ),
+            );
+
+            setShowSupplierForm(false);
+          }}
+        />
+      )}
+
+      {editingStage &&
+        selectedOrder && (
+          <StageFormModal
+            orderId={selectedOrder.id}
+            stage={editingStage}
+            nextStage={getNextProductionStage(
+              selectedOrder.stages,
+              editingStage.type,
+            )}
+            onClose={() =>
+              setEditingStage(null)
+            }
+            onSaved={(order) => {
+              applyUpdatedOrder(order);
+              setEditingStage(null);
+            }}
+          />
+        )}
+
+      {showCostForm &&
+        selectedOrder && (
+          <CostFormModal
+            orderId={selectedOrder.id}
+            suppliers={suppliers}
+            onClose={() =>
+              setShowCostForm(false)
+            }
+            onSaved={(order) => {
+              applyUpdatedOrder(order);
+              setShowCostForm(false);
+            }}
+          />
+        )}
+
+      {confirmDeleteOrder && (
+        <ConfirmDialog
+          title="Delete production order?"
+          message={`Delete production order ${confirmDeleteOrder.orderNumber} and all its stages, costs and images? This cannot be undone.`}
+          confirmLabel="Delete"
+          busy={deletingId === confirmDeleteOrder.id}
+          onCancel={() => setConfirmDeleteOrder(null)}
+          onConfirm={() => void performDeleteOrder()}
+        />
+      )}
+
+      {confirmDeleteCostId && (
+        <ConfirmDialog
+          title="Remove cost entry?"
+          message="This cost entry will be permanently removed from the order."
+          confirmLabel="Remove"
+          onCancel={() => setConfirmDeleteCostId(null)}
+          onConfirm={() => void performRemoveCost()}
+        />
+      )}
+    </>
+  );
 
 }
 
@@ -440,6 +454,11 @@ function MetricCard({ icon: Icon, label, value, tone }: { icon: typeof Factory; 
     </article>
   );
 }
+
+const ORDER_ACCENT: Record<string, string> = {
+  DRAFT: 'border-l-slate-300', CONFIRMED: 'border-l-blue-400', IN_PRODUCTION: 'border-l-amber-400',
+  READY: 'border-l-violet-400', DISPATCHED: 'border-l-cyan-400', COMPLETED: 'border-l-emerald-400', CANCELLED: 'border-l-slate-300',
+};
 
 function OrderList({ orders, onSelect, onEdit, onDelete, deletingId, error, canDelete }: { orders: ProductionOrder[]; onSelect: (id: string) => void; onEdit: (order: ProductionOrder) => void; onDelete: (order: ProductionOrder) => void; deletingId: string; error: string; canDelete: boolean }) {
   const [query, setQuery] = useState('');
@@ -460,53 +479,100 @@ function OrderList({ orders, onSelect, onEdit, onDelete, deletingId, error, canD
   });
   return (
     <section className="min-w-0">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="shrink-0">
           <h2 className="text-base font-extrabold text-slate-950">Orders</h2>
           <p className="mt-1 text-xs text-slate-500">{matchingOrders.length} of {orders.length} orders</p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <div className="relative sm:w-72">
-            <Search aria-hidden="true" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input aria-label="Find production order" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search order, style or customer" className="input-field w-full pl-9" />
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          {/* Search */}
+          <div className="relative w-full sm:w-80">
+            {!query && (
+              <Search
+                aria-hidden="true"
+                size={16}
+                className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-400"
+              />
+            )}
+
+            <input
+              type="text"
+              aria-label="Find production order"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search order, style or customer"
+              className={`input-field w-full pr-10 ${query ? "!pl-4" : "!pl-12"
+                }`}
+            />
+
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X aria-hidden="true" size={14} />
+              </button>
+            )}
           </div>
-          <select aria-label="Filter current process" value={stageFilter} onChange={(event) => setStageFilter(event.target.value)} className="input-field sm:w-48">
+
+          {/* Process Filter */}
+          <select
+            aria-label="Filter current process"
+            value={stageFilter}
+            onChange={(event) => setStageFilter(event.target.value)}
+            className="input-field w-full sm:w-48"
+          >
             <option value="ALL">All processes</option>
-            {orders.some((order) => order.status === 'DRAFT') && <option value="DRAFT">Draft master</option>}
-            {availableStages.map((type) => <option key={type} value={type}>{STAGE_META[type].label}</option>)}
+
+            {orders.some((order) => order.status === "DRAFT") && (
+              <option value="DRAFT">Draft master</option>
+            )}
+
+            {availableStages.map((type) => (
+              <option key={type} value={type}>
+                {STAGE_META[type].label}
+              </option>
+            ))}
           </select>
         </div>
       </div>
       {error && <p role="alert" className="mb-3 rounded-xl border border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</p>}
       {matchingOrders.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No orders match your search.</div> : (
-        <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+        <div className="flex flex-col gap-3">
           {matchingOrders.map((order) => {
             const stage = currentStage(order);
             const processName = stage === 'DRAFT' ? 'Draft master' : stage === 'DELIVERED' ? 'Delivered' : stage === 'CANCELLED' ? 'Cancelled' : STAGE_META[stage].label;
-            return <article key={order.id} className="group min-w-0 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md">
-              <button type="button" onClick={() => onSelect(order.id)} className="block w-full text-left focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label={`View details for ${order.orderNumber}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-extrabold text-slate-950">{order.orderNumber}</p>
-                  <p className="mt-1 truncate text-xs text-slate-500">{order.party.name} · {order.styleName}</p>
+            return <article key={order.id} className={clsx('group min-w-0 overflow-hidden rounded-2xl border border-l-4 border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-5', ORDER_ACCENT[order.status] ?? 'border-l-slate-300')}>
+              <button type="button" onClick={() => onSelect(order.id)} className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label={`View details for ${order.orderNumber}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-extrabold text-slate-950">{order.orderNumber}</p>
+                      <StatusBadge status={order.status} />
+                    </div>
+                    <p className="mt-1 truncate text-xs text-slate-500">{order.party.name} · {order.styleName}</p>
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
+                      <CalendarDays aria-hidden="true" size={12} /> {order.dueDate ? formatDate(order.dueDate) : 'No delivery date'}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Cost so far</p>
+                    <p className="mt-1 text-lg font-extrabold text-slate-950 sm:text-xl">{formatCurrency(order.summary.totalMakingCost)}</p>
+                    <p className="mt-1 truncate text-[11px] font-semibold text-blue-600">{order.orderedQty.toLocaleString('en-IN')} pcs · {processName}</p>
+                  </div>
                 </div>
-                <StatusBadge status={order.status} />
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 border-y border-slate-100 py-3">
-                <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Delivery date</p><p className="mt-1 text-xs font-semibold text-slate-800">{order.dueDate ? formatDate(order.dueDate) : 'Not set'}</p></div>
-                <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Cost so far</p><p className="mt-1 text-xs font-semibold text-slate-800">{formatCurrency(order.summary.totalMakingCost)}</p></div>
-                <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Quantity</p><p className="mt-1 text-xs font-semibold text-slate-800">{order.orderedQty.toLocaleString('en-IN')} pieces</p></div>
-                <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Current process</p><p className="mt-1 text-xs font-semibold text-blue-700">{processName}</p></div>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs text-slate-500">{order.summary.progressPercent}% complete</span>
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-600">Full details <ArrowRight size={14} className="transition group-hover:translate-x-1" /></span>
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.min(order.summary.progressPercent, 100)}%` }} /></div>
               </button>
-              <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
-                <button type="button" onClick={() => onEdit(order)} className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Pencil size={13} /> Edit</button>
-                {canDelete && <button type="button" disabled={deletingId === order.id} onClick={() => onDelete(order)} className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"><Trash2 size={13} /> {deletingId === order.id ? 'Deleting...' : 'Delete'}</button>}
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-slate-100 sm:w-24"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${Math.min(order.summary.progressPercent, 100)}%` }} /></div>
+                  <span className="whitespace-nowrap text-xs font-bold text-slate-600">{order.summary.progressPercent}% complete</span>
+                </div>
+                <div className="flex shrink-0 gap-1.5">
+                  <button type="button" onClick={() => onEdit(order)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Pencil size={13} /> Edit</button>
+                  {canDelete && <button type="button" disabled={deletingId === order.id} onClick={() => onDelete(order)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"><Trash2 size={13} /> {deletingId === order.id ? 'Deleting...' : 'Delete'}</button>}
+                </div>
               </div>
             </article>;
           })}
@@ -550,8 +616,10 @@ function OrderDetail({
   return (
     <div className="min-w-0 space-y-4">
       <section className="card overflow-hidden">
-        <div className="bg-slate-950 px-4 py-4 text-white sm:px-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative overflow-hidden bg-slate-950 px-4 py-4 text-white sm:px-5">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(37,99,235,0.35),transparent_38%),radial-gradient(circle_at_95%_100%,rgba(124,58,237,0.22),transparent_42%)]" />
+          <div className="pointer-events-none absolute inset-0 opacity-[0.06] [background-image:linear-gradient(rgba(255,255,255,0.2)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.2)_1px,transparent_1px)] [background-size:30px_30px]" />
+          <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="mb-1 flex flex-wrap items-center gap-2"><StatusBadge status={order.status} /><span className="text-[10px] text-slate-400">Created {formatDate(order.createdAt)}</span></div>
               <h2 className="text-lg font-extrabold tracking-tight">{order.styleName}</h2>
@@ -559,12 +627,12 @@ function OrderDetail({
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {order.status === 'DRAFT' && <label className="text-[10px] text-slate-300">Confirm date<input type="date" aria-label="Confirmation date" value={confirmDate} onChange={(event) => setConfirmDate(event.target.value)} className="mt-1 block rounded-lg border border-white/20 bg-slate-900 px-2 py-1.5 text-xs text-white" /></label>}
-              <button type="button" onClick={onEditMaster} className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/10"><Pencil aria-hidden="true" size={14} />Edit order</button>
-              {canDelete && <button type="button" disabled={deleting} onClick={onDelete} className="inline-flex items-center gap-2 rounded-lg border border-red-400/30 px-3.5 py-2 text-xs font-bold text-red-200 hover:bg-red-500/10 disabled:opacity-50"><Trash2 aria-hidden="true" size={14} />{deleting ? 'Deleting...' : 'Delete'}</button>}
-              {order.status === 'DRAFT' && <button type="button" disabled={updatingStatus || !confirmDate} onClick={() => onConfirm(confirmDate)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-60">Confirm order <ArrowRight aria-hidden="true" size={15} /></button>}
+              <button type="button" onClick={onEditMaster} className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/10"><Pencil aria-hidden="true" size={14} />Edit order</button>
+              {canDelete && <button type="button" disabled={deleting} onClick={onDelete} className="inline-flex items-center gap-2 rounded-lg border border-red-400/30 px-3.5 py-2 text-xs font-bold text-red-200 transition hover:bg-red-500/10 disabled:opacity-50"><Trash2 aria-hidden="true" size={14} />{deleting ? 'Deleting...' : 'Delete'}</button>}
+              {order.status === 'DRAFT' && <button type="button" disabled={updatingStatus || !confirmDate} onClick={() => onConfirm(confirmDate)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-blue-950/40 transition hover:-translate-y-0.5 hover:bg-blue-500 disabled:opacity-60 disabled:hover:translate-y-0">Confirm order <ArrowRight aria-hidden="true" size={15} /></button>}
             </div>
             {nextAction && (
-              <button type="button" disabled={updatingStatus} onClick={() => onChangeStatus(nextAction.status)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3.5 py-2 text-xs font-bold text-slate-900 transition hover:bg-blue-50 disabled:opacity-60">
+              <button type="button" disabled={updatingStatus} onClick={() => onChangeStatus(nextAction.status)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3.5 py-2 text-xs font-bold text-slate-900 shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50 disabled:opacity-60 disabled:hover:translate-y-0">
                 {nextAction.label} <ArrowRight aria-hidden="true" size={15} />
               </button>
             )}
@@ -572,12 +640,12 @@ function OrderDetail({
         </div>
         {error && <div role="alert" className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</div>}
         <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
-          <InfoCell label="Party" value={order.party.name} />
-          <InfoCell label="Supplier" value={order.supplier?.name || 'Not assigned'} />
-          <InfoCell label="Fabric" value={[order.fabricName, order.fabricGsm].filter(Boolean).join(' · ') || '—'} />
-          <InfoCell label="Colour" value={order.color || '—'} />
-          <InfoCell label="Order qty" value={`${order.orderedQty.toLocaleString('en-IN')} pcs`} />
-          <InfoCell label="Due date" value={formatDate(order.dueDate)} />
+          <InfoCell icon={Users} label="Party" value={order.party.name} />
+          <InfoCell icon={Truck} label="Supplier" value={order.supplier?.name || 'Not assigned'} />
+          <InfoCell icon={Boxes} label="Fabric" value={[order.fabricName, order.fabricGsm].filter(Boolean).join(' · ') || '—'} />
+          <InfoCell icon={Palette} label="Colour" value={order.color || '—'} />
+          <InfoCell icon={PackageCheck} label="Order qty" value={`${order.orderedQty.toLocaleString('en-IN')} pcs`} />
+          <InfoCell icon={CalendarDays} label="Due date" value={formatDate(order.dueDate)} />
         </div>
         {order.sizeBreakdown && Object.keys(order.sizeBreakdown).length > 0 && (
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-3 sm:px-5">
@@ -592,65 +660,65 @@ function OrderDetail({
       <MasterDetails order={order} />
       {order.images && <ProductionImages order={order} onUpdated={onUpdated} />}
       {order.status !== 'DRAFT' && <>
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-  {/* Header */}
-  <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-    <div>
-      <h3 className="text-sm font-extrabold text-slate-950">
-        Production Workflow
-      </h3>
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {/* Header */}
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-950">
+                Production Workflow
+              </h3>
 
-      <p className="mt-1 text-[11px] text-slate-500">
-        Update DC, quantity, unit and cost at every stage.
-      </p>
-    </div>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Update DC, quantity, unit and cost at every stage.
+              </p>
+            </div>
 
-    <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
-      <div>
-        <p className="text-[9px] font-bold uppercase tracking-wider text-blue-400">
-          Overall Progress
-        </p>
+            <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-wider text-blue-400">
+                  Overall Progress
+                </p>
 
-        <p className="text-sm font-black text-blue-700">
-          {order.summary.progressPercent}%
-        </p>
-      </div>
+                <p className="text-sm font-black text-blue-700">
+                  {order.summary.progressPercent}%
+                </p>
+              </div>
 
-      <div className="h-2 w-20 overflow-hidden rounded-full bg-blue-100">
-        <div
-          className="h-full rounded-full bg-blue-600 transition-all duration-500"
-          style={{
-            width: `${Math.min(
-              order.summary.progressPercent,
-              100,
-            )}%`,
-          }}
-        />
-      </div>
-    </div>
-  </div>
+              <div className="h-2 w-20 overflow-hidden rounded-full bg-blue-100">
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                  style={{
+                    width: `${Math.min(
+                      order.summary.progressPercent,
+                      100,
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
 
-  {/* Workflow Cards */}
-  <div className="p-4 sm:p-5">
-    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2.5">
-      <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-blue-500">Good quantity flow</span>
-      {stages.map((stage, index) => (
-        <div key={`flow-${stage.id}`} className="flex items-center gap-2">
-          {index > 0 && <ArrowRight aria-hidden="true" size={13} className="text-blue-300" />}
-          <span className={clsx('rounded-lg border px-2 py-1 text-[10px] font-bold', stage.status === 'COMPLETED' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : stage.status === 'IN_PROGRESS' ? 'border-blue-200 bg-white text-blue-700' : 'border-slate-200 bg-white text-slate-500')}>
-            {STAGE_META[stage.type].shortLabel} · {stage.issuedQty} pcs
-          </span>
-        </div>
-      ))}
-      <span className="ml-auto text-[10px] text-slate-500">Rejected pieces do not move forward.</span>
-    </div>
-    <div className="grid gap-4 md:grid-cols-2">
-      {stages.map((stage, index) => {
-        const nextStage = stages[index + 1];
-        return (
-        <div
-          key={stage.id}
-          className="
+          {/* Workflow Cards */}
+          <div className="p-4 sm:p-5">
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2.5">
+              <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-blue-500">Good quantity flow</span>
+              {stages.map((stage, index) => (
+                <div key={`flow-${stage.id}`} className="flex items-center gap-2">
+                  {index > 0 && <ArrowRight aria-hidden="true" size={13} className="text-blue-300" />}
+                  <span className={clsx('rounded-lg border px-2 py-1 text-[10px] font-bold', stage.status === 'COMPLETED' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : stage.status === 'IN_PROGRESS' ? 'border-blue-200 bg-white text-blue-700' : 'border-slate-200 bg-white text-slate-500')}>
+                    {STAGE_META[stage.type].shortLabel} · {stage.issuedQty} pcs
+                  </span>
+                </div>
+              ))}
+              <span className="ml-auto text-[10px] text-slate-500">Rejected pieces do not move forward.</span>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {stages.map((stage, index) => {
+                const nextStage = stages[index + 1];
+                return (
+                  <div
+                    key={stage.id}
+                    className="
             group
             relative
             overflow-hidden
@@ -669,17 +737,17 @@ function OrderDetail({
             hover:bg-blue-50/40
             hover:shadow-[0_15px_35px_rgba(15,23,42,0.10)]
           "
-        >
-          {/* Stage Number */}
-          <div className="mb-2 flex items-center justify-between px-1 pt-1">
-            <div className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-slate-900 px-2 text-[10px] font-black text-white transition-colors group-hover:bg-blue-600">
-              {String(index + 1).padStart(2, "0")}
-            </div>
+                  >
+                    {/* Stage Number */}
+                    <div className="mb-2 flex items-center justify-between px-1 pt-1">
+                      <div className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-slate-900 px-2 text-[10px] font-black text-white transition-colors group-hover:bg-blue-600">
+                        {String(index + 1).padStart(2, "0")}
+                      </div>
 
-            <button
-              type="button"
-              onClick={() => onEditStage(stage)}
-              className="
+                      <button
+                        type="button"
+                        onClick={() => onEditStage(stage)}
+                        className="
                 rounded-lg
                 bg-blue-600
                 px-3
@@ -693,76 +761,76 @@ function OrderDetail({
                 hover:shadow-md
                 active:scale-95
               "
-            >
-              Edit
-            </button>
-          </div>
+                      >
+                        Edit
+                      </button>
+                    </div>
 
-          {/* Existing Stage Card */}
-          <StageCard
-            stage={stage}
-            onEdit={() => onEditStage(stage)}
-          />
+                    {/* Existing Stage Card */}
+                    <StageCard
+                      stage={stage}
+                      onEdit={() => onEditStage(stage)}
+                    />
 
-          {stage.status === 'COMPLETED' && nextStage && (
-            <div className="mx-1 mt-2 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-2 text-[10px] font-semibold text-emerald-700">
-              {stage.completedQty.toLocaleString('en-IN')} good pcs issued to {STAGE_META[nextStage.type].label}
-            </div>
-          )}
+                    {stage.status === 'COMPLETED' && nextStage && (
+                      <div className="mx-1 mt-2 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-2 text-[10px] font-semibold text-emerald-700">
+                        {stage.completedQty.toLocaleString('en-IN')} good pcs issued to {STAGE_META[nextStage.type].label}
+                      </div>
+                    )}
 
-          {/* Hover bottom line */}
-          <div className="absolute bottom-0 left-0 h-[3px] w-0 bg-blue-600 transition-all duration-300 group-hover:w-full" />
-        </div>
-        );
-      })}
-    </div>
-  </div>
-</section>
-
-      <section className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="card overflow-hidden">
-          <div className="flex flex-col items-start gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-            <div><h3 className="text-sm font-bold text-slate-950">Material & accessory costing</h3><p className="text-[11px] text-slate-500">Fabric, trims, labels, packing and transport.</p></div>
-            <button type="button" onClick={onAddCost} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"><Plus aria-hidden="true" size={14} /> Add cost</button>
-          </div>
-          {order.costs.length === 0 ? (
-            <div className="px-5 py-8 text-center text-xs text-slate-500">No material costs added yet.</div>
-          ) : (
-            <>
-            <div className="divide-y divide-slate-100 md:hidden">
-              {order.costs.map((cost) => (
-                <div key={cost.id} className="p-4">
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0"><p className="break-words text-xs font-semibold text-slate-800">{cost.description}</p><p className="mt-0.5 text-[10px] text-slate-400">{labelize(cost.category)}</p></div>
-                    <button type="button" onClick={() => onRemoveCost(cost.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${cost.description}`}><Trash2 aria-hidden="true" size={14} /></button>
+                    {/* Hover bottom line */}
+                    <div className="absolute bottom-0 left-0 h-[3px] w-0 bg-blue-600 transition-all duration-300 group-hover:w-full" />
                   </div>
-                  <p className="mt-2 truncate text-[11px] text-slate-500">{cost.supplier?.name || 'No supplier'}</p>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs"><span className="text-slate-500">{Number(cost.quantity).toLocaleString('en-IN')} × {formatCurrency(cost.rate)}</span><strong className="text-slate-900">{formatCurrency(cost.amount)}</strong></div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+          </div>
+        </section>
 
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[590px] text-xs">
-                <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wider text-slate-400"><tr><th className="px-4 py-2.5">Cost item</th><th className="px-4 py-2.5">Supplier</th><th className="px-4 py-2.5 text-right">Qty × rate</th><th className="px-4 py-2.5 text-right">Amount</th><th className="w-10" /></tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {order.costs.map((cost) => (
-                    <tr key={cost.id}>
-                      <td className="px-4 py-3"><span className="font-semibold text-slate-800">{cost.description}</span><span className="mt-0.5 block text-[10px] text-slate-400">{labelize(cost.category)}</span></td>
-                      <td className="px-4 py-3 text-slate-500">{cost.supplier?.name || '—'}</td>
-                      <td className="px-4 py-3 text-right text-slate-500">{Number(cost.quantity).toLocaleString('en-IN')} × {formatCurrency(cost.rate)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(cost.amount)}</td>
-                      <td className="pr-3"><button type="button" onClick={() => onRemoveCost(cost.id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${cost.description}`}><Trash2 aria-hidden="true" size={14} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <section className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="card overflow-hidden">
+            <div className="flex flex-col items-start gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="flex items-center gap-2.5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><Boxes aria-hidden="true" size={15} /></span><div><h3 className="text-sm font-bold text-slate-950">Material & accessory costing</h3><p className="text-[11px] text-slate-500">Fabric, trims, labels, packing and transport.</p></div></div>
+              <button type="button" onClick={onAddCost} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"><Plus aria-hidden="true" size={14} /> Add cost</button>
             </div>
-            </>
-          )}
-        </div>
-        <CostSummary order={order} />
-      </section>
+            {order.costs.length === 0 ? (
+              <div className="px-5 py-8 text-center text-xs text-slate-500">No material costs added yet.</div>
+            ) : (
+              <>
+                <div className="divide-y divide-slate-100 md:hidden">
+                  {order.costs.map((cost) => (
+                    <div key={cost.id} className="p-4">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0"><p className="break-words text-xs font-semibold text-slate-800">{cost.description}</p><p className="mt-0.5 text-[10px] text-slate-400">{labelize(cost.category)}</p></div>
+                        <button type="button" onClick={() => onRemoveCost(cost.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${cost.description}`}><Trash2 aria-hidden="true" size={14} /></button>
+                      </div>
+                      <p className="mt-2 truncate text-[11px] text-slate-500">{cost.supplier?.name || 'No supplier'}</p>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs"><span className="text-slate-500">{Number(cost.quantity).toLocaleString('en-IN')} × {formatCurrency(cost.rate)}</span><strong className="text-slate-900">{formatCurrency(cost.amount)}</strong></div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[590px] text-xs">
+                    <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wider text-slate-400"><tr><th className="px-4 py-2.5">Cost item</th><th className="px-4 py-2.5">Supplier</th><th className="px-4 py-2.5 text-right">Qty × rate</th><th className="px-4 py-2.5 text-right">Amount</th><th className="w-10" /></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {order.costs.map((cost) => (
+                        <tr key={cost.id} className="transition hover:bg-slate-50">
+                          <td className="px-4 py-3"><span className="font-semibold text-slate-800">{cost.description}</span><span className="mt-0.5 block text-[10px] text-slate-400">{labelize(cost.category)}</span></td>
+                          <td className="px-4 py-3 text-slate-500">{cost.supplier?.name || '—'}</td>
+                          <td className="px-4 py-3 text-right text-slate-500">{Number(cost.quantity).toLocaleString('en-IN')} × {formatCurrency(cost.rate)}</td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(cost.amount)}</td>
+                          <td className="pr-3"><button type="button" onClick={() => onRemoveCost(cost.id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${cost.description}`}><Trash2 aria-hidden="true" size={14} /></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+          <CostSummary order={order} />
+        </section>
       </>}
     </div>
   );
@@ -772,7 +840,7 @@ function MasterDetails({ order }: { order: ProductionOrder }) {
   if (!order.orderDate && !order.sizeColorBreakdown && !order.instructions) return null;
   const supplierEstimate = order.orderedQty * Number(order.supplierRate ?? 0);
   return <section className="card space-y-4 p-4 sm:p-5">
-    <div><h3 className="text-sm font-bold text-slate-900">Order master</h3><p className="text-xs text-slate-500">{order.status === 'DRAFT' ? 'Review this draft before confirming production.' : 'Customer and supplier order details.'}</p></div>
+    <div className="flex items-center gap-2.5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><Factory aria-hidden="true" size={15} /></span><div><h3 className="text-sm font-bold text-slate-900">Order master</h3><p className="text-xs text-slate-500">{order.status === 'DRAFT' ? 'Review this draft before confirming production.' : 'Customer and supplier order details.'}</p></div></div>
     <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4"><div><p className="text-slate-400">Order date</p><strong>{formatDate(order.orderDate)}</strong></div><div><p className="text-slate-400">Confirmed</p><strong>{order.confirmedAt ? formatDate(order.confirmedAt) : 'Pending'}</strong></div><div><p className="text-slate-400">Transport</p><strong className="break-words">{order.transport || '—'}</strong></div><div><p className="text-slate-400">Destination</p><strong className="break-words">{order.destination || '—'}</strong></div></div>
     {order.invoiceDetails && <p className="text-xs text-slate-600"><strong>Invoice details:</strong> {order.invoiceDetails}</p>}
     <div className="grid gap-2 rounded-xl bg-blue-50 p-3 text-xs sm:grid-cols-3"><p>Customer estimate <strong className="block text-blue-900">{formatCurrency(order.summary.revenue)}</strong></p><p>Supplier estimate <strong className="block text-blue-900">{formatCurrency(supplierEstimate)}</strong></p><p>Estimated spread <strong className="block text-blue-900">{formatCurrency(order.summary.revenue - supplierEstimate)}</strong></p></div>
@@ -834,7 +902,7 @@ function ProductionImages({ order, onUpdated }: { order: ProductionOrder; onUpda
   }
 
   return <section className="card min-w-0 p-4 sm:p-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-sm font-bold text-slate-900">Order and process images</h3><p className="text-[11px] text-slate-500">Upload fabric, artwork, work in progress, and finished goods.</p></div><ImagePlus aria-hidden="true" size={20} className="text-blue-600" /></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2.5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><ImagePlus aria-hidden="true" size={15} /></span><div><h3 className="text-sm font-bold text-slate-900">Order and process images</h3><p className="text-[11px] text-slate-500">Upload fabric, artwork, work in progress, and finished goods.</p></div></div></div>
     <div className="mt-3 grid gap-2 sm:grid-cols-2"><Field label="Image name"><input className="input-field" value={imageMeta.displayName} onChange={(event) => setImageMeta({ ...imageMeta, displayName: event.target.value })} placeholder="Front design" /></Field><Field label="Color"><input className="input-field" value={imageMeta.color} onChange={(event) => setImageMeta({ ...imageMeta, color: event.target.value })} placeholder="White" /></Field><Field label="Size"><input className="input-field" value={imageMeta.sizeLabel} onChange={(event) => setImageMeta({ ...imageMeta, sizeLabel: event.target.value })} placeholder="XL" /></Field><Field label="Details"><input className="input-field" value={imageMeta.details} onChange={(event) => setImageMeta({ ...imageMeta, details: event.target.value })} placeholder="Print size and placement" /></Field></div>
     <div className="mt-3 flex flex-wrap gap-2"><select aria-label="Image process" className="input-field max-w-56" value={stageType} onChange={(event) => setStageType(event.target.value as ProductionStageType)}>{PRODUCTION_PIPELINE.map((type) => <option key={type} value={type}>{STAGE_META[type].label}</option>)}</select><label className="btn-secondary inline-flex cursor-pointer items-center gap-2"><ImagePlus aria-hidden="true" size={15} />{busy ? 'Uploading...' : 'Add image'}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy} onChange={(event) => { void upload(event.target.files?.[0]); event.target.value = ''; }} /></label></div>
     {error && <p role="alert" className="mt-2 text-xs text-red-600">{error}</p>}
@@ -845,8 +913,16 @@ function ProductionImages({ order, onUpdated }: { order: ProductionOrder; onUpda
   </section>;
 }
 
-function InfoCell({ label, value }: { label: string; value: string }) {
-  return <div className="min-w-0 px-3.5 py-3"><span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">{label}</span><span className="mt-1 block truncate text-xs font-semibold text-slate-800" title={value}>{value}</span></div>;
+function InfoCell({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string }) {
+  return (
+    <div className="group flex min-w-0 items-start gap-2.5 px-3.5 py-3 transition hover:bg-slate-50">
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white"><Icon aria-hidden="true" size={13} /></span>
+      <span className="min-w-0">
+        <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+        <span className="mt-0.5 block truncate text-xs font-semibold text-slate-800" title={value}>{value}</span>
+      </span>
+    </div>
+  );
 }
 
 function StageCard({ stage, onEdit }: { stage: ProductionStage; onEdit: () => void }) {

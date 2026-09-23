@@ -266,12 +266,12 @@ export function RecordList({ rows, empty }: { rows: RecordRow[]; empty: string }
 
 export function RegisterCard({ href, label, description, icon: Icon, tone, stat, statLabel }: { href: string; label: string; description: string; icon: LucideIcon; tone: Tone; stat: string; statLabel: string }) {
   return (
-    <Link href={href} className="card group flex min-h-28 items-center gap-4 p-4 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
+    <Link href={href} className="card group flex min-w-0 min-h-28 items-center gap-4 p-4 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
       <span className={clsx('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', TONES[tone].icon)}><Icon aria-hidden="true" size={20} /></span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-bold text-slate-900">{label}</span>
         <span className="mt-0.5 block truncate text-[11px] leading-5 text-slate-500">{description}</span>
-        <span className="mt-1.5 inline-flex items-baseline gap-1.5"><span className={clsx('rounded-md px-1.5 py-0.5 text-[11px] font-extrabold', TONES[tone].soft, TONES[tone].text)}>{stat}</span><span className="text-[10px] text-slate-400">{statLabel}</span></span>
+        <span className="mt-1.5 flex min-w-0 items-baseline gap-1.5"><span className={clsx('shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-extrabold', TONES[tone].soft, TONES[tone].text)}>{stat}</span><span className="min-w-0 truncate text-[10px] text-slate-400">{statLabel}</span></span>
       </span>
       <ArrowRight aria-hidden="true" size={17} className="shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-blue-600" />
     </Link>

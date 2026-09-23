@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import QRCode from 'qrcode';
 import { amountToWords } from '@/lib/numberToWords';
 import { formatAmount, type ItemTableColumnSettings, type RegularPrintSettings, type ThermalPrintSettings } from './printSettingsTypes';
 
@@ -289,7 +288,7 @@ function UpiQrCode({ payeeVpa, payeeName, amount, note }: { payeeVpa: string; pa
     let active = true;
     setDataUrl('');
     const uri = `upi://pay?pa=${encodeURIComponent(payeeVpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
-    void QRCode.toDataURL(uri, { errorCorrectionLevel: 'M', margin: 0, width: 112, color: { dark: '#0f172a', light: '#ffffff' } })
+    void import('qrcode').then(({ default: QRCode }) => QRCode.toDataURL(uri, { errorCorrectionLevel: 'M', margin: 0, width: 112, color: { dark: '#0f172a', light: '#ffffff' } }))
       .then((url) => { if (active) setDataUrl(url); })
       .catch(() => undefined);
     return () => { active = false; };

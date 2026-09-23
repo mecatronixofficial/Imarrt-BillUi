@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 
 import {
@@ -53,10 +54,11 @@ import { useGeneralPreferences, usePreferences } from "@/lib/useGeneralPreferenc
 
 import type { Party, PartyLedger, PartyTransaction } from "@/types";
 
-import InvoiceModal from "@/components/invoices/InvoiceModal";
-import DocumentModal from "@/components/documents/DocumentModal";
-
 import { EmbeddedFormProvider } from "@/components/EmbeddedFormContext";
+import { toast } from "@/components/ToastProvider";
+
+const InvoiceModal = dynamic(() => import("@/components/invoices/InvoiceModal"), { ssr: false });
+const DocumentModal = dynamic(() => import("@/components/documents/DocumentModal"), { ssr: false });
 
 /* ========================================================================== */
 /* GST                                                                        */
@@ -292,13 +294,19 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
 
       setParties((current) => current.filter((entry) => entry.id !== target.id));
 
+      toast.danger("Party deleted", { description: target.name });
+
       setConfirmDeleteParty(null);
 
       if (partyId === target.id) {
         router.push("/parties");
       }
     } catch (deleteError: unknown) {
-      setDeletePartyError(getApiError(deleteError, "Could not delete party."));
+      const message = getApiError(deleteError, "Could not delete party.");
+
+      setDeletePartyError(message);
+
+      toast.error(message);
 
       setConfirmDeleteParty(null);
     } finally {
@@ -1780,9 +1788,15 @@ function PartyFormModal({
         ? await api.patch<Party>(`/parties/${party.id}`, payload)
         : await api.post<Party>("/parties", payload);
 
+      (party ? toast.warning : toast.success)(party ? "Party updated" : "Party created", { description: data.name });
+
       onSaved(data);
     } catch (saveError: unknown) {
-      setError(getApiError(saveError, "Could not save party."));
+      const message = getApiError(saveError, "Could not save party.");
+
+      setError(message);
+
+      toast.error(message);
     } finally {
       setSaving(false);
     }

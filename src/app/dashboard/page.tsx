@@ -6,6 +6,7 @@ import {
   AlertCircle,
   ArrowRight,
   Boxes,
+  CalendarDays,
   CircleDollarSign,
   Clock3,
   Factory,
@@ -18,17 +19,18 @@ import {
   ReceiptText,
   Scissors,
   Shirt,
+  Sparkles,
   TrendingUp,
   Users,
 } from 'lucide-react';
 import clsx from 'clsx';
 import StatusBadge from '@/components/StatusBadge';
 import { ErrorState, LoadingState } from '@/components/ContentState';
-import { getAllPages, getApiError } from '@/lib/api';
+import { getActiveBranchId, getActiveBusinessId, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { getPreferences } from '@/lib/preferences';
 import { usePreferences } from '@/lib/useGeneralPreferences';
-import type { Party, Invoice, Item, ProductionOrder, ProductionStageType } from '@/types';
+import type { Branch, Party, Invoice, Item, ProductionOrder, ProductionStageType } from '@/types';
 
 const STAGES: Array<{ type: ProductionStageType; label: string; icon: typeof Scissors; color: string }> = [
   { type: 'MASTER', label: 'Master', icon: Users, color: 'bg-slate-600' },
@@ -61,11 +63,33 @@ export default function DashboardPage() {
     setError('');
     setPartialWarning('');
 
+    // Parties and items are branch-scoped. If an older "all branches" selection
+    // is still stored, use the first active branch for these dashboard summaries
+    // without changing the user's company-wide invoice/production view.
+    const businessId = getActiveBusinessId();
+    let masterDataConfig = {};
+    let hasSpecificBranch = false;
+    if (businessId) {
+      let branchId = getActiveBranchId(businessId);
+      if (!branchId || branchId === 'all') {
+        try {
+          const { data: branches } = await getAllPages<Branch>('/branches', { headers: { 'X-Business-Id': businessId } });
+          branchId = branches.find(({ isActive }) => isActive)?.id ?? null;
+        } catch {
+          branchId = null;
+        }
+      }
+      if (branchId && branchId !== 'all') {
+        hasSpecificBranch = true;
+        masterDataConfig = { headers: { 'X-Business-Id': businessId, 'X-Branch-Id': branchId } };
+      }
+    }
+
     const results = await Promise.allSettled([
       getAllPages<Invoice>('/invoices'),
       getAllPages<ProductionOrder>('/production-orders'),
-      getAllPages<Party>('/parties'),
-      getAllPages<Item>('/items'),
+      getAllPages<Party>('/parties', masterDataConfig),
+      getAllPages<Item>('/items', masterDataConfig),
     ]);
 
     const failed = results.filter((result) => result.status === 'rejected');
@@ -82,7 +106,14 @@ export default function DashboardPage() {
       parties: results[2].status === 'fulfilled' ? results[2].value.data : [],
       items: results[3].status === 'fulfilled' ? results[3].value.data : [],
     });
-    if (failed.length > 0) setPartialWarning('Some dashboard information is temporarily unavailable.');
+    if (failed.length > 0) {
+      const sectionNames = ['Invoices', 'Production', 'Parties', 'Items'];
+      const unavailable = results.flatMap((result, index) => result.status === 'rejected' ? [sectionNames[index]] : []);
+      const branchHint = !hasSpecificBranch && unavailable.some((name) => name === 'Parties' || name === 'Items')
+        ? ' Select or create an active branch.'
+        : ' Try again in a moment.';
+      setPartialWarning(`${unavailable.join(' and ')} data could not be loaded.${branchHint}`);
+    }
     setLoading(false);
   }, []);
 
@@ -94,7 +125,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-w-0">
-      <HeroHeader />
+      <HeroHeader insights={!loading && !error ? insights : undefined} />
 
       {loading ? (
         <section className="card"><LoadingState label="Preparing your business dashboard..." /></section>
@@ -104,7 +135,9 @@ export default function DashboardPage() {
         <>
           {partialWarning && (
             <div role="status" className="mb-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-medium text-amber-800">
-              <AlertCircle aria-hidden="true" size={15} /> {partialWarning}
+              <AlertCircle aria-hidden="true" size={15} className="shrink-0" />
+              <span className="min-w-0 flex-1">{partialWarning}</span>
+              <button type="button" onClick={() => void loadDashboard()} className="shrink-0 rounded-md px-2 py-1 font-bold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400">Retry</button>
             </div>
           )}
 
@@ -131,27 +164,51 @@ export default function DashboardPage() {
   );
 }
 
-function HeroHeader() {
-  const today = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: '2-digit', month: 'long' }).format(new Date());
+const DASHBOARD_QUOTES = [
+  'Small improvements, repeated daily, build remarkable businesses.',
+  'Clarity in the numbers creates confidence in every decision.',
+  'Great service begins with organized work behind the scenes.',
+  'Track what matters today; growth follows tomorrow.',
+  'Every invoice completed is another step forward.',
+  'Strong businesses turn daily details into lasting progress.',
+  'Plan clearly, execute calmly, and keep moving forward.',
+];
+
+function HeroHeader({ insights }: { insights?: ReturnType<typeof calculateInsights> }) {
+  const [now, setNow] = useState<Date | null>(null);
+  const [userName, setUserName] = useState('');
+  useEffect(() => {
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    void getCurrentUser().then((user) => setUserName(user?.name?.trim().split(/\s+/)[0] ?? '')).catch(() => undefined);
+    return () => window.clearInterval(timer);
+  }, []);
+  const hour = now?.getHours() ?? 12;
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const today = now ? new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(now) : 'Loading date…';
+  const time = now ? new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).format(now) : '--:--';
+  const quote = DASHBOARD_QUOTES[now?.getDay() ?? 0];
   return (
-    <header className="relative mb-4 overflow-hidden rounded-2xl bg-slate-950 px-5 py-5 text-white shadow-xl shadow-slate-200 sm:px-6">
+    <header className="relative mb-4 overflow-hidden rounded-2xl bg-slate-950 px-4 py-4 text-white shadow-lg shadow-slate-200 sm:px-5">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(37,99,235,0.35),transparent_38%),radial-gradient(circle_at_90%_100%,rgba(124,58,237,0.24),transparent_42%)]" />
       <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.2)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.2)_1px,transparent_1px)] [background-size:34px_34px]" />
-      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_9px_rgba(52,211,153,0.8)]" /> Live business overview
+      <div className="relative">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-lg font-extrabold tracking-tight sm:text-xl">{greeting}{userName ? `, ${userName}` : ''}.</h1>
+            <p className="mt-1 flex max-w-2xl items-start gap-1.5 text-[10px] leading-4 text-slate-300 sm:text-[11px]"><Sparkles aria-hidden="true" size={12} className="mt-0.5 shrink-0 text-blue-300" /><span>{quote}</span></p>
           </div>
-          <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl">Business command centre</h1>
-          <p className="mt-1 text-xs text-slate-400">Billing, inventory and garment production in one clear workspace · {today}</p>
+          <div className="shrink-0 text-right">
+            <p className="flex items-center justify-end gap-1.5 text-sm font-extrabold text-white"><Clock3 aria-hidden="true" size={13} className="text-blue-300" /><time>{time}</time></p>
+            <p className="mt-0.5 hidden items-center justify-end gap-1 text-[8px] text-slate-400 min-[420px]:flex"><CalendarDays aria-hidden="true" size={9} />{today}</p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/production" className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3.5 text-xs font-bold text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <Factory aria-hidden="true" size={15} /> Production
-          </Link>
-          <Link href="/invoices/new" className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3.5 text-xs font-bold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <Plus aria-hidden="true" size={15} /> New invoice
-          </Link>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
+          {insights && <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-semibold text-slate-300"><span><strong className="text-white">{insights.unpaidInvoices}</strong> payments pending</span><span><strong className="text-white">{insights.ordersDueSoon}</strong> due soon</span>{insights.lowStock > 0 && <span className="text-amber-200"><strong>{insights.lowStock}</strong> low stock</span>}</div>}
+          <div className="ml-auto flex gap-2">
+            <Link href="/production" className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/15 px-2.5 text-[9px] font-bold text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400"><Factory aria-hidden="true" size={12} /> Production</Link>
+            <Link href="/invoices/new" className="inline-flex h-7 items-center gap-1.5 rounded-md bg-blue-600 px-2.5 text-[9px] font-bold text-white transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400"><Plus aria-hidden="true" size={12} /> New invoice</Link>
+          </div>
         </div>
       </div>
     </header>

@@ -6,6 +6,7 @@ import { Loader2, Plus, Users } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import Modal from '@/components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
+import { toast } from '@/components/ToastProvider';
 import { api, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
 import type { User } from '@/types';
 
@@ -52,9 +53,10 @@ export default function TeamPage() {
     setError('');
     try {
       await api.patch(`/users/${id}/deactivate`);
+      toast.danger('Team member deactivated');
       await loadUsers();
     } catch (deactivateError: unknown) {
-      setError(getApiError(deactivateError, 'Could not deactivate this user.'));
+      const message = getApiError(deactivateError, 'Could not deactivate this user.'); setError(message); toast.error(message);
     } finally {
       setDeactivatingId('');
     }
@@ -151,9 +153,10 @@ function AddUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
       });
+      toast.success('Team member added', { description: form.email.trim().toLowerCase() });
       onSaved();
     } catch (saveError: unknown) {
-      setError(getApiError(saveError, 'Could not add user.'));
+      const message = getApiError(saveError, 'Could not add user.'); setError(message); toast.error(message);
     } finally {
       setSaving(false);
     }

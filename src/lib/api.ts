@@ -140,6 +140,24 @@ const ACTIVE_BUSINESS_KEY = 'activeBusinessId';
 const ACTIVE_WORKSPACE_BRANCH_KEY = 'activeWorkspaceBranchId';
 const ACTIVE_BRANCH_PREFIX = 'activeBranchId:';
 
+/**
+ * Fires whenever the active company, workspace branch, or operational branch changes.
+ * The sidebar and top-menu company picker subscribe to this so they update immediately
+ * (no full page reload) no matter which screen made the switch.
+ */
+const WORKSPACE_CHANGED_EVENT = 'imart:workspace-changed';
+
+function notifyWorkspaceChanged() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(WORKSPACE_CHANGED_EVENT));
+}
+
+/** Subscribes to active company/branch changes. Returns an unsubscribe function. */
+export function onWorkspaceChanged(handler: () => void) {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener(WORKSPACE_CHANGED_EVENT, handler);
+  return () => window.removeEventListener(WORKSPACE_CHANGED_EVENT, handler);
+}
+
 function getPageScopedBusinessId() {
   if (typeof window === 'undefined') return null;
   const isDocumentDetail = /^\/(invoices|documents)\/[^/]+\/?$/.test(window.location.pathname);
@@ -153,7 +171,9 @@ api.interceptors.request.use(async (config) => {
   const canRunWithoutSession =
     url.startsWith('/auth/login') ||
     url.startsWith('/auth/refresh') ||
-    url.startsWith('/auth/logout');
+    url.startsWith('/auth/logout') ||
+    url.startsWith('/auth/forgot-password') ||
+    url.startsWith('/auth/reset-password');
 
   if (!canRunWithoutSession) {
     const user = await getCurrentUser();
@@ -189,7 +209,23 @@ api.interceptors.request.use(async (config) => {
   // Master records are branch-scoped. A company is still required for access,
   // while the selected branch decides which parties, suppliers and items load.
   if (isSharedMasterRequest(url)) {
-    const branchId = config.headers.get('X-Branch-Id')?.toString() || getActiveBranchId(businessId);
+    let branchId = config.headers.get('X-Branch-Id')?.toString() || getActiveBranchId(businessId);
+    if (!branchId) {
+      // No branch chosen yet for this business (e.g. right after login, before
+      // anything has resolved one) - fall back to the first active branch,
+      // same as the general branch-scoped path below. Shares `branchRequest`
+      // so concurrent requests (dashboard fires several at once) reuse one fetch.
+      branchRequest ??= collectAllPages<Branch>(refreshClient, '/branches', { headers: { 'X-Business-Id': businessId } })
+        .then(({ data }) => {
+          const firstBranch = data.find(({ isActive }) => isActive)?.id ?? null;
+          if (firstBranch) setActiveBranchId(firstBranch, businessId);
+          return firstBranch;
+        })
+        .finally(() => {
+          branchRequest = null;
+        });
+      branchId = await branchRequest;
+    }
     if (!branchId || branchId === 'all') throw new axios.Cancel('Select a specific branch to manage master data');
     config.headers['X-Business-Id'] = businessId;
     config.headers['X-Branch-Id'] = branchId;
@@ -311,14 +347,18 @@ export function getActiveWorkspaceBranchId() {
 
 export function setActiveWorkspaceBranchId(branchId: string) {
   if (typeof window === 'undefined') return;
-  if (getActiveWorkspaceBranchId() !== branchId) clearApiCache();
+  const changed = getActiveWorkspaceBranchId() !== branchId;
+  if (changed) clearApiCache();
   localStorage.setItem(ACTIVE_WORKSPACE_BRANCH_KEY, branchId);
+  if (changed) notifyWorkspaceChanged();
 }
 
 export function setActiveBusinessId(businessId: string) {
   if (typeof window === 'undefined') return;
-  if (localStorage.getItem(ACTIVE_BUSINESS_KEY) !== businessId) clearApiCache();
+  const changed = localStorage.getItem(ACTIVE_BUSINESS_KEY) !== businessId;
+  if (changed) clearApiCache();
   localStorage.setItem(ACTIVE_BUSINESS_KEY, businessId);
+  if (changed) notifyWorkspaceChanged();
 }
 
 export function getActiveBranchId(businessId = getActiveBusinessId()) {
@@ -328,8 +368,10 @@ export function getActiveBranchId(businessId = getActiveBusinessId()) {
 
 export function setActiveBranchId(branchId: string, businessId = getActiveBusinessId()) {
   if (typeof window === 'undefined' || !businessId) return;
-  if (getActiveBranchId(businessId) !== branchId) clearApiCache();
+  const changed = getActiveBranchId(businessId) !== branchId;
+  if (changed) clearApiCache();
   localStorage.setItem(`${ACTIVE_BRANCH_PREFIX}${businessId}`, branchId);
+  if (changed) notifyWorkspaceChanged();
 }
 
 export function clearActiveBranch(businessId = getActiveBusinessId()) {
@@ -344,6 +386,7 @@ export function clearActiveBusiness() {
   localStorage.removeItem(ACTIVE_BUSINESS_KEY);
   localStorage.removeItem(ACTIVE_WORKSPACE_BRANCH_KEY);
   clearApiCache();
+  notifyWorkspaceChanged();
 }
 
 export async function getCurrentUser(): Promise<SessionUser | null> {

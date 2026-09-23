@@ -8,6 +8,7 @@ import StatusBadge from '@/components/StatusBadge';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ErrorState, LoadingState } from '@/components/ContentState';
+import { toast } from '@/components/ToastProvider';
 import { api, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate, formatQuantity, formatTransactionDate } from '@/lib/format';
 import { getPreferences } from '@/lib/preferences';
@@ -41,10 +42,11 @@ export default function InvoiceDetailPage() {
     setError('');
     try {
       await api.delete(`/invoices/${invoice.id}`);
+      toast.danger('Invoice deleted', { description: invoice.invoiceNumber });
       router.push('/invoices');
       router.refresh();
     } catch (deleteError: unknown) {
-      setError(getApiError(deleteError, 'Could not delete invoice.'));
+      const message = getApiError(deleteError, 'Could not delete invoice.'); setError(message); toast.error(message);
       setConfirmDelete(false);
       setDeleting(false);
     }
@@ -90,8 +92,9 @@ export default function InvoiceDetailPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      toast.success('Invoice PDF downloaded');
     } catch (downloadError: unknown) {
-      setError(getApiError(downloadError, 'Could not download the invoice PDF.'));
+      const message = getApiError(downloadError, 'Could not download the invoice PDF.'); setError(message); toast.error(message);
     } finally {
       setDownloading(false);
     }
@@ -111,8 +114,9 @@ export default function InvoiceDetailPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      toast.success('Attachment downloaded', { description: fileName });
     } catch (downloadError: unknown) {
-      setError(getApiError(downloadError, 'Could not download this attachment.'));
+      const message = getApiError(downloadError, 'Could not download this attachment.'); setError(message); toast.error(message);
     } finally {
       setDownloadingAttachment('');
     }
@@ -171,8 +175,9 @@ export default function InvoiceDetailPage() {
       const { data } = await api.post<InvoiceDelivery[]>(`/invoices/${invoice.id}/deliver`, { channels: [channel] });
       const failed = data.find((attempt) => attempt.status === 'FAILED');
       await loadInvoice();
-      if (failed) setError(failed.errorMessage || `${channel === 'EMAIL' ? 'Email' : 'WhatsApp'} delivery failed.`);
-    } catch (sendError: unknown) { setError(getApiError(sendError, 'Could not send the invoice.')); }
+      if (failed) { const message = failed.errorMessage || `${channel === 'EMAIL' ? 'Email' : 'WhatsApp'} delivery failed.`; setError(message); toast.error(message); }
+      else toast.success(`Invoice sent by ${channel === 'EMAIL' ? 'email' : 'WhatsApp'}`);
+    } catch (sendError: unknown) { const message = getApiError(sendError, 'Could not send the invoice.'); setError(message); toast.error(message); }
     finally { setSendingChannel(''); }
   }
 

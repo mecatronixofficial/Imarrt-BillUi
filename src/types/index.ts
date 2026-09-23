@@ -276,9 +276,6 @@ export interface WorkspaceBranch {
   name: string;
   code: string;
   address?: string;
-  stateCode?: string;
-  phone?: string;
-  email?: string;
   isActive: boolean;
   createdAt: string;
   businesses: Business[];
