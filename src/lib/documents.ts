@@ -14,6 +14,7 @@ export type DocumentConfig = {
 };
 
 export const DOCUMENT_CONFIG: Record<BusinessDocumentType, DocumentConfig> = {
+  SALES_ORDER: { type: 'SALES_ORDER', label: 'Sales order', plural: 'Sales orders', shortLabel: 'Order', description: 'Confirm an item order before dispatch or invoicing.', createPath: '/sales/orders/new', registerPath: '/sales/orders', accent: 'text-blue-700', soft: 'bg-blue-50', border: 'border-blue-200' },
   QUOTATION: {
     type: 'QUOTATION', label: 'Quotation', plural: 'Quotations', shortLabel: 'Quote',
     description: 'Send a professional price proposal before the sale is confirmed.',

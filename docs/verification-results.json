@@ -1,0 +1,379 @@
+{
+  "frontend": {
+    "tests": {
+      "files": 2,
+      "failed": 0,
+      "passed": 7
+    },
+    "productionBuild": "pass",
+    "typecheck": "pass",
+    "lint": "pass"
+  },
+  "envEdited": false,
+  "deployed": false,
+  "migrationsApplied": false,
+  "print": [
+    {
+      "name": "a4-portrait",
+      "widthPoints": 595.91998,
+      "heightPoints": 841.91998,
+      "pages": 1,
+      "bytes": 85152,
+      "passed": true
+    },
+    {
+      "name": "a4-landscape",
+      "widthPoints": 841.91998,
+      "heightPoints": 595.91998,
+      "pages": 2,
+      "bytes": 82144,
+      "passed": true
+    },
+    {
+      "name": "thermal-58mm",
+      "widthPoints": 165.119995,
+      "heightPoints": 234.95999,
+      "pages": 1,
+      "bytes": 34534,
+      "passed": true
+    },
+    {
+      "name": "thermal-80mm-two-copies",
+      "widthPoints": 227.03999,
+      "heightPoints": 234.95999,
+      "pages": 2,
+      "bytes": 44100,
+      "passed": true
+    },
+    {
+      "name": "thermal-custom",
+      "widthPoints": 196.08,
+      "heightPoints": 234.95999,
+      "pages": 1,
+      "bytes": 34770,
+      "passed": true
+    }
+  ],
+  "backend": {
+    "tests": {
+      "scope": "Unit and transaction doubles, no database",
+      "files": 15,
+      "failed": 0,
+      "passed": 93
+    },
+    "clientGeneration": "pass",
+    "prismaSchema": "valid",
+    "typecheck": "pass"
+  },
+  "databaseTests": "pending by user instruction",
+  "checkedOn": "2026-11-01",
+  "browser": {
+    "checks": [
+      {
+        "route": "/dashboard",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/parties/10000000-0000-4000-8000-000000000005",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/items/10000000-0000-4000-8000-000000000006",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/invoices",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/invoices/10000000-0000-4000-8000-000000000007",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/documents",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/documents/10000000-0000-4000-8000-000000000012",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/payment-in",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/orders",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/payment-out",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/expenses",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/inventory",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/inventory/godowns",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/inventory/adjustments",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/general",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/party",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/item",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/transaction",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/taxes-gst",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/transaction-message",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/print",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/team",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/security",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/businesses",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/dashboard",
+        "viewport": "tablet",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "tablet",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": "tablet",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "tablet",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "tablet",
+        "passed": true
+      },
+      {
+        "route": "/inventory",
+        "viewport": "tablet",
+        "passed": true
+      },
+      {
+        "route": "/inventory/adjustments",
+        "viewport": "tablet",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "tablet",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks",
+        "viewport": "tablet",
+        "passed": true
+      },
+      {
+        "route": "/dashboard",
+        "viewport": "mobile",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "mobile",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": "mobile",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "mobile",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "mobile",
+        "passed": true
+      },
+      {
+        "route": "/inventory",
+        "viewport": "mobile",
+        "passed": true
+      },
+      {
+        "route": "/inventory/adjustments",
+        "viewport": "mobile",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "mobile",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks",
+        "viewport": "mobile",
+        "passed": true
+      }
+    ],
+    "requestCount": 588,
+    "missing": [],
+    "mutations": [],
+    "errors": [],
+    "databaseAccess": false
+  }
+}

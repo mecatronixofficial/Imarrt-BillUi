@@ -39,7 +39,11 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import Modal from "@/components/Modal";
+import ReferenceMaster from "@/components/ReferenceMaster";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import RowActions, { type RowAction } from "@/components/RowActions";
+import { EditPaymentModal } from "@/components/sales/PaymentInRegister";
+import { whatsappLink } from "@/lib/messageTemplates";
 
 import {
   EmptyState,
@@ -52,7 +56,7 @@ import { api, getAllPages, getApiError, getCurrentUser } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useGeneralPreferences, usePreferences } from "@/lib/useGeneralPreferences";
 
-import type { Party, PartyLedger, PartyTransaction } from "@/types";
+import type { Invoice, Party, PartyLedger, PartyTransaction, PaymentInRecord } from "@/types";
 
 import { EmbeddedFormProvider } from "@/components/EmbeddedFormContext";
 import { toast } from "@/components/ToastProvider";
@@ -94,6 +98,7 @@ function isRegisteredGstType(type: Party["gstType"]) {
 
 export function PartyWorkspace({ partyId }: { partyId?: string }) {
   const router = useRouter();
+  const [selectedId,setSelectedId]=useState(partyId??"");
   const { partyCategories: showGroupBadge } = usePreferences("party");
 
   const [parties, setParties] = useState<Party[]>([]);
@@ -127,6 +132,12 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
   const [deletingPartyId, setDeletingPartyId] = useState("");
 
   const [deletePartyError, setDeletePartyError] = useState("");
+
+  const [confirmTransaction, setConfirmTransaction] = useState<{ transaction: PartyTransaction; action: "cancel" | "delete" } | null>(null);
+
+  const [transactionBusy, setTransactionBusy] = useState(false);
+
+  const [editingPayment, setEditingPayment] = useState<PaymentInRecord | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -168,9 +179,7 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
   }, []);
 
   useEffect(() => {
-    if (!partyId) {
-      void loadParties();
-    }
+    void loadParties();
   }, [partyId, loadParties]);
 
   /* ====================================================================== */
@@ -198,10 +207,9 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
   }, []);
 
   useEffect(() => {
-    if (partyId) {
-      void loadLedger(partyId);
-    }
-  }, [partyId, loadLedger]);
+    const id=selectedId||parties[0]?.id;
+    if(id) void loadLedger(id);
+  }, [selectedId,parties,loadLedger]);
 
   /* ====================================================================== */
   /* FILTER                                                                 */
@@ -255,6 +263,8 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
   /* ====================================================================== */
   /* PARTY ACTIONS                                                          */
   /* ====================================================================== */
+
+  useEffect(() => { if (!partyId && new URLSearchParams(window.location.search).get('create') === '1') { setEditingParty(null); setFormTab('profile'); setShowForm(true); } }, [partyId]);
 
   function openAddParty() {
     setEditingParty(null);
@@ -410,12 +420,113 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
   const hasWhatsApp = Boolean(party?.whatsappNumber || party?.phone);
 
   /* ====================================================================== */
+  /* TRANSACTION ACTIONS                                                    */
+  /* ====================================================================== */
+
+  async function printTransaction(transaction: PartyTransaction) {
+    const resource = transaction.type === "CREDIT_NOTE" ? `/documents/${transaction.id}` : `/invoices/${transaction.invoiceId}`;
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) return toast.error("Allow pop-ups to view this PDF.");
+    tab.opener = null;
+    try {
+      const { data } = await api.get<Blob>(`${resource}/pdf`, { responseType: "blob" });
+      const url = URL.createObjectURL(data);
+      tab.location.href = url;
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (pdfError) {
+      tab.close();
+      toast.error(getApiError(pdfError, "Could not open PDF."));
+    }
+  }
+
+  /** The ledger only carries a summary of each payment, so load its invoice to get the full record for editing. */
+  async function editPayment(transaction: PartyTransaction) {
+    try {
+      const { data: invoice } = await api.get<Invoice>(`/invoices/${transaction.invoiceId}`);
+      const payment = invoice.payments?.find((entry) => entry.id === transaction.id);
+      if (!payment) return toast.error("This payment could not be found on its invoice.");
+      setEditingPayment({ ...payment, invoice });
+    } catch (loadError) {
+      toast.error(getApiError(loadError, "Could not load payment."));
+    }
+  }
+
+  async function runTransactionAction() {
+    if (!confirmTransaction || transactionBusy) return;
+    const { transaction, action } = confirmTransaction;
+    setTransactionBusy(true);
+    try {
+      if (transaction.type === "PAYMENT_IN") await api.delete(`/invoices/payments/${transaction.id}`);
+      else if (transaction.type === "CREDIT_NOTE") await api.patch(`/documents/${transaction.id}/status`, { status: "CANCELLED" });
+      else if (action === "cancel") await api.post(`/invoices/${transaction.invoiceId}/cancel`);
+      else await api.delete(`/invoices/${transaction.invoiceId}`);
+      toast.success(`${transactionLabel(transaction)} ${action === "cancel" ? "cancelled" : "deleted"}`, { description: transaction.number });
+      setConfirmTransaction(null);
+      void loadParties();
+    } catch (actionError) {
+      toast.error(getApiError(actionError, action === "cancel" ? "Could not cancel." : "Could not delete."));
+    } finally {
+      setTransactionBusy(false);
+    }
+  }
+
+  function transactionActions(transaction: PartyTransaction): Array<RowAction | false | undefined> {
+    const phone = party?.whatsappNumber || party?.phone;
+    const email = party?.email;
+    const message = `Hello ${party?.name ?? ""},\n${transactionMessage(transaction)}`;
+    const share: Array<RowAction | false> = [
+      { label: "Share on WhatsApp", icon: "whatsapp", href: whatsappLink(phone, message), external: true },
+      !!email && { label: "Email", icon: "email", href: `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(`${transactionLabel(transaction)} ${transaction.number}`)}&body=${encodeURIComponent(message)}`, external: true },
+    ];
+
+    if (transaction.type === "OPENING_BALANCE") {
+      return [{ label: "Edit opening balance", icon: "edit", onClick: () => party && openEditParty(party, "credit") }, ...share];
+    }
+
+    if (transaction.type === "PAYMENT_IN") {
+      return [
+        { label: "View invoice", icon: "view", href: `/invoices/${transaction.invoiceId}` },
+        { label: "Edit payment", icon: "edit", onClick: () => void editPayment(transaction) },
+        { label: "Print invoice", icon: "print", onClick: () => void printTransaction(transaction) },
+        ...share,
+        canDeleteParty && { label: "Delete payment", icon: "delete", danger: true, onClick: () => setConfirmTransaction({ transaction, action: "delete" }) },
+      ];
+    }
+
+    if (transaction.type === "CREDIT_NOTE") {
+      return [
+        { label: "View", icon: "view", href: `/documents/${transaction.id}` },
+        { label: "Edit", icon: "edit", href: `/sales/returns/new?editId=${encodeURIComponent(transaction.id)}` },
+        { label: "Duplicate", icon: "duplicate", href: `/sales/returns/new?duplicateId=${encodeURIComponent(transaction.id)}` },
+        { label: "Print / PDF", icon: "print", onClick: () => void printTransaction(transaction) },
+        ...share,
+        // Issued credit notes can only be cancelled, not deleted, so the server keeps their history.
+        { label: "Cancel credit note", icon: "cancel", danger: true, onClick: () => setConfirmTransaction({ transaction, action: "cancel" }) },
+      ];
+    }
+
+    // Mirrors the server: an invoice with payments can't be edited, cancelled or deleted.
+    const hasPayments = Boolean(ledger?.transactions.some((entry) => entry.type === "PAYMENT_IN" && entry.invoiceId === transaction.invoiceId));
+    const editId = encodeURIComponent(transaction.invoiceId ?? "");
+    return [
+      { label: "View", icon: "view", href: `/invoices/${transaction.invoiceId}` },
+      transaction.status !== "CANCELLED" && !hasPayments && { label: "Edit", icon: "edit", href: `/invoices/new?editId=${editId}` },
+      { label: "Duplicate", icon: "duplicate", href: `/invoices/new?duplicateId=${editId}` },
+      { label: "Print / PDF", icon: "print", onClick: () => void printTransaction(transaction) },
+      ...share,
+      !hasPayments && !["DRAFT", "CANCELLED"].includes(transaction.status ?? "") && { label: "Cancel invoice", icon: "cancel", danger: true, onClick: () => setConfirmTransaction({ transaction, action: "cancel" }) },
+      canDeleteParty && !hasPayments && { label: "Delete", icon: "delete", danger: true, onClick: () => setConfirmTransaction({ transaction, action: "delete" }) },
+    ];
+  }
+
+  /* ====================================================================== */
   /* UI                                                                     */
   /* ====================================================================== */
 
   return (
     <>
-      <div className="min-h-screen bg-slate-50/70 p-4 sm:p-6">
+      <ReferenceMaster title="Parties" rows={filteredParties.map(p=>({id:p.id,name:p.name,value:formatCurrency(Number(p.balanceDue??0))}))} selectedId={selectedId||parties[0]?.id||''} query={search} onQuery={setSearch} onSelect={id=>{setSelectedId(id);if(id===selectedId)void loadLedger(id);}} onAdd={openAddParty} onEdit={()=>party&&openEditParty(party,"profile")} onDelete={canDeleteParty&&party?()=>requestDeleteParty(party):undefined} loading={loading} error={error} onRetry={()=>void loadParties()} detailLoading={detailLoading} detailError={detailError} name={party?.name} facts={[{label:'GSTIN',value:party?.gstin},{label:'Billing Address',value:party?.billingAddr},{label:'Phone',value:party?.phone}]} headers={['Type','Number','Date','Total','Balance / Unused','Status','Actions']} transactions={(ledger?.transactions??[]).map(t=>({id:t.id,cells:[t.type.replaceAll('_',' '),t.invoiceId?<Link href={'/invoices/'+t.invoiceId}>{t.number}</Link>:t.number,formatDate(t.date),formatCurrency(Number(t.amount)),formatCurrency(Number(t.balance)),<span key="status" className={Number(t.balance)?'reference-status-open':'reference-status-paid'}>{Number(t.balance)?'Unpaid':'Paid'}</span>,<div key="actions" className="reference-row-actions flex justify-end"><RowActions label={`Actions for ${transactionLabel(t)} ${t.number}`} actions={transactionActions(t)}/></div>]}))} onExport={exportTransactions} actions={<div className="flex gap-3"><button type="button" disabled={!hasWhatsApp} aria-label="WhatsApp selected party" onClick={()=>openWhatsApp('Hello '+(party?.name??''))} className="text-emerald-500"><MessageCircle size={18}/></button><button type="button" disabled={!party?.email} aria-label="Email selected party" onClick={openEmail}><Mail size={18}/></button></div>}/>
+      <div className="reference-legacy-master min-h-screen bg-slate-50/70 p-4 sm:p-6">
         {partyId ? (
           /* ================================================================ */
           /* DETAIL VIEW                                                      */
@@ -893,11 +1004,11 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
           party={editingParty}
           initialTab={formTab}
           onClose={() => setShowForm(false)}
-          onSaved={() => {
-            setShowForm(false);
+          onSaved={(_saved, keepOpen) => {
+            setShowForm(Boolean(keepOpen));
 
-            if (partyId) {
-              void loadLedger(partyId);
+            if (selectedId || partyId) {
+              void loadLedger(selectedId || partyId!);
             } else {
               void loadParties();
             }
@@ -917,6 +1028,35 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
           busy={deletingPartyId === confirmDeleteParty.id}
           onCancel={() => setConfirmDeleteParty(null)}
           onConfirm={() => void performDeleteParty()}
+        />
+      )}
+
+      {confirmTransaction && (
+        <ConfirmDialog
+          title={`${confirmTransaction.action === "cancel" ? "Cancel" : "Delete"} ${confirmTransaction.transaction.number}?`}
+          message={
+            confirmTransaction.transaction.type === "PAYMENT_IN"
+              ? `${formatCurrency(Math.abs(confirmTransaction.transaction.amount))} received from ${party?.name ?? "this party"} will be removed, and its invoice will show that much as due again. This can't be undone.`
+              : confirmTransaction.action === "cancel"
+                ? `This ${transactionLabel(confirmTransaction.transaction).toLowerCase()} will be cancelled and its stock and balances reversed. It stays in the register.`
+                : "This sale invoice will be removed. Linked stock is protected by the billing rules, so the server may refuse if it is still in use."
+          }
+          confirmLabel={confirmTransaction.action === "cancel" ? "Cancel it" : "Delete"}
+          busyLabel={confirmTransaction.action === "cancel" ? "Cancelling..." : "Deleting..."}
+          busy={transactionBusy}
+          onCancel={() => setConfirmTransaction(null)}
+          onConfirm={() => void runTransactionAction()}
+        />
+      )}
+
+      {editingPayment && (
+        <EditPaymentModal
+          payment={editingPayment}
+          onClose={() => setEditingPayment(null)}
+          onSaved={() => {
+            setEditingPayment(null);
+            void loadParties();
+          }}
         />
       )}
     </>
@@ -1477,6 +1617,22 @@ function MiniTotal({
 }
 
 /* ========================================================================== */
+/* TRANSACTION ACTIONS                                                        */
+/* ========================================================================== */
+
+function transactionLabel(transaction: PartyTransaction) {
+  return { OPENING_BALANCE: "Opening balance", SALE_INVOICE: "Sale invoice", PAYMENT_IN: "Payment", CREDIT_NOTE: "Credit note" }[transaction.type];
+}
+
+function transactionMessage(transaction: PartyTransaction) {
+  const amount = formatCurrency(Math.abs(Number(transaction.amount)));
+  const date = formatDate(transaction.date);
+  if (transaction.type === "PAYMENT_IN") return `We have received your payment of ${amount} on ${date} (${transaction.number}). Thank you!`;
+  if (transaction.type === "OPENING_BALANCE") return `Your opening balance with us is ${amount} as of ${date}.`;
+  return `${transactionLabel(transaction)} ${transaction.number} dated ${date}\nAmount: ${amount}`;
+}
+
+/* ========================================================================== */
 /* TRANSACTION ROW                                                            */
 /* ========================================================================== */
 
@@ -1508,7 +1664,7 @@ function TransactionRow({ transaction }: { transaction: PartyTransaction }) {
         >
           {isPayment ? <ArrowDownLeft size={10} /> : <ArrowUpRight size={10} />}
 
-          {isPayment ? "Payment In" : isOpening ? "Opening" : "Sale"}
+          {isPayment ? "Payment In" : isOpening ? "Opening" : transaction.type === "CREDIT_NOTE" ? "Credit note" : "Sale"}
         </span>
       </td>
 
@@ -1671,12 +1827,12 @@ function PartyFormModal({
 
   onClose: () => void;
 
-  onSaved: (party: Party) => void;
+  onSaved: (party: Party, keepOpen?: boolean) => void;
 }) {
   const { tinNumber: showTin } = useGeneralPreferences();
   const { openingBalance: showOpening, partyCategories: showCategories } = usePreferences("party");
 
-  const [tab, setTab] = useState(initialTab);
+  const [tab, setTab] = useState<"profile" | "credit" | "additional">(initialTab);
 
   const [form, setForm] = useState<PartyFormState>(() => createForm(party));
 
@@ -1790,7 +1946,9 @@ function PartyFormModal({
 
       (party ? toast.warning : toast.success)(party ? "Party updated" : "Party created", { description: data.name });
 
-      onSaved(data);
+      const saveAndNew = (event.nativeEvent as SubmitEvent).submitter?.getAttribute('value') === 'new';
+      onSaved(data, saveAndNew);
+      if (saveAndNew) { setForm(createForm(null)); setHasDifferentWhatsApp(false); void fetchNextCode(); }
     } catch (saveError: unknown) {
       const message = getApiError(saveError, "Could not save party.");
 
@@ -1802,654 +1960,15 @@ function PartyFormModal({
     }
   }
 
-  return (
-    <Modal
-      title={party ? "Edit Party" : "Add Party"}
-      onClose={onClose}
-      size="lg"
-      className="!max-w-3xl"
-    >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* ERROR */}
-
-        {error && (
-          <div
-            role="alert"
-            className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-[9px] font-semibold text-red-700"
-          >
-            {error}
-          </div>
-        )}
-
-        {/* CONTACT */}
-
-        <section className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-          <div className="mb-3">
-            <p className="text-[10px] font-black text-slate-900">
-              Party Details
-            </p>
-
-            <p className="mt-0.5 text-[8px] text-slate-400">
-              Basic contact and communication information
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormField
-              label="Party Code"
-              action={
-                <button
-                  type="button"
-                  disabled={generatingCode}
-                  onClick={() => void fetchNextCode()}
-                  className="text-[7px] font-bold text-blue-600 hover:underline disabled:pointer-events-none disabled:opacity-50"
-                >
-                  {generatingCode ? "Generating..." : "Generate"}
-                </button>
-              }
-            >
-              <input
-                id="party-code"
-                className="input-field"
-                value={form.code}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    code: event.target.value,
-                  })
-                }
-                placeholder="Auto-generated"
-              />
-            </FormField>
-
-            <FormField label="Party Name" required>
-              <input
-                id="party-name"
-                required
-                autoFocus
-                className="input-field"
-                value={form.name}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    name: event.target.value,
-                  })
-                }
-                placeholder="Business or customer name"
-              />
-            </FormField>
-
-            <FormField label="Default Billing Name">
-              <input
-                id="party-billing-name"
-                className="input-field"
-                value={form.billingName}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    billingName: event.target.value,
-                  })
-                }
-                placeholder="Same as party name if left blank"
-              />
-            </FormField>
-
-            {showCategories && (
-              <FormField label="Party Group">
-                <input
-                  id="party-group"
-                  list="party-group-options"
-                  className="input-field"
-                  value={form.group}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      group: event.target.value,
-                    })
-                  }
-                  placeholder="Select or enter a group"
-                />
-                <datalist id="party-group-options">
-                  <option value="General" />
-                  <option value="Distributor" />
-                  <option value="Wholesaler" />
-                  <option value="Retailer" />
-                  <option value="Supplier" />
-                  <option value="Manufacturer" />
-                </datalist>
-              </FormField>
-            )}
-
-            <FormField label="Phone Number">
-              <input
-                id="party-phone"
-                type="tel"
-                autoComplete="tel"
-                className="input-field"
-                value={form.phone}
-                onChange={(event) => {
-                  const phone = event.target.value;
-
-                  setForm({
-                    ...form,
-
-                    phone,
-
-                    whatsappNumber: hasDifferentWhatsApp
-                      ? form.whatsappNumber
-                      : phone,
-                  });
-                }}
-              />
-            </FormField>
-
-            <FormField label="WhatsApp Number">
-              <input
-                id="party-whatsapp"
-                type="tel"
-                autoComplete="tel"
-                disabled={!hasDifferentWhatsApp}
-                className="input-field disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                value={hasDifferentWhatsApp ? form.whatsappNumber : form.phone}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    whatsappNumber: event.target.value,
-                  })
-                }
-                placeholder={
-                  hasDifferentWhatsApp
-                    ? "Enter WhatsApp number"
-                    : "Same as phone"
-                }
-              />
-
-              <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[8px] font-semibold text-slate-500">
-                <input
-                  type="checkbox"
-                  checked={hasDifferentWhatsApp}
-                  onChange={(event) => {
-                    const different = event.target.checked;
-
-                    setHasDifferentWhatsApp(different);
-
-                    setForm({
-                      ...form,
-
-                      whatsappNumber: different
-                        ? form.whatsappNumber === form.phone
-                          ? ""
-                          : form.whatsappNumber
-                        : form.phone,
-                    });
-                  }}
-                />
-                WhatsApp number is different
-              </label>
-            </FormField>
-
-            <FormField label="Email">
-              <input
-                id="party-email"
-                type="email"
-                autoComplete="email"
-                className="input-field"
-                value={form.email}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    email: event.target.value,
-                  })
-                }
-              />
-            </FormField>
-          </div>
-
-          <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[8px] leading-4 text-emerald-800">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={form.whatsappOptIn}
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  whatsappOptIn: event.target.checked,
-                })
-              }
-            />
-
-            <span>
-              <strong>WhatsApp consent recorded.</strong> Required for automatic
-              invoice delivery.
-            </span>
-          </label>
-        </section>
-
-        {/* TABS */}
-
-        <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1">
-          <button
-            type="button"
-            onClick={() => setTab("profile")}
-            className={`
-              rounded-lg
-              px-3
-              py-2
-              text-[9px]
-              font-extrabold
-              transition-all
-
-              ${
-                tab === "profile"
-                  ? "bg-white text-blue-700 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }
-            `}
-          >
-            GST & Address
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setTab("credit")}
-            className={`
-              rounded-lg
-              px-3
-              py-2
-              text-[9px]
-              font-extrabold
-              transition-all
-
-              ${
-                tab === "credit"
-                  ? "bg-white text-blue-700 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              }
-            `}
-          >
-            Credit & Balance
-          </button>
-        </div>
-
-        {/* ================================================================ */}
-        {/* GST TAB                                                          */}
-        {/* ================================================================ */}
-
-        {tab === "profile" ? (
-          <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="GST Type">
-                <select
-                  id="gst-type"
-                  className="input-field"
-                  value={form.gstType}
-                  onChange={(event) => {
-                    const gstType = event.target
-                      .value as PartyFormState["gstType"];
-
-                    setForm({
-                      ...form,
-
-                      gstType,
-
-                      gstin: isRegisteredGstType(gstType) ? form.gstin : "",
-                    });
-                  }}
-                >
-                  {Object.entries(GST_TYPE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-
-              {registered ? (
-                <FormField label="GSTIN" required>
-                  <input
-                    id="party-gstin"
-                    required
-                    className="input-field uppercase"
-                    minLength={15}
-                    maxLength={15}
-                    value={form.gstin}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-
-                        gstin: event.target.value
-                          .replace(/\s/g, "")
-                          .toUpperCase(),
-                      })
-                    }
-                    placeholder="33ABCDE1234F1Z5"
-                  />
-                </FormField>
-              ) : (
-                <div className="flex min-h-10 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-[9px] text-slate-500">
-                  GSTIN is not applicable.
-                </div>
-              )}
-            </div>
-
-            {showTin && (
-              <FormField label="TIN number">
-                <input
-                  id="party-tin"
-                  className="input-field uppercase"
-                  maxLength={20}
-                  pattern="[A-Za-z0-9-]{4,20}"
-                  title="4-20 letters, numbers, or hyphens"
-                  value={form.tin}
-                  onChange={(event) =>
-                    setForm({ ...form, tin: event.target.value.replace(/\s/g, "").toUpperCase() })
-                  }
-                  placeholder="Tax identification number"
-                />
-              </FormField>
-            )}
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Billing Address">
-                <textarea
-                  id="billing-address"
-                  rows={3}
-                  className="input-field resize-none"
-                  value={form.billingAddr}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-
-                      billingAddr: event.target.value,
-                    })
-                  }
-                />
-              </FormField>
-
-              <FormField
-                label="Shipping Address"
-                action={
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        shippingAddr: form.billingAddr,
-                      })
-                    }
-                    className="text-[7px] font-bold text-blue-600 hover:underline"
-                  >
-                    Same as billing
-                  </button>
-                }
-              >
-                <textarea
-                  id="shipping-address"
-                  rows={3}
-                  className="input-field resize-none"
-                  value={form.shippingAddr}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-
-                      shippingAddr: event.target.value,
-                    })
-                  }
-                />
-              </FormField>
-            </div>
-          </section>
-        ) : (
-          /* ============================================================== */
-          /* CREDIT TAB                                                     */
-          /* ============================================================== */
-
-          <section className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {showOpening && (
-                <>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-[10px] font-black text-slate-900">
-                    Opening Balance
-                  </p>
-
-                  <p className="mt-0.5 text-[8px] text-slate-400">
-                    Starting balance for this party
-                  </p>
-
-                  <div className="mt-3 flex h-10 overflow-hidden rounded-xl border border-slate-200 bg-white transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100/60">
-                    <span className="flex shrink-0 items-center border-r border-slate-200 bg-slate-50 px-3 text-[8px] font-black text-slate-500">
-                      INR
-                    </span>
-
-                    <input
-                      id="opening-balance"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      inputMode="decimal"
-                      className="min-w-0 flex-1 bg-transparent px-3 text-[10px] font-bold text-slate-900 outline-none"
-                      value={form.openingBalance}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-
-                          openingBalance: event.target.value,
-                        })
-                      }
-                      placeholder="0.00"
-                    />
-                  </div>
-
-                  <p className="mb-2 mt-3 text-[7px] font-black uppercase tracking-wider text-slate-400">
-                    Balance Type
-                  </p>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm({
-                          ...form,
-                          openingBalanceType: "RECEIVABLE",
-                        })
-                      }
-                      className={`
-                        flex
-                        h-9
-                        items-center
-                        justify-center
-                        gap-1.5
-                        rounded-lg
-                        text-[8px]
-                        font-extrabold
-                        transition
-
-                        ${
-                          form.openingBalanceType === "RECEIVABLE"
-                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                            : "bg-slate-50 text-slate-500 hover:bg-slate-100"
-                        }
-                      `}
-                    >
-                      <ArrowDownLeft size={11} />
-                      To Receive
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm({
-                          ...form,
-                          openingBalanceType: "PAYABLE",
-                        })
-                      }
-                      className={`
-                        flex
-                        h-9
-                        items-center
-                        justify-center
-                        gap-1.5
-                        rounded-lg
-                        text-[8px]
-                        font-extrabold
-                        transition
-
-                        ${
-                          form.openingBalanceType === "PAYABLE"
-                            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                            : "bg-slate-50 text-slate-500 hover:bg-slate-100"
-                        }
-                      `}
-                    >
-                      <ArrowUpRight size={11} />
-                      To Pay
-                    </button>
-                  </div>
-                </div>
-                </>
-              )}
-
-              {/* CREDIT LIMIT */}
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-[10px] font-black text-slate-900">
-                  Credit Limit
-                </p>
-
-                <p className="mt-0.5 text-[8px] text-slate-400">
-                  Maximum unpaid balance allowed
-                </p>
-
-                <div className="mt-3 flex h-10 overflow-hidden rounded-xl border border-slate-200 bg-white transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100/60">
-                  <span className="flex shrink-0 items-center border-r border-slate-200 bg-slate-50 px-3 text-[8px] font-black text-slate-500">
-                    INR
-                  </span>
-
-                  <input
-                    id="credit-limit"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    className="min-w-0 flex-1 bg-transparent px-3 text-[10px] font-bold text-slate-900 outline-none"
-                    value={form.creditLimit}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-
-                        creditLimit: event.target.value,
-                      })
-                    }
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[8px] leading-4 text-blue-700">
-                  Enter 0 when no credit should be allowed.
-                </div>
-              </div>
-            </div>
-
-            {/* DELIVERY */}
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-[10px] font-black text-slate-800">
-                    Invoice Delivery
-                  </p>
-
-                  <p className="mt-0.5 text-[8px] text-slate-500">
-                    Manual sharing or automatic delivery after invoice creation.
-                  </p>
-                </div>
-
-                <select
-                  className="input-field h-9 sm:w-36"
-                  value={form.invoiceDeliveryMode}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-
-                      invoiceDeliveryMode: event.target
-                        .value as PartyFormState["invoiceDeliveryMode"],
-                    })
-                  }
-                >
-                  <option value="MANUAL">Manual</option>
-
-                  <option value="AUTOMATIC">Automatic</option>
-                </select>
-              </div>
-
-              {form.invoiceDeliveryMode === "AUTOMATIC" && (
-                <div className="mt-3 border-t border-slate-200 pt-3">
-                  <FormField label="Automatic Channel">
-                    <select
-                      className="input-field"
-                      value={form.invoiceDeliveryChannel}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-
-                          invoiceDeliveryChannel: event.target
-                            .value as PartyFormState["invoiceDeliveryChannel"],
-                        })
-                      }
-                    >
-                      <option value="BOTH">Email and WhatsApp</option>
-
-                      <option value="EMAIL">Email only</option>
-
-                      <option value="WHATSAPP">WhatsApp only</option>
-                    </select>
-                  </FormField>
-                </div>
-              )}
-            </div>
-
-            <FormField label="Credit Terms / Notes">
-              <textarea
-                id="party-notes"
-                rows={3}
-                className="input-field resize-none"
-                value={form.notes}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-
-                    notes: event.target.value,
-                  })
-                }
-                placeholder="Example: Net 30 days, preferred payment method..."
-              />
-            </FormField>
-          </section>
-        )}
-
-        {/* FOOTER */}
-
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-[9px] font-extrabold text-slate-600 transition hover:bg-slate-50"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex h-9 min-w-28 items-center justify-center rounded-lg bg-blue-600 px-4 text-[9px] font-extrabold text-white shadow-[0_6px_16px_rgba(37,99,235,0.18)] transition-all hover:-translate-y-0.5 hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-50"
-          >
-            {saving ? "Saving..." : party ? "Update Party" : "Save Party"}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
+  const partyInput=(key:keyof PartyFormState,label:string,type='text')=><FormField label={label}><input className="input-field" type={type} required={key==='name'} value={String(form[key])} onChange={e=>setForm({...form,[key]:e.target.value})} placeholder={label} autoFocus={key==='name'} /></FormField>;
+  return <Modal title={party?'Edit Party':'Add Party'} onClose={onClose} size="xl" className="reference-party-form !max-w-[1035px]"><form onSubmit={handleSubmit}>
+  {error&&<p role="alert" className="my-3 text-red-600">{error}</p>}
+  <div className="reference-party-basics">{partyInput('name','Party Name *')}<FormField label="GSTIN"><input className="input-field" value={form.gstin} maxLength={15} onChange={e=>setForm({...form,gstin:e.target.value.toUpperCase(),gstType:e.target.value?'REGISTERED_REGULAR':'UNREGISTERED'})} placeholder="GSTIN"/></FormField>{partyInput('phone','Phone Number','tel')}{showCategories&&partyInput('group','Party Group')}</div>
+  <div className="reference-party-tabs" role="tablist" aria-label="Party details"><button type="button" role="tab" aria-selected={tab==='profile'} onClick={()=>setTab('profile')}>GST & Address</button><button type="button" role="tab" aria-selected={tab==='credit'} onClick={()=>setTab('credit')}>Credit & Balance <small>New</small></button><button type="button" role="tab" aria-selected={tab==='additional'} onClick={()=>setTab('additional')}>Additional Fields</button></div>
+  {tab==='profile'&&<div className="reference-party-address"><div><FormField label="GST Type"><select className="input-field" value={form.gstType} onChange={e=>setForm({...form,gstType:e.target.value as PartyFormState['gstType']})}><option value="UNREGISTERED">Unregistered / Consumer</option><option value="REGISTERED_REGULAR">Registered Business - Regular</option><option value="REGISTERED_COMPOSITION">Registered Business - Composition</option><option value="CONSUMER">Consumer</option><option value="OVERSEAS">Overseas</option><option value="SEZ">Special Economic Zone</option></select></FormField>{partyInput('email','Email ID','email')}{showTin&&partyInput('tin','TIN')}</div><FormField label="Billing Address"><textarea className="input-field" rows={4} value={form.billingAddr} onChange={e=>setForm({...form,billingAddr:e.target.value})} placeholder="Billing Address"/></FormField><FormField label="Shipping Address"><textarea className="input-field" rows={4} value={form.shippingAddr} onChange={e=>setForm({...form,shippingAddr:e.target.value})} placeholder="Add Shipping Address"/><button type="button" className="mt-2 text-blue-600 text-xs" onClick={()=>setForm({...form,shippingAddr:form.billingAddr})}>Use billing address</button></FormField></div>}
+  {tab==='credit'&&<div className="reference-party-credit">{showOpening&&<><FormField label="Opening Balance"><input className="input-field" type="number" min="0" step="0.01" value={form.openingBalance} onChange={e=>setForm({...form,openingBalance:e.target.value})}/></FormField><FormField label="Balance Type"><select className="input-field" value={form.openingBalanceType} onChange={e=>setForm({...form,openingBalanceType:e.target.value as PartyFormState['openingBalanceType']})}><option value="RECEIVABLE">To Receive</option><option value="PAYABLE">To Pay</option></select></FormField></>}<FormField label="Credit Limit"><input className="input-field" type="number" min="0" step="0.01" placeholder="No Limit" value={form.creditLimit} onChange={e=>setForm({...form,creditLimit:e.target.value})}/></FormField><p className="text-xs text-slate-500">Use 0 for no credit limit.</p></div>}
+  {tab==='additional'&&<div className="reference-party-additional">{partyInput('code','Party Code')}{partyInput('billingName','Billing Name')}<FormField label="WhatsApp Number"><input className="input-field" type="tel" value={hasDifferentWhatsApp?form.whatsappNumber:form.phone} onChange={e=>{setHasDifferentWhatsApp(true);setForm({...form,whatsappNumber:e.target.value});}}/></FormField><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.whatsappOptIn} onChange={e=>setForm({...form,whatsappOptIn:e.target.checked})}/>WhatsApp delivery consent</label><FormField label="Invoice Delivery"><select className="input-field" value={form.invoiceDeliveryMode} onChange={e=>setForm({...form,invoiceDeliveryMode:e.target.value as PartyFormState['invoiceDeliveryMode']})}><option value="MANUAL">Manual</option><option value="AUTOMATIC">Automatic</option></select></FormField><FormField label="Delivery Channel"><select className="input-field" value={form.invoiceDeliveryChannel} onChange={e=>setForm({...form,invoiceDeliveryChannel:e.target.value as PartyFormState['invoiceDeliveryChannel']})}><option value="BOTH">Email & WhatsApp</option><option value="EMAIL">Email</option><option value="WHATSAPP">WhatsApp</option></select></FormField><FormField label="Notes"><textarea className="input-field" value={form.notes} rows={3} onChange={e=>setForm({...form,notes:e.target.value})}/></FormField></div>}
+  <footer className="reference-form-footer"><button type="button" disabled={saving} onClick={onClose} className="btn-secondary">Cancel</button><button type="submit" value="new" disabled={saving} className="btn-secondary">Save & New</button><button type="submit" disabled={saving} className="btn-primary min-w-28">{saving?'Saving...':'Save'}</button></footer></form></Modal>;
 }
 
 /* ========================================================================== */

@@ -278,7 +278,7 @@ export default function CommandMenu({ compact = false }: { compact?: boolean }) 
           <X aria-hidden="true" size={14} />
         </button>
       ) : (
-        <kbd aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-400 md:block">Ctrl K</kbd>
+        <kbd aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-400 md:block">Ctrl F</kbd>
       )}
       {compact && (
         <button type="button" onClick={closeMenu} aria-label="Cancel search" title="Cancel search" className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-400">

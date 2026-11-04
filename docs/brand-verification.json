@@ -1,0 +1,455 @@
+{
+  "date": "2026-11-02",
+  "brandReference": "https://www.imarrt.com/",
+  "build": "passed, including lint and TypeScript (57 routes)",
+  "unitTests": {
+    "passed": 11,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "route": "/purchases/orders",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/parties/10000000-0000-4000-8000-000000000005",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/items/10000000-0000-4000-8000-000000000006",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/invoices/10000000-0000-4000-8000-000000000007",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/documents/10000000-0000-4000-8000-000000000012",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/dashboard",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/parties",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/items",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/invoices",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/invoices/new",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/documents/new",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/sales",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/sales/payment-in",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/sales/proforma/new",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/sales/quotations/new",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/sales/orders/new",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/sales/delivery-challans/new",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/sales/returns/new",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/purchases",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/purchases/bills/new",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/purchases/returns/new",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/purchases/payment-out",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/purchases/expenses",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/production",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/inventory",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/inventory/godowns",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/inventory/adjustments",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/cash-banks",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/cash-banks/cash",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/cash-banks/loans",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/cash-banks/cheques",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/sales/other-income",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/reports",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/profile",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/settings",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/settings/general",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/settings/party",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/settings/item",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/settings/transaction",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/settings/taxes-gst",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/settings/transaction-message",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/settings/print",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/team",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/security",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/businesses",
+      "check": "visible back button",
+      "passed": true
+    },
+    {
+      "route": "/dashboard",
+      "width": 1920,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/settings/general",
+      "width": 1920,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/invoices/new",
+      "width": 1920,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/parties",
+      "width": 1920,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/dashboard",
+      "width": 1440,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/settings/general",
+      "width": 1440,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/invoices/new",
+      "width": 1440,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/parties",
+      "width": 1440,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/dashboard",
+      "width": 1280,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/settings/general",
+      "width": 1280,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/invoices/new",
+      "width": 1280,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/parties",
+      "width": 1280,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/dashboard",
+      "width": 1024,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/settings/general",
+      "width": 1024,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/invoices/new",
+      "width": 1024,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/parties",
+      "width": 1024,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/dashboard",
+      "width": 768,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/settings/general",
+      "width": 768,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/invoices/new",
+      "width": 768,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/parties",
+      "width": 768,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/dashboard",
+      "width": 430,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/settings/general",
+      "width": 430,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/invoices/new",
+      "width": 430,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/parties",
+      "width": 430,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/dashboard",
+      "width": 390,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/settings/general",
+      "width": 390,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/invoices/new",
+      "width": 390,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/parties",
+      "width": 390,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/dashboard",
+      "width": 360,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/settings/general",
+      "width": 360,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/invoices/new",
+      "width": 360,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "route": "/parties",
+      "width": 360,
+      "check": "responsive layout and chart controls",
+      "passed": true
+    },
+    {
+      "width": 1440,
+      "check": "settings symbol and return navigation",
+      "passed": true
+    },
+    {
+      "width": 390,
+      "check": "settings symbol and return navigation",
+      "passed": true
+    },
+    {
+      "check": "repeated direct-link settings back fallback",
+      "passed": true
+    },
+    {
+      "check": "overdue dashboard shortcut filter",
+      "passed": true
+    },
+    {
+      "check": "keyboard chart exploration",
+      "passed": true
+    }
+  ],
+  "requestCount": 874,
+  "missing": [],
+  "mutations": [],
+  "errors": [],
+  "databaseAccess": false
+}

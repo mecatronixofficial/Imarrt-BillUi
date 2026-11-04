@@ -31,6 +31,11 @@ import {
 } from "lucide-react";
 
 import StatusBadge from "@/components/StatusBadge";
+import RowActions from "@/components/RowActions";
+import { toast } from "@/components/ToastProvider";
+import { useTransactionActions } from "@/components/transactionActions";
+import DocumentConversionDialog from "@/components/documents/DocumentConversionDialog";
+import { conversionOptions, conversionReversal, type ConversionRecord } from "@/lib/document-conversion";
 
 import {
   EmptyState,
@@ -39,6 +44,7 @@ import {
 } from "@/components/ContentState";
 
 import {
+  api,
   getAllPages,
   getApiError,
 } from "@/lib/api";
@@ -81,6 +87,7 @@ type SortOption =
 
 const TYPE_ICONS = {
   QUOTATION: FileText,
+  SALES_ORDER: FileText,
   PROFORMA_INVOICE: ReceiptText,
   PURCHASE_INVOICE: ShoppingCart,
   DELIVERY_CHALLAN: Truck,
@@ -160,6 +167,24 @@ export default function DocumentsPage() {
   useEffect(() => {
     void loadDocuments();
   }, [loadDocuments]);
+
+  const { actionsFor, dialogs } = useTransactionActions(() => void loadDocuments());
+  const [workflow, setWorkflow] = useState<{ record: ConversionRecord; action: "convert" | "reverse" } | null>(null);
+
+  async function openPdf(document: BusinessDocument) {
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) return toast.error("Allow pop-ups to view this PDF.");
+    tab.opener = null;
+    try {
+      const { data } = await api.get<Blob>(`/documents/${document.id}/pdf`, { responseType: "blob" });
+      const url = URL.createObjectURL(data);
+      tab.location.href = url;
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (pdfError) {
+      tab.close();
+      toast.error(getApiError(pdfError, "Could not open PDF."));
+    }
+  }
 
   /* ------------------------------------------------------------------------ */
   /* Close Create Menu                                                        */
@@ -389,8 +414,10 @@ export default function DocumentsPage() {
       {/* PAGE HEADER                                                      */}
       {/* ================================================================ */}
 
-      <section className="relative mb-5 overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-cyan-50 shadow-[0_10px_35px_rgba(15,23,42,0.05)]">
-        <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-blue-200/40 blur-3xl" />
+      <section className="relative z-20 mb-5 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-cyan-50 shadow-[0_10px_35px_rgba(15,23,42,0.05)]">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+          <div className="absolute -right-20 -top-24 h-56 w-56 rounded-full bg-blue-200/40 blur-3xl" />
+        </div>
 
         <div className="relative flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -446,6 +473,7 @@ export default function DocumentsPage() {
                 hover:shadow-[0_12px_25px_rgba(37,99,235,0.28)]
               "
               aria-haspopup="menu"
+              aria-controls="new-document-menu"
               aria-expanded={
                 showCreateMenu
               }
@@ -456,12 +484,15 @@ export default function DocumentsPage() {
               />
 
               New Document
+              <ChevronDown aria-hidden="true" size={14} />
             </button>
 
             {showCreateMenu && (
               <div
+                id="new-document-menu"
                 role="menu"
-                className="absolute right-0 top-full z-30 mt-2 w-[min(19rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_50px_rgba(15,23,42,0.15)]"
+                aria-label="New document types"
+                className="absolute right-0 top-full z-30 mt-2 max-h-[min(30rem,calc(100dvh-12rem))] w-[min(19rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_20px_50px_rgba(15,23,42,0.15)]"
               >
                 <div className="border-b border-slate-100 px-2.5 pb-2 pt-1">
                   <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">
@@ -484,6 +515,7 @@ export default function DocumentsPage() {
 
                       return (
                         <Link
+                          role="menuitem"
                           key={
                             documentType
                           }
@@ -701,7 +733,8 @@ export default function DocumentsPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+        {/* Flex-grow fills the last row, so an odd category count leaves no blank slots. */}
+        <div className="flex flex-wrap gap-3">
           {DOCUMENT_TYPES.map(
             (documentType) => {
               const config =
@@ -742,7 +775,11 @@ export default function DocumentsPage() {
                     selected
                   }
                   className={`
-                    group relative overflow-hidden
+                    group relative min-w-0 flex-1
+                    basis-[calc(50%-0.375rem)]
+                    overflow-hidden
+                    sm:basis-[calc(25%-0.75rem)]
+                    xl:basis-0
                     rounded-2xl border bg-white
                     p-3.5 text-left
                     shadow-[0_4px_15px_rgba(15,23,42,0.04)]
@@ -1206,7 +1243,7 @@ export default function DocumentsPage() {
                     Total
                   </th>
 
-                  <th className="w-[4%]" />
+                  <th className="w-[48px]"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
 
@@ -1354,28 +1391,15 @@ export default function DocumentsPage() {
                         {/* Open */}
 
                         <td className="px-1 text-center">
-                          <Link
-                            href={`/documents/${businessDocument.id}`}
-                            aria-label={`Open ${businessDocument.documentNumber}`}
-                            className="
-                              inline-flex
-                              h-7
-                              w-7
-                              items-center
-                              justify-center
-                              rounded-lg
-                              text-slate-300
-                              transition-all
-                              duration-300
-                              group-hover:translate-x-0.5
-                              group-hover:bg-blue-600
-                              group-hover:text-white
-                            "
-                          >
-                            <ArrowUpRight
-                              size={12}
-                            />
-                          </Link>
+                          <RowActions
+                            label={`Actions for ${businessDocument.documentNumber}`}
+                            actions={actionsFor(businessDocument, {
+                              onPrint: () => void openPdf(businessDocument),
+                              onConvert: conversionOptions(businessDocument).length ? () => setWorkflow({ record: businessDocument, action: "convert" }) : undefined,
+                              onReverse: conversionReversal(businessDocument) ? () => setWorkflow({ record: businessDocument, action: "reverse" }) : undefined,
+                              reverseLabel: conversionReversal(businessDocument)?.label,
+                            })}
+                          />
                         </td>
                       </tr>
                     );
@@ -1410,6 +1434,16 @@ export default function DocumentsPage() {
             </div>
           )}
       </section>
+
+      {workflow && (
+        <DocumentConversionDialog
+          record={workflow.record}
+          action={workflow.action}
+          onClose={() => setWorkflow(null)}
+          onUpdated={() => void loadDocuments()}
+        />
+      )}
+      {dialogs}
     </>
   );
 }

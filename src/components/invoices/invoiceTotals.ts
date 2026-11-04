@@ -1,38 +1,21 @@
-export type InvoiceDraftLine = { key: string; itemId?: string; description: string; quantity: number; unitPrice: number; taxRate: number };
-
+import type { TrackingFields } from '@/lib/tracking';
+import { computeBilling, scaled, unscaled } from '@/lib/billing';
+export type InvoiceDraftLine = TrackingFields & { key: string; itemId?: string; unit?: string; hsnSac?: string; description: string; quantity: number; unitPrice: number; taxRate: number; taxInclusive?: boolean };
 export type TotalsOptions = { roundOff?: boolean; roundTax?: boolean; noTax?: boolean };
-
-/** Company rules that change how totals are worked out; they match the server's computeInvoiceTotals. */
 export function totalsOptionsFor(transaction: { autoRoundOff: boolean }, taxes: { roundOffTax: boolean; compositionScheme: boolean }, sales = true): TotalsOptions {
   return { roundOff: transaction.autoRoundOff, roundTax: taxes.roundOffTax, noTax: sales && taxes.compositionScheme };
 }
-
-const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
-
-// Match the API's per-line rounding and invoice-level discount calculation.
-export function calculateInvoice(drafts: InvoiceDraftLine[] = [], discount: number = 0, gstRegistered: boolean = false, options: TotalsOptions = {}) {
-  const safeDrafts = Array.isArray(drafts) ? drafts : [];
-  const lines = safeDrafts.map((line) => {
-    const active = Boolean((line?.description || '').trim() || line?.itemId || (line?.unitPrice ?? 0) !== 0);
-    const quantity = Number.isFinite(line?.quantity) ? (line.quantity ?? 0) : 0;
-    const unitPrice = Number.isFinite(line?.unitPrice) ? (line.unitPrice ?? 0) : 0;
-    const taxRate = Number.isFinite(line?.taxRate) ? (line.taxRate ?? 0) : 0;
-    const subtotal = active ? round2(quantity * unitPrice) : 0;
-    const tax = round2(subtotal * (gstRegistered && !options.noTax ? taxRate : 0) / 100);
-    return { subtotal, tax, total: round2(subtotal + tax), active };
-  });
-
-  const subtotal = round2(lines.reduce((sum, line) => sum + line.subtotal, 0));
-  const summedTax = round2(lines.reduce((sum, line) => sum + line.tax, 0));
-  const tax = options.roundTax ? Math.round(summedTax) : summedTax;
-  const validDiscount = Number.isFinite(discount) && discount > 0 ? discount : 0;
-
-  return {
-    lines,
-    subtotal,
-    tax,
-    total: options.roundOff ? Math.round(Math.max(0, round2(subtotal + tax - validDiscount))) : round2(Math.max(0, subtotal + tax - validDiscount)),
-    count: lines.filter(({ active }) => active).length,
-    quantity: round2(safeDrafts.reduce((sum, line, index) => sum + (lines[index]?.active ? (Number.isFinite(line?.quantity) ? line.quantity : 0) : 0), 0)),
+export function calculateInvoice(drafts: InvoiceDraftLine[] = [], discount = 0, gstRegistered = false, options: TotalsOptions = {}) {
+  const safe = (Array.isArray(drafts) ? drafts : []).map((line) => ({ ...line,
+    active: Boolean(line.description?.trim() || line.itemId || line.unitPrice),
+    quantity: Number.isFinite(line.quantity) ? line.quantity : 0,
+    unitPrice: Number.isFinite(line.unitPrice) ? line.unitPrice : 0,
+    taxRate: Number.isFinite(line.taxRate) && gstRegistered ? line.taxRate : 0,
+  }));
+  const result = computeBilling(safe.map((line) => ({ ...line, quantity: line.active ? line.quantity : 0 })), Number.isFinite(discount) ? discount : 0, options);
+  return { ...result, subtotal: result.subTotal, tax: result.taxTotal, total: result.grandTotal,
+    lines: result.lines.map((line, i) => ({ subtotal: line.lineSubTotal, tax: line.lineTax, total: line.lineTotal, active: safe[i].active })),
+    count: safe.filter((line) => line.active).length,
+    quantity: unscaled(safe.reduce((sum, line) => sum + (line.active ? scaled(line.quantity, 3) : 0n), 0n), 3),
   };
 }

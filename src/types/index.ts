@@ -1,6 +1,8 @@
+import type { TrackingFields } from '@/lib/tracking';
 export type Role = 'SUPER_ADMIN' | 'OWNER' | 'ACCOUNTANT' | 'STAFF';
 
 export interface Business {
+  preferences?: unknown;
   id: string;
   name: string;
   legalName?: string;
@@ -71,7 +73,7 @@ export interface Party {
 
 export interface PartyTransaction {
   id: string;
-  type: 'OPENING_BALANCE' | 'SALE_INVOICE' | 'PAYMENT_IN';
+  type: 'OPENING_BALANCE' | 'SALE_INVOICE' | 'PAYMENT_IN' | 'CREDIT_NOTE';
   number: string;
   date: string;
   amount: number;
@@ -93,10 +95,15 @@ export interface PartyLedger {
   transactions: PartyTransaction[];
 }
 
-export interface Item {
+export interface Item extends TrackingFields {
   id: string;
   name: string;
   sku?: string;
+  hsnSac?: string;
+  purchasePrice?: string | number;
+  salePriceTaxMode?: 'WITH_TAX' | 'WITHOUT_TAX';
+  purchasePriceTaxMode?: 'WITH_TAX' | 'WITHOUT_TAX';
+  lowStockThreshold?: string | number;
   description?: string;
   category?: string | null;
   wholesalePrice?: string | number | null;
@@ -108,7 +115,10 @@ export interface Item {
 
 export type InvoiceStatus = 'DRAFT' | 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
 
-export interface InvoiceLineItem {
+export interface InvoiceLineItem extends TrackingFields {
+  unit?: string;
+  hsnSac?: string;
+  taxInclusive?: boolean;
     id: string;
     itemId?: string;
   description: string;
@@ -128,6 +138,12 @@ export interface InvoiceAttachment {
 }
 
 export interface Invoice {
+  conversionSource?: Pick<BusinessDocument, 'id' | 'type' | 'documentNumber'> | null;
+  placeOfSupply?: string | null;
+  notes?: string;
+  warehouseId?: string;
+  creditTotal?: number;
+  balanceDue?: number;
   id: string;
   branchId?: string;
   branch?: Branch;
@@ -156,12 +172,14 @@ export interface PaymentRecord {
   amount: string;
   method: string;
   reference?: string;
+  accountId?: string | null;
   paidAt: string;
   createdAt: string;
 }
 
 export interface PaymentInRecord extends PaymentRecord {
-  invoice: Pick<Invoice, 'id' | 'invoiceNumber' | 'grandTotal' | 'amountPaid'> & { party: Pick<Party, 'id' | 'name'> };
+  invoice: Pick<Invoice, 'id' | 'invoiceNumber' | 'grandTotal' | 'amountPaid' | 'creditTotal' | 'balanceDue'> & { party: Pick<Party, 'id' | 'name' | 'phone' | 'email'> };
+  account?: { id: string; bankName: string } | null;
 }
 
 export interface ProductionPayment {
@@ -193,6 +211,7 @@ export interface InvoiceDelivery {
 
 export type BusinessDocumentType =
   | 'QUOTATION'
+  | 'SALES_ORDER'
   | 'PROFORMA_INVOICE'
   | 'PURCHASE_INVOICE'
   | 'DELIVERY_CHALLAN'
@@ -201,7 +220,8 @@ export type BusinessDocumentType =
 
 export type BusinessDocumentStatus = 'DRAFT' | 'ISSUED' | 'ACCEPTED' | 'REJECTED' | 'CONVERTED' | 'CANCELLED';
 
-export interface BusinessDocumentItem {
+export interface BusinessDocumentItem extends TrackingFields {
+  taxInclusive?: boolean;
   id: string;
   itemId?: string;
   description: string;
@@ -214,6 +234,9 @@ export interface BusinessDocumentItem {
 }
 
 export interface BusinessDocument {
+  returnStock?: boolean;
+  debitTotal?: number;
+  balanceDue?: number;
   id: string;
   businessId: string;
   branchId?: string;
@@ -229,6 +252,7 @@ export interface BusinessDocument {
   referenceInvoice?: Pick<Invoice, 'id' | 'invoiceNumber' | 'grandTotal' | 'issueDate'>;
   sourceDocumentId?: string;
   sourceDocument?: Pick<BusinessDocument, 'id' | 'documentNumber' | 'type'>;
+  conversionTarget?: { id: string; type: BusinessDocumentType | 'INVOICE'; documentNumber?: string } | null;
   convertedInvoiceId?: string;
   issueDate: string;
   validUntil?: string;
@@ -254,7 +278,47 @@ export interface BusinessDocument {
   attachments?: BusinessDocumentAttachment[];
   payments?: PurchasePayment[];
   business?: Business;
-  createdBy?: Pick<User, 'id' | 'name' | 'email'>;
+  createdBy?: Pick<User, 'id' | 'name'> & { email?: string };
+  warehouseId?: string | null;
+  warehouse?: { id: string; name: string } | null;
+  billingName?: string | null;
+  deliveryLocation?: string | null;
+  lrNumber?: string | null;
+  noOfBags?: number | null;
+  /** List only: the latest payment's bank account or method, else the method chosen on the bill. */
+  paymentType?: string | null;
+}
+
+/** One supplier payment; its money (and any discount) is split across purchase bills. */
+export interface PaymentOutReceipt {
+  id: string;
+  receiptNumber: string;
+  supplierId?: string | null;
+  supplier?: { id: string; name: string; phone?: string | null; email?: string | null } | null;
+  paidAt: string;
+  reference?: string | null;
+  description?: string | null;
+  paid: number;
+  discount: number;
+  total: number;
+  paymentTypes: string[];
+  splits: Array<{ method: string; accountId?: string | null; bankName?: string | null; amount: number; reference?: string | null }>;
+  bills: Array<{ id: string; documentNumber: string; referenceNumber?: string | null; settled: number }>;
+  attachmentCount: number;
+  attachments?: Array<{ id: string; kind: 'IMAGE' | 'DOCUMENT'; fileName: string; mimeType: string; size: number; createdAt: string }>;
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  createdAt: string;
+}
+
+export interface OpenPurchaseBill {
+  id: string;
+  documentNumber: string;
+  referenceNumber?: string | null;
+  issueDate: string;
+  dueDate?: string | null;
+  grandTotal: number;
+  outstanding: number;
 }
 
 export interface PurchasePayment {
@@ -266,6 +330,9 @@ export interface PurchasePayment {
   notes?: string;
   paidAt: string;
   createdAt: string;
+  accountId?: string | null;
+  voidedAt?: string | null;
+  voidReason?: string | null;
   document: Pick<BusinessDocument, 'id' | 'documentNumber' | 'referenceNumber' | 'grandTotal' | 'paidAmount'> & {
     supplier?: Pick<Supplier, 'id' | 'name'>;
   };
@@ -386,9 +453,27 @@ export interface ProductionOrder {
 }
 
 export type PurchaseOrderStatus = 'DRAFT' | 'SENT' | 'CONFIRMED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED' | 'CLOSED';
-export interface PurchaseOrderItem { id: string; itemId?: string; description: string; quantity: string; unit: string; unitPrice: string; taxRate: string; lineTotal: string; }
+export interface PurchaseOrderItem extends TrackingFields { id: string; itemId?: string | null; description: string; quantity: string; unit: string; unitPrice: string; taxRate: string; lineTotal: string; taxInclusive?: boolean; }
 export interface PurchaseOrder {
+  branchId?: string;
+  convertedDocumentId?: string;
   id: string; orderNumber: string; orderDate: string; expectedDeliveryDate?: string; deliveryLocation?: string;
-  paymentTerms?: string; notes?: string; status: PurchaseOrderStatus; subTotal: string; taxTotal: string;
+  paymentTerms?: string; notes?: string; status: PurchaseOrderStatus; subTotal: string; taxTotal: string; createdAt?: string;
+  convertedDocument?: { id: string; documentNumber: string; status: BusinessDocumentStatus } | null;
+  warehouseId?: string | null; placeOfSupply?: string | null; billingName?: string | null; phone?: string | null;
+  transportName?: string | null; lrNumber?: string | null; eWayBillNumber?: string | null; noOfBags?: number | null;
+  paymentMethod?: string | null; accountId?: string | null; paymentReference?: string | null; roundOff?: boolean;
+  attachments?: BusinessDocumentAttachment[];
   discount: string; grandTotal: string; supplier: Supplier; items: PurchaseOrderItem[];
+}
+
+export interface Expense {
+  reference?: string; id: string; description: string; category: string; expenseDate: string; amount: string; taxAmount: string; total: string; method: string; status: string; accountId?: string; notes?: string | null; account?: { id: string; bankName: string } | null; }
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  /** Sum of active (not cancelled) expenses. */
+  total: number;
+  count: number;
 }

@@ -23,7 +23,7 @@ export function SettingsCard({ title, description, icon, children }: { title: st
 
 export function ToggleRow({ label, description, checked, onChange }: { label: string; description?: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+    <label className="reference-toggle flex cursor-pointer items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
       <span className="min-w-0">
         <span className="block text-sm font-semibold text-slate-800">{label}</span>
         {description && <span className="mt-0.5 block text-xs leading-5 text-slate-500">{description}</span>}

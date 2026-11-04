@@ -1,0 +1,2 @@
+export type TrackingFields={brand?:string;serialNumbers?:string;count?:number;lotNo?:string;barcode?:string;mrp?:number;size?:string};
+export function trackingFields(value:TrackingFields):TrackingFields{return {brand:value.brand,serialNumbers:value.serialNumbers,count:value.count==null?undefined:Number(value.count),lotNo:value.lotNo,barcode:value.barcode,mrp:value.mrp==null?undefined:Number(value.mrp),size:value.size};}

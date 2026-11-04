@@ -21,6 +21,19 @@ const PAGE_CACHE_TTL_MS = 15_000;
 const pageCache = new Map<string, { expiresAt: number; response: AxiosResponse<unknown[]> }>();
 const pageRequests = new Map<string, Promise<AxiosResponse<unknown[]>>>();
 let pageCacheVersion = 0;
+const recordBranches = new Map<string,string>();
+function operationalRecord(url:string) { return url.match(/^\/(invoices|documents|production-orders|purchase-orders|expenses)\/([^/?]+)(?:[/?]|$)/); }
+function rememberRecordBranches(response:AxiosResponse) {
+  if(response.config.method?.toLowerCase()!=='get')return;
+  const resource=response.config.url?.match(/^\/(invoices|documents|production-orders|purchase-orders|expenses)(?:[/?]|$)/)?.[1];
+  const businessId=AxiosHeaders.from(response.config.headers).get('X-Business-Id')?.toString();
+  if(!resource||!businessId)return;
+  for(const record of Array.isArray(response.data)?response.data:[response.data]) {
+    if(!record || typeof record!=='object' || typeof record.id!=='string' || typeof record.branchId!=='string' || record.businessId && record.businessId!==businessId)continue;
+    recordBranches.set(businessId+':'+resource+':'+record.id,record.branchId);
+    if(recordBranches.size>10000)recordBranches.delete(recordBranches.keys().next().value!);
+  }
+}
 
 /**
  * Parties (including suppliers) and items are company-wide master data. They
@@ -85,7 +98,7 @@ export async function getAllPages<T>(
       }
       return response;
     })
-    .finally(() => pageRequests.delete(key));
+    .finally(() => { if (pageRequests.get(key) === request) pageRequests.delete(key); });
 
   pageRequests.set(key, request as Promise<AxiosResponse<unknown[]>>);
   return request;
@@ -100,12 +113,17 @@ async function collectAllPages<T>(
   let offset = 0;
   let firstResponse: AxiosResponse<T[]> | undefined;
   const records: T[] = [];
+  let previousPage: string | undefined;
 
   do {
     const response = await client.get<T[]>(url, {
       ...config,
       params: { ...config.params, limit, offset },
     });
+    if (!Array.isArray(response.data)) throw new Error('The server returned an invalid paginated response');
+    const fingerprint = JSON.stringify(response.data);
+    if (response.data.length && fingerprint === previousPage) throw new Error('The server did not advance to the next page');
+    previousPage = fingerprint;
     firstResponse ??= response;
     records.push(...response.data);
     offset += response.data.length;
@@ -129,8 +147,14 @@ const sessionClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-type RetryableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+type RetryableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean; _authGeneration?: number };
 
+const SESSION_CACHE_TTL_MS = 30_000;
+let sessionUser: SessionUser | null = null;
+let sessionValidUntil = 0;
+let sessionVersion = 0;
+let authGeneration = 0;
+let redirectingToLogin = false;
 let refreshRequest: Promise<void> | null = null;
 let sessionRequest: Promise<SessionUser | null> | null = null;
 let businessRequest: Promise<string | null> | null = null;
@@ -182,6 +206,8 @@ api.interceptors.request.use(async (config) => {
       throw new axios.Cancel('Authentication required');
     }
   }
+
+  (config as RetryableRequestConfig)._authGeneration = authGeneration;
 
   const isUnscoped = url.startsWith('/auth/') || url === '/businesses' || url.startsWith('/businesses/');
   if (isUnscoped) return config;
@@ -238,7 +264,9 @@ api.interceptors.request.use(async (config) => {
     return config;
   }
 
-  let branchId = config.headers.get('X-Branch-Id')?.toString() || getActiveBranchId(businessId);
+  const record = operationalRecord(url);
+  const recordBranch = record && config.method?.toLowerCase() !== 'get' ? recordBranches.get(businessId+':'+record[1]+':'+record[2]) : undefined;
+  let branchId = config.headers.get('X-Branch-Id')?.toString() || recordBranch || getActiveBranchId(businessId);
   if (!branchId || (requestedBusinessId && branchId === 'all')) {
     const resolveBranch = () => collectAllPages<Branch>(refreshClient, '/branches', {
       headers: { 'X-Business-Id': businessId },
@@ -263,7 +291,7 @@ api.interceptors.request.use(async (config) => {
     throw new axios.Cancel('Create a branch before continuing');
   }
 
-  const isOperational = ['/invoices', '/documents', '/production-orders'].some(
+  const isOperational = ['/invoices', '/documents', '/production-orders', '/expenses', '/reports'].some(
     (prefix) => url === prefix || url.startsWith(`${prefix}/`),
   ) || url === '/purchase-orders' || url.startsWith('/purchase-orders/');
   // Operational registers belong to the selected company. The concrete branch
@@ -280,6 +308,7 @@ api.interceptors.request.use(async (config) => {
 
 api.interceptors.response.use(
   (response) => {
+    rememberRecordBranches(response);
     if (response.config.method && response.config.method.toLowerCase() !== 'get') clearApiCache();
     return response;
   },
@@ -288,17 +317,31 @@ api.interceptors.response.use(
     const isAuthMutation =
       config?.url?.includes('/auth/login') ||
       config?.url?.includes('/auth/register') ||
-      config?.url?.includes('/auth/refresh');
+      config?.url?.includes('/auth/refresh') ||
+      config?.url?.includes('/auth/forgot-password') ||
+      config?.url?.includes('/auth/reset-password') ||
+      config?.url?.includes('/auth/logout');
 
-    if (error.response?.status === 401 && config && !config._retry && !isAuthMutation) {
+    if (error.response?.status === 401 && config && !isAuthMutation) {
+      if (config._retry) {
+        resetSession();
+        redirectToLogin();
+        return Promise.reject(error);
+      }
       config._retry = true;
 
       try {
-        await refreshSession();
+        // A late response may belong to the cookie used before another request
+        // completed its refresh. Retry it with the current cookie first.
+        if (config._authGeneration === authGeneration) await refreshSession();
         return api(config);
-      } catch {
-        resetSession();
-        redirectToLogin();
+      } catch (refreshError) {
+        // Temporary connection/server errors do not invalidate a login.
+        if (isAxiosError(refreshError) && refreshError.response?.status === 401) {
+          resetSession();
+          redirectToLogin();
+        }
+        return Promise.reject(refreshError);
       }
     }
 
@@ -329,6 +372,10 @@ export type SessionUser = {
 };
 
 export function resetSession() {
+  sessionVersion += 1;
+  sessionUser = null;
+  sessionValidUntil = 0;
+  recordBranches.clear();
   sessionRequest = null;
   businessRequest = null;
   branchRequest = null;
@@ -390,41 +437,64 @@ export function clearActiveBusiness() {
 }
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
-  sessionRequest ??= sessionClient
+  if (sessionUser && Date.now() < sessionValidUntil) return sessionUser;
+  if (sessionRequest) return sessionRequest;
+
+  const version = sessionVersion;
+  const request = sessionClient
     .get<SessionUser>('/auth/me')
     .then(({ data }) => data)
     .catch(async (error: unknown) => {
-      if (isAxiosError(error) && error.response?.status === 401) {
-        try {
-          await refreshSession();
-          const { data } = await sessionClient.get<SessionUser>('/auth/me');
-          return data;
-        } catch {
-          return null;
-        }
+      if (!isAxiosError(error) || error.response?.status !== 401) throw error;
+      try {
+        await refreshSession();
+        const { data } = await sessionClient.get<SessionUser>('/auth/me');
+        return data;
+      } catch (refreshError) {
+        if (isAxiosError(refreshError) && refreshError.response?.status === 401) return null;
+        throw refreshError;
       }
-      sessionRequest = null;
-      throw error;
+    })
+    .then((user) => {
+      if (version === sessionVersion) {
+        sessionUser = user;
+        sessionValidUntil = user ? Date.now() + SESSION_CACHE_TTL_MS : 0;
+      }
+      return user;
+    })
+    .finally(() => {
+      if (sessionRequest === request) sessionRequest = null;
     });
-
-  return sessionRequest;
+  sessionRequest = request;
+  return request;
 }
 
 async function refreshSession(): Promise<void> {
-  refreshRequest ??= refreshClient
-    .post('/auth/refresh')
-    .then(() => undefined)
-    .finally(() => {
-      refreshRequest = null;
-    });
+  if (!refreshRequest) {
+    const version = sessionVersion;
+    const request = refreshClient
+      .post('/auth/refresh')
+      .then(() => {
+        if (version === sessionVersion) {
+          authGeneration += 1;
+          sessionValidUntil = 0;
+        }
+      })
+      .finally(() => {
+        if (refreshRequest === request) refreshRequest = null;
+      });
+    refreshRequest = request;
+  }
   return refreshRequest;
 }
 
 function redirectToLogin() {
   if (
     typeof window !== 'undefined' &&
-    window.location.pathname !== '/login'
+    window.location.pathname !== '/login' &&
+    !redirectingToLogin
   ) {
+    redirectingToLogin = true;
     window.location.href = '/login';
   }
 }

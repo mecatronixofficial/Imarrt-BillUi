@@ -7,6 +7,7 @@ export default function ConfirmDialog({
   message,
   confirmLabel = 'Delete',
   busy = false,
+  busyLabel = 'Deleting...',
   onCancel,
   onConfirm,
 }: {
@@ -14,6 +15,7 @@ export default function ConfirmDialog({
   message: string;
   confirmLabel?: string;
   busy?: boolean;
+  busyLabel?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -24,7 +26,7 @@ export default function ConfirmDialog({
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onCancel} className="btn-secondary">Cancel</button>
           <button type="button" disabled={busy} onClick={onConfirm} className="inline-flex min-w-24 items-center justify-center gap-2 rounded-lg bg-red-600 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-60">
-            {busy ? 'Deleting...' : confirmLabel}
+            {busy ? busyLabel : confirmLabel}
           </button>
         </div>
       </div>

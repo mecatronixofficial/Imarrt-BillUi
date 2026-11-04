@@ -75,7 +75,7 @@ export default function PrintSettingsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="print-layout space-y-4">
       <div className="card inline-flex gap-1 p-1.5">
         <button
           type="button"
@@ -93,7 +93,7 @@ export default function PrintSettingsPage() {
         </button>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[400px_minmax(0,1fr)] xl:items-start">
+      <div className="grid gap-5 xl:grid-cols-[minmax(380px,42%)_minmax(0,1fr)] xl:items-start">
         {printerType === 'regular' ? (
           <div className="space-y-4">
             <SettingsCard title="Print company info / header">
@@ -113,6 +113,7 @@ export default function PrintSettingsPage() {
                 <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => void handleLogoChange(event)} />
               </div>
 
+              <SelectRow label="Invoice template" value={regular.value.template} onChange={(value)=>regular.update('template',value as 'standard'|'compact'|'classic')} options={[{value:'standard',label:'Standard'},{value:'compact',label:'Compact'},{value:'classic',label:'Classic'}]} />
               <ToggleRow label="Address" description={business?.address || 'Add your address in Business profile.'} checked={regular.value.showAddress} onChange={(checked) => regular.update('showAddress', checked)} />
               <ToggleRow label="Email" description={business?.email || 'Add your email in Business profile.'} checked={regular.value.showEmail} onChange={(checked) => regular.update('showEmail', checked)} />
               <ToggleRow label="Phone number" description={business?.phone || 'Add your phone number in Business profile.'} checked={regular.value.showPhone} onChange={(checked) => regular.update('showPhone', checked)} />

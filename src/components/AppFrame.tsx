@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import DashboardShell from './DashboardShell';
 import { ToastProvider } from './ToastProvider';
+import BackButton, { NavigationHistory } from './BackButton';
 
 const FULL_BLEED_ROUTES = new Set(['/items', '/parties']);
 // Routes that just need the 1440px width cap lifted, keeping the shell's own padding.
@@ -14,17 +15,17 @@ const PUBLIC_ROUTES = new Set(['/', '/login', '/forgot-password', '/reset-passwo
 export default function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  if (PUBLIC_ROUTES.has(pathname)) return <ToastProvider>{children}</ToastProvider>;
+  if (PUBLIC_ROUTES.has(pathname)) return <NavigationHistory><ToastProvider>{pathname !== '/' && <BackButton className="brand-public-back" />}{children}</ToastProvider></NavigationHistory>;
 
   const isFullBleed = FULL_BLEED_ROUTES.has(pathname);
   const isWide = WIDE_ROUTE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-  const contentClassName = isFullBleed ? '!max-w-none !p-0' : isWide ? '!max-w-none' : '';
+  const contentClassName = isFullBleed ? '!max-w-none !p-0' : isWide ? '!max-w-none' : '!max-w-none';
 
   return (
-    <ToastProvider>
+    <NavigationHistory><ToastProvider>
       <DashboardShell contentClassName={contentClassName}>
         {children}
       </DashboardShell>
-    </ToastProvider>
+    </ToastProvider></NavigationHistory>
   );
 }

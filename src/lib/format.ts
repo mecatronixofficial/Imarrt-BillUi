@@ -52,6 +52,11 @@ export function formatDate(value?: string) {
 }
 
 /** The transaction date, followed by the time it was created when the company asks for times. */
+export function formatDateTime(value?: string) {
+  if (!value || Number.isNaN(new Date(value).getTime())) return '—';
+  return `${formatDate(value)} · ${new Date(value).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+}
+
 export function formatTransactionDate(issueDate?: string, createdAt?: string) {
   const date = formatDate(issueDate);
   if (!getPreferences('transaction').showTimeOnTransaction || !createdAt) return date;

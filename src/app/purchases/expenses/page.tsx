@@ -1,5 +1,1 @@
-import ProductionCostRegister from '@/components/purchases/ProductionCostRegister';
-
-export default function ExpensesPage() {
-  return <ProductionCostRegister mode="expenses" />;
-}
+import ProductionCostRegister from '@/components/purchases/ProductionCostRegister';import GeneralExpenseRegister from '@/components/accounting/GeneralExpenseRegister';export default function ExpensesPage(){return <><GeneralExpenseRegister/><details className="reference-dashboard-details"><summary>Production expenses</summary><ProductionCostRegister mode="expenses"/></details></>}

@@ -31,6 +31,7 @@ import {
   setActiveWorkspaceBranchId,
 } from "@/lib/api";
 import type { Business, WorkspaceBranch } from "@/types";
+import MainCompanyOverview from "./MainCompanyOverview";
 import { toast } from "@/components/ToastProvider";
 import { formatRoleLabel } from "@/lib/format";
 import { BranchFormModal, BusinessFormModal } from "./BusinessForms";
@@ -79,7 +80,7 @@ export default function StylishBusinessPage() {
       if (selected) setActiveWorkspaceBranchId(selected.id);
       setError("");
     } catch (cause) {
-      setError(getApiError(cause, "Could not load branches and companies."));
+      setError(getApiError(cause, "Could not load your companies."));
     } finally {
       setLoading(false);
     }
@@ -156,7 +157,7 @@ export default function StylishBusinessPage() {
       toast.success(`${target.name} was deleted.`);
     } catch (deleteError: unknown) {
       setConfirm(null);
-      toast.error(getApiError(deleteError, "Could not delete branch."));
+      toast.error(getApiError(deleteError, "Could not delete main company."));
     } finally {
       setBusy(false);
     }
@@ -192,11 +193,11 @@ export default function StylishBusinessPage() {
               Workspace control
             </span>
             <h1 className="mt-2 text-xl font-black tracking-tight sm:text-2xl">
-              Branches & Companies
+              Main Company &amp; Sub Companies
             </h1>
             <p className="mt-1.5 max-w-xl text-xs leading-5 text-slate-400">
-              Keep every company, team, inventory item, party, and transaction
-              organized in the right branch.
+              One main company holds your sub companies. Each sub company keeps its own
+              team, items, parties and transactions; the main company sees them all together.
             </p>
           </div>
           {canManage && (
@@ -205,7 +206,7 @@ export default function StylishBusinessPage() {
               className="group inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-xs font-extrabold shadow-lg shadow-blue-950/40 transition-all duration-300 hover:-translate-y-0.5 hover:bg-blue-500"
             >
               <Plus size={14} className="transition-transform duration-300 group-hover:rotate-90" />
-              Create Branch
+              Create Main Company
             </button>
           )}
         </div>
@@ -214,7 +215,7 @@ export default function StylishBusinessPage() {
 
       {loading ? (
         <section className="rounded-2xl border bg-white">
-          <LoadingState label="Loading branches..." />
+          <LoadingState label="Loading companies..." />
         </section>
       ) : error ? (
         <section className="rounded-2xl border bg-white">
@@ -224,8 +225,8 @@ export default function StylishBusinessPage() {
         <section className="rounded-2xl border border-dashed border-blue-200 bg-gradient-to-br from-white to-blue-50 py-6">
           <EmptyState
             icon={GitBranch}
-            title="Create your first branch"
-            description="Start with a branch, then add its companies."
+            title="Create your main company"
+            description="Start with a main company, then add its sub companies."
           />
           {canManage && (
             <div className="flex justify-center">
@@ -233,7 +234,7 @@ export default function StylishBusinessPage() {
                 onClick={() => setBranchForm({})}
                 className="btn-primary"
               >
-                Create Branch
+                Create Main Company
               </button>
             </div>
           )}
@@ -243,17 +244,17 @@ export default function StylishBusinessPage() {
           <section className="grid gap-3 sm:grid-cols-3">
             <Stat
               icon={GitBranch}
-              label="Total branches"
+              label="Main companies"
               value={branches.length}
             />
             <Stat
               icon={Building2}
-              label="Total companies"
+              label="Sub companies"
               value={totalCompanies}
             />
             <Stat
               icon={ReceiptText}
-              label="In selected branch"
+              label="Under selected main"
               value={branch?.businesses.length ?? 0}
             />
           </section>
@@ -264,7 +265,7 @@ export default function StylishBusinessPage() {
                   Step 1
                 </p>
                 <h2 className="text-base font-black text-slate-950">
-                  Choose a branch
+                  Choose the main company
                 </h2>
               </div>
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
@@ -313,7 +314,7 @@ export default function StylishBusinessPage() {
                         </span>
                         <span>
                           {item.businesses.length}{" "}
-                          {item.businesses.length === 1 ? "company" : "companies"}
+                          {item.businesses.length === 1 ? "sub company" : "sub companies"}
                         </span>
                       </div>
                       {item.address && (
@@ -338,7 +339,7 @@ export default function StylishBusinessPage() {
                         <button
                           type="button"
                           disabled={item.businesses.length > 0}
-                          title={item.businesses.length > 0 ? "Move or delete its companies first" : undefined}
+                          title={item.businesses.length > 0 ? "Move or delete its sub companies first" : undefined}
                           onClick={() => setConfirm({ kind: "branch", branch: item })}
                           aria-label={`Delete ${item.name}`}
                           className={`inline-flex flex-1 items-center justify-center gap-1 py-1.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "text-red-200 hover:bg-red-500/10" : "text-red-600 hover:bg-red-50"}`}
@@ -352,20 +353,21 @@ export default function StylishBusinessPage() {
               })}
             </div>
           </section>
+          {branch && canManage && branch.businesses.length > 0 && <MainCompanyOverview key={`${branch.id}-${branch.businesses.length}`} group={branch} />}
           {branch && (
             <section>
               <div className="mb-2.5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[.15em] text-blue-600">
-                    Step 2 · Company workspace
+                    Step 2 · Sub companies
                   </p>
 
                   <h2 className="text-base font-black text-slate-950">
-                    Companies in {branch.name}
+                    Sub companies of {branch.name}
                   </h2>
 
                   <p className="mt-1 text-[11px] text-slate-500">
-                    Companies from other branches stay hidden.
+                    Sub companies of other main companies stay hidden.
                   </p>
                 </div>
 
@@ -408,7 +410,7 @@ export default function StylishBusinessPage() {
                       className="btn-primary inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap text-xs"
                     >
                       <Plus size={13} />
-                      Add Company
+                      Add Sub Company
                     </button>
                   )}
                 </div>
@@ -420,12 +422,12 @@ export default function StylishBusinessPage() {
                     title={
                       search
                         ? "No matching companies"
-                        : "No companies in this branch"
+                        : "No sub companies yet"
                     }
                     description={
                       search
                         ? "Try another name or GSTIN."
-                        : "Add the first company to this branch."
+                        : "Add the first sub company to this main company."
                     }
                   />
                   {!search && canManage && (

@@ -1,0 +1,1005 @@
+{
+  "date": "2026-11-02",
+  "frontendBuild": "passed (57 routes; lint and TypeScript included)",
+  "backendBuild": "passed",
+  "tests": {
+    "backend": 105,
+    "frontend": 7
+  },
+  "migrations": {
+    "applied": 9,
+    "status": "up to date",
+    "approval": "User approved applying all nine pending migrations after checks pass"
+  },
+  "baseline": {
+    "checks": [
+      {
+        "route": "/dashboard",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/parties/10000000-0000-4000-8000-000000000005",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/items/10000000-0000-4000-8000-000000000006",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/invoices",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/invoices/10000000-0000-4000-8000-000000000007",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/documents",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/documents/10000000-0000-4000-8000-000000000012",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/payment-in",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/orders",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/payment-out",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/purchases/expenses",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/inventory",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/inventory/godowns",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/inventory/adjustments",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/cash",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/loans",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/cheques",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/sales/other-income",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/profile",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/general",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/party",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/item",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/transaction",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/taxes-gst",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/transaction-message",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/settings/print",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/team",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/security",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/businesses",
+        "viewport": "desktop",
+        "passed": true
+      },
+      {
+        "route": "/dashboard",
+        "viewport": "desktop1920",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "desktop1920",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "desktop1920",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "desktop1920",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "desktop1920",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/loans",
+        "viewport": "desktop1920",
+        "passed": true
+      },
+      {
+        "route": "/settings/general",
+        "viewport": "desktop1920",
+        "passed": true
+      },
+      {
+        "route": "/dashboard",
+        "viewport": "desktop1280",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "desktop1280",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "desktop1280",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "desktop1280",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "desktop1280",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/loans",
+        "viewport": "desktop1280",
+        "passed": true
+      },
+      {
+        "route": "/settings/general",
+        "viewport": "desktop1280",
+        "passed": true
+      },
+      {
+        "route": "/dashboard",
+        "viewport": "tablet1024",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "tablet1024",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "tablet1024",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "tablet1024",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "tablet1024",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/loans",
+        "viewport": "tablet1024",
+        "passed": true
+      },
+      {
+        "route": "/settings/general",
+        "viewport": "tablet1024",
+        "passed": true
+      },
+      {
+        "route": "/dashboard",
+        "viewport": "tablet768",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "tablet768",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "tablet768",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "tablet768",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "tablet768",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/loans",
+        "viewport": "tablet768",
+        "passed": true
+      },
+      {
+        "route": "/settings/general",
+        "viewport": "tablet768",
+        "passed": true
+      },
+      {
+        "route": "/dashboard",
+        "viewport": "mobile430",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "mobile430",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "mobile430",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "mobile430",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "mobile430",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/loans",
+        "viewport": "mobile430",
+        "passed": true
+      },
+      {
+        "route": "/settings/general",
+        "viewport": "mobile430",
+        "passed": true
+      },
+      {
+        "route": "/dashboard",
+        "viewport": "mobile390",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "mobile390",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "mobile390",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "mobile390",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "mobile390",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/loans",
+        "viewport": "mobile390",
+        "passed": true
+      },
+      {
+        "route": "/settings/general",
+        "viewport": "mobile390",
+        "passed": true
+      },
+      {
+        "route": "/dashboard",
+        "viewport": "mobile360",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": "mobile360",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "viewport": "mobile360",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "viewport": "mobile360",
+        "passed": true
+      },
+      {
+        "route": "/reports",
+        "viewport": "mobile360",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/loans",
+        "viewport": "mobile360",
+        "passed": true
+      },
+      {
+        "route": "/settings/general",
+        "viewport": "mobile360",
+        "passed": true
+      },
+      {
+        "route": "/parties",
+        "interaction": "open and close create dialog",
+        "passed": true
+      },
+      {
+        "route": "/items",
+        "interaction": "open and close create dialog",
+        "passed": true
+      },
+      {
+        "route": "/sales/payment-in",
+        "interaction": "open and close create dialog",
+        "passed": true
+      },
+      {
+        "route": "/cash-banks/loans",
+        "interaction": "open and close create dialog",
+        "passed": true
+      },
+      {
+        "route": "/sales/other-income",
+        "interaction": "open and close create dialog",
+        "passed": true
+      }
+    ],
+    "requestCount": 1033,
+    "missing": [],
+    "mutations": [],
+    "errors": [],
+    "databaseAccess": false
+  },
+  "editors": {
+    "checks": [
+      {
+        "route": "/invoices/new",
+        "viewport": 1920,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": 1920,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": 1920,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations/new",
+        "viewport": 1920,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma/new",
+        "viewport": 1920,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": 1920,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans/new",
+        "viewport": 1920,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns/new",
+        "viewport": 1920,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": 1440,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": 1440,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": 1440,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations/new",
+        "viewport": 1440,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma/new",
+        "viewport": 1440,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": 1440,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans/new",
+        "viewport": 1440,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns/new",
+        "viewport": 1440,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": 1280,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": 1280,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": 1280,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations/new",
+        "viewport": 1280,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma/new",
+        "viewport": 1280,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": 1280,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans/new",
+        "viewport": 1280,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns/new",
+        "viewport": 1280,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": 1024,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": 1024,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": 1024,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations/new",
+        "viewport": 1024,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma/new",
+        "viewport": 1024,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": 1024,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans/new",
+        "viewport": 1024,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns/new",
+        "viewport": 1024,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": 768,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": 768,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": 768,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations/new",
+        "viewport": 768,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma/new",
+        "viewport": 768,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": 768,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans/new",
+        "viewport": 768,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns/new",
+        "viewport": 768,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": 430,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": 430,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": 430,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations/new",
+        "viewport": 430,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma/new",
+        "viewport": 430,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": 430,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans/new",
+        "viewport": 430,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns/new",
+        "viewport": 430,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": 390,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": 390,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": 390,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations/new",
+        "viewport": 390,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma/new",
+        "viewport": 390,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": 390,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans/new",
+        "viewport": 390,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns/new",
+        "viewport": 390,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/invoices/new",
+        "viewport": 360,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/bills/new",
+        "viewport": 360,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/purchases/returns/new",
+        "viewport": 360,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/quotations/new",
+        "viewport": 360,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/proforma/new",
+        "viewport": 360,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/orders/new",
+        "viewport": 360,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/delivery-challans/new",
+        "viewport": 360,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      },
+      {
+        "route": "/sales/returns/new",
+        "viewport": 360,
+        "interaction": "form bounds, table scrolling and add row",
+        "passed": true
+      }
+    ],
+    "requestCount": 944,
+    "missing": [],
+    "mutations": [],
+    "errors": [],
+    "databaseAccess": false
+  },
+  "print": [
+    {
+      "name": "a4-portrait",
+      "widthPoints": 595.91998,
+      "heightPoints": 841.91998,
+      "pages": 1,
+      "bytes": 85152,
+      "passed": true
+    },
+    {
+      "name": "a4-landscape",
+      "widthPoints": 841.91998,
+      "heightPoints": 595.91998,
+      "pages": 2,
+      "bytes": 82144,
+      "passed": true
+    },
+    {
+      "name": "thermal-58mm",
+      "widthPoints": 165.119995,
+      "heightPoints": 234.95999,
+      "pages": 1,
+      "bytes": 34534,
+      "passed": true
+    },
+    {
+      "name": "thermal-80mm-two-copies",
+      "widthPoints": 227.03999,
+      "heightPoints": 234.95999,
+      "pages": 2,
+      "bytes": 44100,
+      "passed": true
+    },
+    {
+      "name": "thermal-custom",
+      "widthPoints": 196.08,
+      "heightPoints": 234.95999,
+      "pages": 1,
+      "bytes": 34770,
+      "passed": true
+    }
+  ],
+  "backend": {
+    "schemaQueries": "passed",
+    "checks": [
+      {
+        "route": "/health",
+        "status": 200,
+        "passed": true
+      },
+      {
+        "route": "/health/ready",
+        "status": 200,
+        "passed": true
+      },
+      {
+        "route": "/loans",
+        "status": 401,
+        "passed": true
+      },
+      {
+        "route": "/incomes",
+        "status": 401,
+        "passed": true
+      },
+      {
+        "route": "/cheques",
+        "status": 401,
+        "passed": true
+      },
+      {
+        "route": "/cash/transactions",
+        "status": 401,
+        "passed": true
+      },
+      {
+        "route": "/accounts",
+        "status": 401,
+        "passed": true
+      }
+    ],
+    "databaseAccess": "read-only",
+    "businessRecordsModified": false
+  }
+}

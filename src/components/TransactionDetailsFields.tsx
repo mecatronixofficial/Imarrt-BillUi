@@ -1,0 +1,5 @@
+'use client';
+export type TransactionDetails={billingName:string;transportName:string;deliveryLocation:string;lrNumber:string;eWayBillNumber:string;noOfBags:string};
+export const emptyTransactionDetails:TransactionDetails={billingName:'',transportName:'',deliveryLocation:'',lrNumber:'',eWayBillNumber:'',noOfBags:''};
+export function transactionDetailsPayload(value:TransactionDetails){return {...value,noOfBags:value.noOfBags===''?undefined:Number(value.noOfBags)};}
+export default function TransactionDetailsFields({value,onChange}:{value:TransactionDetails;onChange:(value:TransactionDetails)=>void}){return <div className="reference-logistics">{([['transportName','Transport Name'],['noOfBags','No of Bags'],['deliveryLocation','Delivery Location'],['lrNumber','LR Number & Date']] as const).map(([key,label])=><input key={key} aria-label={label} placeholder={label} type={key==='noOfBags'?'number':'text'} min={key==='noOfBags'?0:undefined} step={key==='noOfBags'?1:undefined} className="input-field" value={value[key]} onChange={e=>onChange({...value,[key]:e.target.value})}/>)}</div>}

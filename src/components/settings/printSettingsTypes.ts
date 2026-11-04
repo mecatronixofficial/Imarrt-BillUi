@@ -1,6 +1,7 @@
 export type TextSize = 1 | 2 | 3 | 4 | 5;
 
 export type RegularPrintSettings = {
+  template:'standard'|'compact'|'classic';
   makeDefault: boolean;
   repeatHeader: boolean;
   showCompanyName: boolean;
@@ -44,6 +45,7 @@ export type RegularPrintSettings = {
 };
 
 export const REGULAR_PRINT_DEFAULTS: RegularPrintSettings = {
+  template:'standard',
   makeDefault: true,
   repeatHeader: false,
   showCompanyName: true,
@@ -92,8 +94,8 @@ export type ThermalPrintingType = 'text' | 'image';
 
 export const THERMAL_PAGE_SIZES: Array<{ value: ThermalPageSize; label: string; sublabel: string }> = [
   { value: '2in', label: '2 Inch', sublabel: '58mm' },
-  { value: '3in', label: '3 Inch', sublabel: '68mm' },
-  { value: '4in', label: '4 Inch', sublabel: '88mm' },
+  { value: '3in', label: '3 Inch', sublabel: '80mm' },
+  { value: '4in', label: '4 Inch', sublabel: '100mm' },
   { value: 'custom', label: 'Custom', sublabel: 'Set width' },
 ];
 

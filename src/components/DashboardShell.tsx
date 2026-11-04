@@ -8,6 +8,7 @@ import { getCurrentUser } from '@/lib/api';
 import type { SessionUser } from '@/lib/api';
 import { syncPreferences } from '@/lib/preferences';
 import Sidebar from './Sidebar';
+import ReferenceToolbar from './ReferenceToolbar';
 import CommandMenu from './CommandMenu';
 import CompanyCornerPicker from './CompanyCornerPicker';
 import ScrollToTopButton from './ScrollToTopButton';
@@ -115,7 +116,7 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
   }
 
   return (
-    <div className="flex min-h-screen min-h-dvh bg-slate-50">
+    <div className="reference-app flex min-h-screen min-h-dvh bg-slate-50">
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <button
         type="button"
@@ -146,7 +147,7 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-md shadow-blue-200">
                 <ReceiptText aria-hidden="true" size={17} />
               </span>
-              <span className="hidden text-sm font-extrabold tracking-tight text-slate-900 md:inline">iMart Billing</span>
+              <span className="hidden text-sm font-extrabold tracking-tight text-slate-900 md:inline">iMarrt Billing</span>
             </Link>
             <div className="min-w-0 [&_.truncate]:max-w-[6.5rem] sm:[&_.truncate]:max-w-[11rem]"><CompanyCornerPicker compact companyOnly /></div>
           </div>
@@ -164,7 +165,7 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
           </div>
         </header>
 
-        <header className="sticky top-0 z-30 hidden h-14 items-center gap-4 border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur-xl lg:flex">
+        <header className="reference-old-toolbar sticky top-0 z-30 hidden h-14 items-center gap-4 border-b border-slate-200/80 bg-white/90 px-6 backdrop-blur-xl lg:flex">
           <div className="min-w-0 lg:w-36 xl:w-56 xl:shrink-0">
             <div className="hidden items-center gap-1.5 text-[10px] font-semibold text-slate-400 xl:flex"><span>{pageMeta.section}</span><ChevronRight aria-hidden="true" size={11} /><span className="truncate text-slate-500">{pageMeta.title}</span></div>
             <p className="truncate text-sm font-extrabold capitalize text-slate-900 xl:mt-0.5" title={pageMeta.title}>{pageMeta.title}</p>
@@ -175,10 +176,11 @@ export default function DashboardShell({ children, contentClassName = '' }: { ch
           </div>
         </header>
 
-        <main id="main-content" tabIndex={-1} className={`mx-auto w-full max-w-[1440px] p-4 sm:p-5 lg:p-6 xl:p-8 ${contentClassName}`}><Fragment key={preferencesVersion}>{children}</Fragment></main>
+        <ReferenceToolbar />
+        <main data-route={pathname} id="main-content" tabIndex={-1} className={`mx-auto w-full max-w-[1440px] p-4 sm:p-5 lg:p-6 xl:p-8 ${contentClassName}`}><Fragment key={preferencesVersion}>{children}</Fragment></main>
       </div>
       <ScrollToTopButton />
-      <FloatingQuickActions />
+      <div className="reference-floating"><FloatingQuickActions /></div>
     </div>
   );
 }

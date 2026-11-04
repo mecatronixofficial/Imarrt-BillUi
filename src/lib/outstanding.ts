@@ -1,0 +1,3 @@
+import { subtractMoney } from './billing';
+export function invoiceOutstanding(invoice: { grandTotal: string | number; amountPaid: string | number; creditTotal?: number; balanceDue?: number }) { return Math.max(0, invoice.balanceDue ?? subtractMoney(subtractMoney(invoice.grandTotal,invoice.creditTotal??0),invoice.amountPaid)); }
+export function documentOutstanding(document: { grandTotal: string | number; paidAmount?: string | number; debitTotal?: number; balanceDue?: number }) { return Math.max(0, document.balanceDue ?? subtractMoney(subtractMoney(document.grandTotal,document.debitTotal??0),document.paidAmount??0)); }

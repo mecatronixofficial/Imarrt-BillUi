@@ -1,4 +1,6 @@
 "use client";
+import FinanceWorkspace from '@/components/accounting/FinanceWorkspace';
+
 
 import {
   FormEvent,
@@ -27,7 +29,7 @@ import {
 } from "lucide-react";
 
 import {
-  getActiveBusinessId,
+  api, getAllPages, getApiError, getActiveBusinessId,
 } from "@/lib/api";
 
 import {
@@ -36,8 +38,9 @@ import {
 
 import {
   loadEncrypted,
-  saveEncrypted,
 } from "@/lib/encryptedStorage";
+
+import { toast } from "@/components/ToastProvider";
 
 /* ========================================================================== */
 /* TYPES                                                                      */
@@ -59,6 +62,7 @@ type BankAccount = {
   accountType: AccountType;
   upiId: string;
   openingBalance: number;
+  balance?: number;
   primary: boolean;
   updatedAt: string;
 };
@@ -111,6 +115,7 @@ const maskAccount = (
 /* ========================================================================== */
 
 export default function CashBanksPage() {
+  const [legacyAccounts, setLegacyAccounts] = useState<BankAccount[]>([]);
   const [
     accounts,
     setAccounts,
@@ -165,29 +170,36 @@ export default function CashBanksPage() {
   /* ------------------------------------------------------------------------ */
 
   useEffect(() => {
-    let active = true;
-
-    loadEncrypted<
-      BankAccount[]
-    >(
-      storageKey(),
-      [],
-    )
-      .then((saved) => {
-        if (active) {
-          setAccounts(saved);
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
+    const controller = new AbortController();
+    void Promise.all([
+      getAllPages<BankAccount>('/accounts', { signal: controller.signal }),
+      loadEncrypted<BankAccount[]>(storageKey(), []).catch(() => []),
+      getAllPages<BankAccount>('/accounts', {signal:controller.signal,headers:{'X-Branch-Id':'all'}}),
+    ]).then(([response, legacy, companyAccounts]) => {
+      if (controller.signal.aborted) return;
+      setAccounts(response.data);
+      setLegacyAccounts(legacy.filter((entry) => !companyAccounts.data.some((account) => account.accountNumber === entry.accountNumber)));
+    }).catch((error) => { if (!controller.signal.aborted) setError(getApiError(error, 'Could not load bank accounts.')); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
   }, []);
+
+  function accountPayload(record: BankAccount) {
+    return { accountHolder: record.accountHolder, bankName: record.bankName, accountNumber: record.accountNumber, ifsc: record.ifsc, branch: record.branch, accountType: record.accountType, upiId: record.upiId, openingBalance: Number(record.openingBalance), primary: record.primary };
+  }
+  async function refreshAccounts() { const { data } = await getAllPages<BankAccount>('/accounts'); setAccounts(data); }
+  async function importLegacyAccounts() {
+    if (saving) return;
+    setSaving(true); setError('');
+    try {
+      for (const record of legacyAccounts) {
+        const { data } = await getAllPages<BankAccount>('/accounts',{headers:{'X-Branch-Id':'all'}});
+        if (!data.some((account) => account.accountNumber === record.accountNumber)) await api.post('/accounts', accountPayload(record));
+      }
+      await refreshAccounts(); setLegacyAccounts([]); setMessage('Existing bank details imported. The encrypted local copy has been retained.');
+    } catch (error) { setError(getApiError(error, 'Could not import bank accounts. Your local copy is retained.')); }
+    finally { setSaving(false); }
+  }
 
   /* ------------------------------------------------------------------------ */
   /* TOTAL                                                                    */
@@ -202,7 +214,7 @@ export default function CashBanksPage() {
             account,
           ) =>
             sum +
-            account.openingBalance,
+            Number(account.balance ?? account.openingBalance),
           0,
         ),
       [accounts],
@@ -353,54 +365,25 @@ export default function CashBanksPage() {
         new Date().toISOString(),
     };
 
-    let next = editingId
-      ? accounts.map(
-          (account) =>
-            account.id ===
-            editingId
-              ? record
-              : account,
-        )
-      : [
-          ...accounts,
-          record,
-        ];
-
-    if (record.primary) {
-      next = next.map(
-        (account) => ({
-          ...account,
-          primary:
-            account.id ===
-            record.id,
-        }),
-      );
-    }
-
     setSaving(true);
 
     try {
-      await saveEncrypted(
-        storageKey(),
-        next,
-      );
-
-      setAccounts(next);
+      await api.request({ method: editingId ? 'patch' : 'post', url: editingId ? `/accounts/${editingId}` : '/accounts', data: accountPayload(record) });
+      await refreshAccounts();
 
       closeForm();
 
-      setMessage(
+      toast.success(
         editingId
           ? "Bank details updated securely."
           : "Bank account added securely.",
+        { description: record.bankName },
       );
     } catch (
       saveError
     ) {
       setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "Could not securely save bank details.",
+        getApiError(saveError, "Could not save bank details."),
       );
     } finally {
       setSaving(false);
@@ -424,37 +407,15 @@ export default function CashBanksPage() {
       return;
     }
 
-    const next =
-      accounts.filter(
-        ({ id }) =>
-          id !== account.id,
-      );
-
-    if (
-      account.primary &&
-      next.length
-    ) {
-      next[0] = {
-        ...next[0],
-        primary: true,
-      };
-    }
-
     try {
-      await saveEncrypted(
-        storageKey(),
-        next,
-      );
-
-      setAccounts(next);
+      await api.delete(`/accounts/${account.id}`);
+      await refreshAccounts();
 
       setMessage(
         "Bank account removed.",
       );
-    } catch {
-      setError(
-        "Could not update encrypted bank details.",
-      );
+    } catch (error) {
+      setError(getApiError(error, "Could not remove bank account."));
     }
   }
 
@@ -464,7 +425,9 @@ export default function CashBanksPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-slate-50/60">
+      <FinanceWorkspace mode="banks" onAdd={startAdd} onEdit={id=>{const a=accounts.find(a=>a.id===id);if(a)startEdit(a);}} onDeleted={()=>void refreshAccounts()} version={JSON.stringify(accounts.map(a=>[a.id,a.updatedAt]))}/>
+      <div className="reference-legacy-master min-h-screen bg-slate-50/60">
+        {legacyAccounts.length > 0 && <div className="card mb-4 flex flex-wrap items-center justify-between gap-3 p-4"><p className="text-xs text-slate-600">{legacyAccounts.length} existing bank accounts are saved on this device.</p><button type="button" className="btn-secondary" disabled={saving} onClick={() => void importLegacyAccounts()}>Import saved accounts</button></div>}
         {/* ================================================================ */}
         {/* PREMIUM HEADER                                                   */}
         {/* ================================================================ */}
@@ -604,7 +567,7 @@ export default function CashBanksPage() {
             value={formatCurrency(
               totalBalance,
             )}
-            description="Combined opening balance"
+            description="Opening balances plus linked receipts, payments and expenses"
             tone="blue"
           />
 
@@ -626,7 +589,7 @@ export default function CashBanksPage() {
             }
             label="Storage Security"
             value="AES-256"
-            description="Encrypted on this device"
+            description="Account numbers encrypted in the company database"
             tone="violet"
           />
         </div>
@@ -757,7 +720,7 @@ export default function CashBanksPage() {
                 <span className="mx-auto block h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
 
                 <p className="mt-3 text-[9px] font-semibold text-slate-400">
-                  Opening encrypted bank
+                  Loading saved bank
                   details...
                 </p>
               </div>
@@ -832,18 +795,11 @@ export default function CashBanksPage() {
 
           <div>
             <p className="text-[9px] font-extrabold text-blue-900">
-              Protected on this
-              device
+              Protected in your company account
             </p>
 
             <p className="mt-0.5 max-w-4xl text-[8px] leading-5 text-blue-700">
-              Bank details are
-              encrypted using AES-GCM
-              with a non-exportable
-              browser key. Clearing
-              browser site data removes
-              both the encryption key
-              and saved bank accounts.
+              Bank account numbers are encrypted before database storage. Access follows your company and branch permissions.
             </p>
           </div>
         </div>

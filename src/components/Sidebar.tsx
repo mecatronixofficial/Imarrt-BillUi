@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
+import CommandMenu from './CommandMenu';
 import {
   api,
   clearActiveBusiness,
@@ -54,8 +55,9 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
-  { href: '/parties', label: 'Parties', icon: Users },
-  { href: '/items', label: 'Items', icon: Package },
+  { href: '/parties', label: 'Parties', icon: Users, children: [{ href: '/parties', label: 'Party Details' }] },
+  { href: '/items', label: 'Items', icon: Package, children: [{ href: '/items', label: 'Item Details' }, { href: '/inventory', label: 'Godown Management' }, { href: '/inventory/godowns', label: 'Godowns' }, { href: '/inventory/adjustments', label: 'Adjustments & Transfers' }] },
+
   {
     href: '/sales',
     label: 'Sale',
@@ -68,6 +70,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/sales/orders', label: 'Sale Order' },
       { href: '/sales/delivery-challans', label: 'Delivery Challan' },
       { href: '/sales/returns', label: 'Sale Return / Credit Note' },
+      { href: '/sales/other-income', label: 'Other Income' },
     ],
   },
   { href: '/documents', label: 'Business Documents', icon: FileText },
@@ -83,7 +86,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/purchases/returns', label: 'Purchase Return / Dr. Note' },
     ],
   },
-  { href: '/cash-banks', label: 'Cash & Banks', icon: Landmark },
+  { href: '/cash-banks', label: 'Cash & Bank', icon: Landmark, children: [{ href: '/cash-banks', label: 'Bank Accounts' }, { href: '/cash-banks/cash', label: 'Cash In Hand' }, { href: '/cash-banks/cheques', label: 'Cheques' }, { href: '/cash-banks/loans', label: 'Loan Accounts' }] },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
   {
     href: '/settings',
@@ -280,7 +283,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
   return (
     <aside
       className={clsx(
-        'fixed inset-y-0 left-0 z-50 flex h-screen h-dvh w-64 shrink-0 flex-col overflow-hidden bg-slate-950 text-white shadow-2xl transition-transform duration-300 ease-out',
+        'reference-sidebar fixed inset-y-0 left-0 z-50 flex h-screen h-dvh w-64 shrink-0 flex-col overflow-hidden bg-slate-950 text-white shadow-2xl transition-transform duration-300 ease-out',
         'lg:sticky lg:top-0 lg:z-20 lg:translate-x-0 lg:shadow-none',
         collapsed ? 'lg:w-[72px]' : 'lg:w-[252px]',
         desktopHidden && 'lg:hidden',
@@ -288,6 +291,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
       )}
       aria-label="Main navigation"
     >
+      <div className="reference-sidebar-search"><CommandMenu /></div>
       <header className={clsx('relative flex h-16 shrink-0 items-center justify-between px-4 transition-all', collapsed && 'lg:h-24 lg:flex-col lg:justify-center lg:gap-2 lg:px-2 lg:py-2')}>
         <button type="button" onClick={() => {
           if (window.matchMedia('(min-width: 1024px)').matches) updateCollapsed(!collapsed);
@@ -297,7 +301,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
             <ReceiptText aria-hidden="true" size={19} strokeWidth={2.4} />
           </span>
           <span className={collapsed ? 'lg:hidden' : ''}>
-            <span className="block text-sm font-extrabold tracking-tight">iMart Billing</span>
+            <span className="block text-sm font-extrabold tracking-tight">iMarrt Billing</span>
             <span className="block whitespace-nowrap text-[6px] font-medium uppercase text-blue-300/75">Business made simple</span>
           </span>
         </button>
@@ -316,7 +320,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
         </button>
       </header>
 
-      <div className={clsx('relative px-3 pb-2 transition-all', collapsed && 'lg:px-2')}>
+      <div className={clsx('reference-company relative px-3 pb-2 transition-all', collapsed && 'lg:px-2')}>
         {activeBusiness ? (
           <div ref={businessMenuRef} className="relative z-30">
             <button
@@ -391,6 +395,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
                 </Link>
               </div>
               <div className="mt-1 border-t border-white/10 pt-1">
+                <Link href="/profile" className="block rounded-lg px-2.5 py-2 text-blue-300">Edit Profile</Link>
                 <Link href="/businesses" className="flex items-center justify-between rounded-lg px-2.5 py-2 text-[11px] font-semibold text-blue-300 transition hover:bg-blue-500/10 hover:text-blue-200">
                   Manage company & branches <ChevronRight aria-hidden="true" size={14} />
                 </Link>
@@ -412,7 +417,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
               : Boolean(pathname?.startsWith(href) || children?.some((child) => pathname === child.href || pathname?.startsWith(`${child.href}/`)));
 
             if (children?.length) {
-              const groupOpen = openGroups[href] ?? false;
+              const groupOpen = openGroups[href] ?? active;
               const setGroupOpen = (next: boolean | ((current: boolean) => boolean)) => {
                 setOpenGroups((current) => ({
                   ...current,
@@ -442,7 +447,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
                     className={clsx(
                       'group relative flex h-11 w-full items-center gap-3 rounded-md px-3 text-left outline-none transition-all',
                       collapsed && 'lg:justify-center lg:gap-0 lg:px-2',
-                      active ? 'bg-blue-600 text-white shadow-md shadow-blue-950/25' : 'text-slate-200 hover:bg-white/[0.06] hover:text-white',
+                      active ? 'reference-nav-active text-white' : 'text-slate-200 hover:bg-white/[0.06] hover:text-white',
                     )}
                   >
                     <span className={clsx('flex h-7 w-7 shrink-0 items-center justify-center', active ? 'text-white' : 'text-slate-300 group-hover:text-white')}><Icon aria-hidden="true" size={17} /></span>
@@ -453,8 +458,8 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
                     <div className="overflow-hidden">
                       <div className="ml-5 mt-1 space-y-0.5 border-l border-white/10 pb-1 pl-3">
                         {children.map((child) => {
-                          const childActive = pathname === child.href || pathname?.startsWith(`${child.href}/`);
-                          return <Link key={child.href} href={child.href} aria-current={childActive ? 'page' : undefined} className={clsx('flex min-h-8 items-center rounded-md px-2 text-[11px] font-semibold transition', childActive ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200')}><span className={clsx('mr-2 h-1.5 w-1.5 shrink-0 rounded-full', childActive ? 'bg-blue-300' : 'bg-slate-600')} />{child.label}</Link>;
+                          const childActive = pathname === child.href || (child.href !== href && pathname?.startsWith(`${child.href}/`));
+                          return <Link key={child.href} href={child.href} aria-current={childActive ? 'page' : undefined} className={clsx('flex min-h-8 items-center rounded-md px-2 text-[11px] font-semibold transition', childActive ? 'reference-nav-active text-white' : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200')}><span className={clsx('mr-2 h-1.5 w-1.5 shrink-0 rounded-full', childActive ? 'bg-blue-300' : 'bg-slate-600')} />{child.label}</Link>;
                         })}
                       </div>
                     </div>
@@ -473,7 +478,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
                   'group relative flex h-11 items-center gap-3 rounded-md px-3 outline-none transition-all',
                   collapsed && 'lg:justify-center lg:gap-0 lg:px-2',
                   active
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-950/25'
+                    ? 'reference-nav-active text-white'
                     : 'text-slate-200 hover:bg-white/[0.06] hover:text-white',
                 )}
               >
