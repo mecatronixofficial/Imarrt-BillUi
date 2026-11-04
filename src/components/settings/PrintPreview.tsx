@@ -64,7 +64,7 @@ export function RegularInvoicePreview({ settings, business, documentTitle = 'Tax
   return (
     <div
       className={`mx-auto w-full overflow-hidden border border-slate-400 bg-white text-slate-900 shadow-sm ${INVOICE_TEXT_SIZE[settings.invoiceTextSize]}`}
-      style={{ maxWidth: width, paddingTop: settings.extraSpaceTop }}
+      style={{ maxWidth: width, paddingTop: settings.extraSpaceTop, fontFamily:settings.template==='classic'?'Georgia, serif':undefined }}
     >
       <div className="relative border-b border-slate-400 px-6 py-4 text-center">
         {settings.printOriginalDuplicate && <span className="absolute right-4 top-4 rounded border border-slate-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Original</span>}

@@ -66,14 +66,14 @@ export default function Modal({ title, children, onClose, size = 'md', className
   if (!mounted) return null;
 
   return createPortal(
-    <div className={`fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/55 backdrop-blur-sm ${size === 'full' ? 'p-0' : 'px-4 py-5'}`} onMouseDown={onClose}>
+    <div className={`reference-modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/55 backdrop-blur-sm ${size === 'full' ? 'p-0' : 'px-4 py-5'}`} onMouseDown={onClose}>
       <section
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onMouseDown={(event) => event.stopPropagation()}
-        className={`max-h-full w-full overflow-y-auto bg-white p-5 shadow-2xl ${size === 'full' ? 'h-full max-w-none rounded-xl border border-white/70 sm:p-6' : `rounded-2xl border border-white/70 ${size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-3xl' : size === 'xl' ? 'max-w-6xl' : 'max-w-md'}`} ${className}`}
+        className={`reference-modal-panel max-h-full w-full overflow-y-auto bg-white p-5 shadow-2xl ${size === 'full' ? 'h-full max-w-none rounded-xl border border-white/70 sm:p-6' : `rounded-2xl border border-white/70 ${size === 'sm' ? 'max-w-sm' : size === 'lg' ? 'max-w-3xl' : size === 'xl' ? 'max-w-6xl' : 'max-w-md'}`} ${className}`}
       >
         <div className={`mb-4 flex items-center justify-between gap-4 ${size === 'full' ? 'mx-auto max-w-6xl' : ''}`}>
           <h2 id={titleId} className="text-lg font-bold tracking-tight text-slate-950">{title}</h2>

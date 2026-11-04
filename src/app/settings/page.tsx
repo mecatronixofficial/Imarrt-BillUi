@@ -17,7 +17,7 @@ const SETTINGS: SettingsEntry[] = [
   { href: '/settings/transaction-message', icon: MessageSquare, title: 'Transaction messages', description: 'Invoice, quotation, payment reminder, and auto-share templates.', group: 'Preferences' },
   { href: '/settings/party', icon: Users, title: 'Party defaults', description: 'Opening balances, categories, reminders, credit terms, and loyalty.', group: 'Preferences' },
   { href: '/settings/item', icon: Package, title: 'Item & inventory', description: 'Categories, batches, serial numbers, units, pricing, and stock alerts.', group: 'Preferences' },
-  { href: '/businesses', icon: Building2, title: 'Business profile', description: 'Legal name, GST registration, contact details, branches, and active company.', group: 'Workspace' },
+  { href: '/profile', icon: Building2, title: 'Business profile', description: 'Legal name, GST registration, contact details, branches, and active company.', group: 'Workspace' },
   { href: '/parties', icon: MessageCircle, title: 'Invoice delivery', description: 'Configure email, WhatsApp consent, and automatic delivery per party.', group: 'Workspace' },
   { href: '/team', icon: UserCog, title: 'Team & permissions', description: 'Invite members and control billing access by role.', group: 'Access' },
   { href: '/security', icon: ShieldCheck, title: 'Security & MFA', description: 'Authenticator setup, recovery codes, sessions, and account protection.', group: 'Access' },

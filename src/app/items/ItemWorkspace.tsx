@@ -1,6 +1,8 @@
 'use client';
+import ReferenceItemForm from '@/components/ReferenceItemForm';
 
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
@@ -22,14 +24,18 @@ import {
 } from 'lucide-react';
 
 import Modal from '@/components/Modal';
+import ReferenceMaster from '@/components/ReferenceMaster';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import RowActions, { type RowAction } from '@/components/RowActions';
 import StatusBadge from '@/components/StatusBadge';
+import { whatsappLink } from '@/lib/messageTemplates';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState';
 import { toast } from '@/components/ToastProvider';
 import { api, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
+import { multiplyMoney, sumMoney } from '@/lib/billing';
 import { formatCurrency, formatDate, formatQuantity } from '@/lib/format';
 import { useGeneralPreferences, usePreferences } from '@/lib/useGeneralPreferences';
-import type { BusinessDocument, Invoice, Item } from '@/types';
+import type { Item } from '@/types';
 const InvoiceModal = dynamic(() => import('@/components/invoices/InvoiceModal'), { ssr: false });
 const DocumentModal = dynamic(() => import('@/components/documents/DocumentModal'), { ssr: false });
 
@@ -49,10 +55,10 @@ type ItemTransaction = {
   href: string;
 };
 
-type TransactionSources = {
-  invoices: Invoice[];
-  documents: BusinessDocument[];
-};
+const transactionLabel = (transaction: ItemTransaction) => (transaction.type === 'SALE' ? 'Sale invoice' : 'Purchase bill');
+
+/** The server's `href` is the record's page, which is also its API path (`/invoices/:id` or `/documents/:id`). */
+const transactionResource = (transaction: ItemTransaction) => transaction.href;
 
 /* ========================================================================== */
 /* WORKSPACE                                                                  */
@@ -63,6 +69,7 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
   const itemPrefs = usePreferences('item');
   const isLowStock = (quantity: number) => itemPrefs.lowStockAlert && quantity <= itemPrefs.lowStockThreshold;
   const router = useRouter();
+  const [selectedId,setSelectedId]=useState(itemId??'');
 
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState('');
@@ -85,8 +92,9 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<Item | null>(null);
   const [deletingItemId, setDeletingItemId] = useState('');
   const [deleteItemError, setDeleteItemError] = useState('');
+  const [confirmTransaction, setConfirmTransaction] = useState<{ transaction: ItemTransaction; action: 'cancel' | 'delete' } | null>(null);
+  const [transactionBusy, setTransactionBusy] = useState(false);
 
-  const sourcesRef = useRef<TransactionSources | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -123,7 +131,7 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
   }, []);
 
   useEffect(() => {
-    if (!itemId) void loadItems();
+    void loadItems();
   }, [itemId, loadItems]);
 
   /* ====================================================================== */
@@ -146,100 +154,24 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
   }, []);
 
   useEffect(() => {
-    if (itemId) void loadItem(itemId);
-  }, [itemId, loadItem]);
+    const id=selectedId||items[0]?.id;if(id)void loadItem(id);
+  }, [selectedId,items,loadItem]);
 
   /* ====================================================================== */
   /* LOAD TRANSACTION SOURCES                                               */
   /* ====================================================================== */
 
-  const loadTransactionSources = useCallback(async () => {
-    if (sourcesRef.current) return sourcesRef.current;
-
-    const [invoiceList, documentList] = await Promise.all([
-      getAllPages<Invoice>('/invoices'),
-      getAllPages<BusinessDocument>('/documents'),
-    ]);
-
-    const purchaseDocuments = documentList.data.filter((document) => document.type === 'PURCHASE_INVOICE');
-
-    const [invoiceResults, documentResults] = await Promise.all([
-      Promise.allSettled(invoiceList.data.map((invoice) => api.get<Invoice>(`/invoices/${invoice.id}`))),
-      Promise.allSettled(purchaseDocuments.map((document) => api.get<BusinessDocument>(`/documents/${document.id}`))),
-    ]);
-
-    const sources = {
-      invoices: invoiceResults.flatMap((result) => (result.status === 'fulfilled' ? [result.value.data] : [])),
-      documents: documentResults.flatMap((result) => (result.status === 'fulfilled' ? [result.value.data] : [])),
-    };
-
-    sourcesRef.current = sources;
-    return sources;
+  const loadTransactions = useCallback(async (id: string) => {
+    if (!id) { setTransactions([]); return; }
+    setTransactionLoading(true); setTransactionError('');
+    try { const { data } = await getAllPages<ItemTransaction>(`/items/${id}/transactions`); setTransactions(data); }
+    catch (error) { setTransactions([]); setTransactionError(getApiError(error, 'Could not load item transactions.')); }
+    finally { setTransactionLoading(false); }
   }, []);
 
-  /* ====================================================================== */
-  /* LOAD TRANSACTIONS                                                      */
-  /* ====================================================================== */
-
-  const loadTransactions = useCallback(
-    async (id: string) => {
-      if (!id) {
-        setTransactions([]);
-        return;
-      }
-
-      setTransactionLoading(true);
-      setTransactionError('');
-
-      try {
-        const sources = await loadTransactionSources();
-
-        const sales = sources.invoices.flatMap((invoice) =>
-          invoice.items
-            .filter((line) => line.itemId === id)
-            .map((line) => ({
-              id: `sale-${line.id}`,
-              type: 'SALE' as const,
-              number: invoice.invoiceNumber,
-              date: invoice.issueDate,
-              quantity: -Number(line.quantity),
-              rate: Number(line.unitPrice),
-              total: Number(line.lineTotal),
-              status: invoice.status,
-              href: `/invoices/${invoice.id}`,
-            })),
-        );
-
-        const purchases = sources.documents.flatMap((document) =>
-          (document.items ?? [])
-            .filter((line) => line.itemId === id)
-            .map((line) => ({
-              id: `purchase-${line.id}`,
-              type: 'PURCHASE' as const,
-              number: document.documentNumber,
-              date: document.issueDate,
-              quantity: Number(line.quantity),
-              rate: Number(line.unitPrice),
-              total: Number(line.lineTotal),
-              status: document.status,
-              href: `/documents/${document.id}`,
-            })),
-        );
-
-        setTransactions([...sales, ...purchases].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      } catch (loadError: unknown) {
-        setTransactions([]);
-        setTransactionError(getApiError(loadError, 'Could not load item transactions.'));
-      } finally {
-        setTransactionLoading(false);
-      }
-    },
-    [loadTransactionSources],
-  );
-
   useEffect(() => {
-    if (itemId) void loadTransactions(itemId);
-  }, [loadTransactions, itemId]);
+    const id=selectedId||items[0]?.id;if(id)void loadTransactions(id);
+  }, [loadTransactions,selectedId,items]);
 
   /* ====================================================================== */
   /* COMPUTED                                                               */
@@ -255,7 +187,7 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
 
   const salesQty = Math.abs(
     transactions
-      .filter((transaction) => transaction.type === 'SALE' && transaction.status !== 'CANCELLED')
+      .filter((transaction) => transaction.type === 'SALE' && !['CANCELLED', 'DRAFT'].includes(transaction.status))
       .reduce((sum, transaction) => sum + transaction.quantity, 0),
   );
 
@@ -263,7 +195,7 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
     .filter((transaction) => transaction.type === 'PURCHASE' && ['ISSUED', 'ACCEPTED'].includes(transaction.status))
     .reduce((sum, transaction) => sum + transaction.quantity, 0);
 
-  const totalStockValue = items.reduce((sum, entry) => sum + Number(entry.stockQty) * Number(entry.salePrice), 0);
+  const totalStockValue = sumMoney(items.map((entry) => multiplyMoney(entry.stockQty, entry.purchasePrice ?? 0)));
   const lowStockCount = items.filter((entry) => isLowStock(Number(entry.stockQty))).length;
 
   /* ====================================================================== */
@@ -307,6 +239,68 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
     }
   }
 
+  /* ====================================================================== */
+  /* TRANSACTION ACTIONS                                                    */
+  /* ====================================================================== */
+
+  async function printTransaction(transaction: ItemTransaction) {
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) return toast.error('Allow pop-ups to view this PDF.');
+    tab.opener = null;
+    try {
+      const { data } = await api.get<Blob>(`${transactionResource(transaction)}/pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      tab.location.href = url;
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (pdfError) {
+      tab.close();
+      toast.error(getApiError(pdfError, 'Could not open PDF.'));
+    }
+  }
+
+  async function runTransactionAction() {
+    if (!confirmTransaction || transactionBusy) return;
+    const { transaction, action } = confirmTransaction;
+    const resource = transactionResource(transaction);
+    setTransactionBusy(true);
+    try {
+      if (action === 'delete') await api.delete(resource);
+      else if (transaction.type === 'SALE') await api.post(`${resource}/cancel`);
+      else await api.patch(`${resource}/status`, { status: 'CANCELLED' });
+      toast.success(`${transactionLabel(transaction)} ${action === 'cancel' ? 'cancelled' : 'deleted'}`, { description: transaction.number });
+      setConfirmTransaction(null);
+      // Cancelling or deleting moves stock, so refresh the item as well as its transactions.
+      const id = selectedId || items[0]?.id;
+      if (id) { void loadItem(id); void loadTransactions(id); }
+    } catch (actionError) {
+      toast.error(getApiError(actionError, action === 'cancel' ? 'Could not cancel.' : 'Could not delete.'));
+    } finally {
+      setTransactionBusy(false);
+    }
+  }
+
+  /** Mirrors the server's rules, so each action only shows where it can succeed. */
+  function transactionActions(transaction: ItemTransaction): Array<RowAction | false | undefined> {
+    const sale = transaction.type === 'SALE';
+    const recordId = encodeURIComponent(transaction.href.split('/').pop() ?? '');
+    const editBase = sale ? '/invoices/new' : '/purchases/bills/new';
+    const paid = ['PAID', 'PARTIALLY_PAID'].includes(transaction.status);
+    const canEdit = sale ? transaction.status !== 'CANCELLED' && !paid : ['DRAFT', 'ISSUED', 'ACCEPTED'].includes(transaction.status);
+    const canCancel = sale ? !['DRAFT', 'CANCELLED'].includes(transaction.status) && !paid : ['ISSUED', 'ACCEPTED'].includes(transaction.status);
+    const canDelete = canDeleteItem && (sale ? !paid : ['DRAFT', 'CANCELLED'].includes(transaction.status));
+    const message = `${transactionLabel(transaction)} ${transaction.number} dated ${formatDate(transaction.date)}\n${item?.name ?? 'Item'}: ${formatQuantity(Math.abs(transaction.quantity))} ${item?.unit ?? ''} × ${formatCurrency(transaction.rate)} = ${formatCurrency(transaction.total)}`;
+    return [
+      { label: 'View', icon: 'view', href: transaction.href },
+      canEdit && { label: 'Edit', icon: 'edit', href: `${editBase}?editId=${recordId}` },
+      { label: 'Duplicate', icon: 'duplicate', href: `${editBase}?duplicateId=${recordId}` },
+      { label: 'Print / PDF', icon: 'print', onClick: () => void printTransaction(transaction) },
+      { label: 'Share on WhatsApp', icon: 'whatsapp', href: whatsappLink(undefined, message), external: true },
+      !sale && ['ISSUED', 'ACCEPTED'].includes(transaction.status) && { label: 'Make payment', icon: 'payment', href: `/purchases/payment-out?billId=${recordId}` },
+      canCancel && { label: sale ? 'Cancel invoice' : 'Cancel bill', icon: 'cancel', danger: true, onClick: () => setConfirmTransaction({ transaction, action: 'cancel' }) },
+      canDelete && { label: 'Delete', icon: 'delete', danger: true, onClick: () => setConfirmTransaction({ transaction, action: 'delete' }) },
+    ];
+  }
+
   function exportTransactions() {
     if (!item || transactions.length === 0) return;
 
@@ -330,7 +324,8 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
 
   return (
     <>
-      <div className="min-h-screen bg-slate-50/70 p-4 sm:p-6">
+      <ReferenceMaster title="Items" rows={filteredItems.map(i=>({id:i.id,name:i.name,value:formatQuantity(Number(i.stockQty))}))} selectedId={selectedId||items[0]?.id||''} query={search} onQuery={setSearch} onSelect={id=>{setSelectedId(id);if(id===selectedId)void loadItem(id);}} onAdd={openAddItem} onEdit={()=>item&&openEditItem(item)} onDelete={canDeleteItem&&item?()=>requestDeleteItem(item):undefined} loading={loading} error={error} onRetry={()=>void loadItems()} detailLoading={itemLoading||transactionLoading} detailError={itemError||transactionError} name={item?.name} facts={[{label:'SALE PRICE',value:formatCurrency(Number(item?.salePrice??0))},{label:'PURCHASE PRICE',value:formatCurrency(Number(item?.purchasePrice??0))},{label:'STOCK QUANTITY',value:formatQuantity(Number(item?.stockQty??0))+' '+(item?.unit??'')},{label:'STOCK VALUE',value:formatCurrency(multiplyMoney(item?.stockQty??0,item?.purchasePrice??0))}]} headers={['TYPE','INVOICE / REF. NO','DATE','QUANTITY','PRICE / UNIT','STATUS','ACTIONS']} transactions={transactions.map(t=>({id:t.id,cells:[t.type,<Link key="ref" href={t.href}>{t.number}</Link>,formatDate(t.date),formatQuantity(t.quantity)+' '+(item?.unit??''),formatCurrency(t.rate),t.status,<div key="actions" className="reference-row-actions flex justify-end"><RowActions label={`Actions for ${transactionLabel(t)} ${t.number}`} actions={transactionActions(t)}/></div>]}))} onExport={exportTransactions} actions={<Link href="/inventory/adjustments" className="btn-primary">ADJUST ITEM</Link>}/>
+      <div className="reference-legacy-master min-h-screen bg-slate-50/70 p-4 sm:p-6">
         {itemId ? (
           /* ================================================================ */
           /* DETAIL VIEW                                                      */
@@ -421,7 +416,7 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
 
                       <div className="shrink-0 rounded-xl border border-blue-100 bg-white px-4 py-2.5 text-right shadow-sm">
                         <p className="text-[7px] font-black uppercase tracking-[0.12em] text-slate-400">Current Stock Value</p>
-                        <p className="mt-1 text-lg font-black text-blue-700">{formatCurrency(Number(item.stockQty) * Number(item.salePrice))}</p>
+                        <p className="mt-1 text-lg font-black text-blue-700">{formatCurrency(multiplyMoney(item.stockQty, item.purchasePrice ?? 0))}</p>
                       </div>
                     </div>
                   </div>
@@ -647,12 +642,11 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
         <ItemFormModal
           item={editingItem}
           onClose={() => setShowForm(false)}
-          onSaved={() => {
-            setShowForm(false);
-            sourcesRef.current = null;
+          onSaved={(_saved, keepOpen) => {
+            setShowForm(Boolean(keepOpen));
 
-            if (itemId) {
-              void loadItem(itemId);
+            if (selectedId || itemId) {
+              void loadItem(selectedId || itemId!);
             } else {
               void loadItems();
             }
@@ -668,6 +662,20 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
           busy={deletingItemId === confirmDeleteItem.id}
           onCancel={() => setConfirmDeleteItem(null)}
           onConfirm={() => void performDeleteItem()}
+        />
+      )}
+
+      {confirmTransaction && (
+        <ConfirmDialog
+          title={`${confirmTransaction.action === 'cancel' ? 'Cancel' : 'Delete'} ${confirmTransaction.transaction.number}?`}
+          message={confirmTransaction.action === 'cancel'
+            ? `This ${transactionLabel(confirmTransaction.transaction).toLowerCase()} will be cancelled and its stock and balances reversed. It stays in the register.`
+            : `This ${transactionLabel(confirmTransaction.transaction).toLowerCase()} will be removed. Linked payments and stock are protected by the billing rules, so the server may refuse if it is still in use.`}
+          confirmLabel={confirmTransaction.action === 'cancel' ? 'Cancel it' : 'Delete'}
+          busyLabel={confirmTransaction.action === 'cancel' ? 'Cancelling...' : 'Deleting...'}
+          busy={transactionBusy}
+          onCancel={() => setConfirmTransaction(null)}
+          onConfirm={() => void runTransactionAction()}
         />
       )}
     </>
@@ -791,7 +799,7 @@ function ItemRegisterTable({
                     </td>
 
                     <td className="border-r border-slate-100 bg-blue-50/20 px-3 py-3 text-right">
-                      <span className="whitespace-nowrap text-[9px] font-black text-slate-900">{formatCurrency(stock * Number(entry.salePrice))}</span>
+                      <span className="whitespace-nowrap text-[9px] font-black text-slate-900">{formatCurrency(multiplyMoney(stock, entry.purchasePrice ?? 0))}</span>
                     </td>
 
                     <td className="px-2 py-3" onClick={(event) => event.stopPropagation()}>
@@ -953,197 +961,7 @@ function StockRow({ label, value, type }: { label: string; value: string; type: 
 /* ITEM FORM                                                                  */
 /* ========================================================================== */
 
-function ItemFormModal({ item, onClose, onSaved }: { item: Item | null; onClose: () => void; onSaved: (item: Item) => void }) {
-  const { itemDescription: showDescription } = useGeneralPreferences();
-  const { itemCategories: showCategory, wholesalePrice: showWholesale } = usePreferences('item');
-  const [form, setForm] = useState({
-    name: item?.name ?? '',
-    category: item?.category ?? '',
-    wholesalePrice: item?.wholesalePrice === null || item?.wholesalePrice === undefined ? '' : String(item.wholesalePrice),
-    sku: item?.sku ?? '',
-    description: item?.description ?? '',
-    unit: item?.unit ?? 'pcs',
-    salePrice: String(item?.salePrice ?? ''),
-    taxRate: String(item?.taxRate ?? 0),
-    stockQty: String(item?.stockQty ?? 0),
-  });
-
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (saving) return;
-
-    setSaving(true);
-    setError('');
-
-    try {
-      const payload = {
-        name: form.name.trim(),
-        sku: form.sku.trim() || undefined,
-        description: form.description.trim() || undefined,
-        // Hidden fields are left out so turning a setting off never wipes saved data.
-        ...(showCategory ? { category: form.category.trim() || undefined } : {}),
-        ...(showWholesale ? { wholesalePrice: form.wholesalePrice.trim() === '' ? null : Number(form.wholesalePrice) } : {}),
-        unit: form.unit.trim(),
-        salePrice: Number(form.salePrice),
-        taxRate: Number(form.taxRate),
-        stockQty: Number(form.stockQty),
-      };
-
-      const { data } = item ? await api.patch<Item>(`/items/${item.id}`, payload) : await api.post<Item>('/items', payload);
-      (item ? toast.warning : toast.success)(item ? 'Item updated' : 'Item created', { description: data.name });
-      onSaved(data);
-    } catch (saveError: unknown) {
-      const message = getApiError(saveError, 'Could not save item.'); setError(message); toast.error(message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal title={item ? 'Edit Item' : 'Add Item'} onClose={onClose} size="lg" className="!max-w-2xl">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div role="alert" className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-[9px] font-semibold text-red-700">
-            {error}
-          </div>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FormField label="Item Name" required>
-            <input
-              id="item-name"
-              required
-              autoFocus
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none transition-all hover:border-slate-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="Enter item name"
-            />
-          </FormField>
-
-          <FormField label="SKU">
-            <input
-              id="item-sku"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none transition-all hover:border-slate-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-              value={form.sku}
-              onChange={(event) => setForm({ ...form, sku: event.target.value })}
-              placeholder="Product SKU"
-            />
-          </FormField>
-        </div>
-
-        {showDescription && (
-          <FormField label="Description">
-            <textarea
-              id="item-description"
-              rows={2}
-              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[10px] font-medium text-slate-800 outline-none transition-all hover:border-slate-300 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-              value={form.description}
-              onChange={(event) => setForm({ ...form, description: event.target.value })}
-              placeholder="Short item description"
-            />
-          </FormField>
-        )}
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <FormField label="Unit" required>
-            <input
-              id="item-unit"
-              required
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-              value={form.unit}
-              onChange={(event) => setForm({ ...form, unit: event.target.value })}
-            />
-          </FormField>
-
-          <FormField label="Sale Price" required>
-            <input
-              id="item-price"
-              required
-              type="number"
-              step="0.01"
-              min="0"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-              value={form.salePrice}
-              onChange={(event) => setForm({ ...form, salePrice: event.target.value })}
-            />
-          </FormField>
-
-          {showCategory && (
-            <FormField label="Category">
-              <input
-                id="item-category"
-                maxLength={80}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-                value={form.category}
-                onChange={(event) => setForm({ ...form, category: event.target.value })}
-                placeholder="e.g. Fabric"
-              />
-            </FormField>
-          )}
-
-          {showWholesale && (
-            <FormField label="Wholesale Price">
-              <input
-                id="item-wholesale"
-                type="number"
-                step="0.01"
-                min="0"
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-                value={form.wholesalePrice}
-                onChange={(event) => setForm({ ...form, wholesalePrice: event.target.value })}
-                placeholder="Optional"
-              />
-            </FormField>
-          )}
-
-          <FormField label="Tax %">
-            <input
-              id="item-tax"
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-              value={form.taxRate}
-              onChange={(event) => setForm({ ...form, taxRate: event.target.value })}
-            />
-          </FormField>
-
-          <FormField label="Stock">
-            <input
-              id="item-stock"
-              type="number"
-              step="0.001"
-              min="0"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100/60"
-              value={form.stockQty}
-              onChange={(event) => setForm({ ...form, stockQty: event.target.value })}
-            />
-          </FormField>
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-          <button type="button" onClick={onClose} className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-[9px] font-extrabold text-slate-600 transition hover:bg-slate-50">
-            Cancel
-          </button>
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex h-9 min-w-28 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-[9px] font-extrabold text-white transition-all hover:-translate-y-0.5 hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : item ? 'Update Item' : 'Save Item'}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
+function ItemFormModal({item,onClose,onSaved}:{item:Item|null;onClose:()=>void;onSaved:(item:Item,keepOpen?:boolean)=>void}){return <ReferenceItemForm item={item} onClose={onClose} onSaved={onSaved}/>}
 /* ========================================================================== */
 /* FORM FIELD                                                                 */
 /* ========================================================================== */

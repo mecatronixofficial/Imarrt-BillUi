@@ -9,6 +9,8 @@ export type ToastOptions = {
   description?: string;
   duration?: number;
   id?: string;
+  /** A single follow-up button, such as Undo. Clicking it also dismisses the toast. */
+  action?: { label: string; onClick: () => void };
 };
 
 type ToastItem = ToastOptions & {
@@ -177,6 +179,15 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: (id: strin
         <div className="min-w-0 pt-0.5">
           <p className="text-[11px] font-bold leading-4 text-slate-900">{item.message}</p>
           {item.description && <p className="mt-0.5 text-[10px] leading-4 text-slate-500">{item.description}</p>}
+          {item.action && (
+            <button
+              type="button"
+              onClick={() => { item.action?.onClick(); onDismiss(item.id); }}
+              className="mt-1.5 rounded-md border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 transition hover:border-blue-200 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {item.action.label}
+            </button>
+          )}
         </div>
       </div>
       <button type="button" onClick={() => onDismiss(item.id)} className="absolute right-2 top-2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Dismiss notification">

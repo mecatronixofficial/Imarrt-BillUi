@@ -84,7 +84,7 @@ export function BusinessFormModal({
   }
 
   return (
-    <Modal title={editing ? "Edit company" : "Add company"} onClose={onClose}>
+    <Modal title={editing ? "Edit sub company" : "Add sub company"} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3.5">
         {error && <ModalError message={error} />}
 
@@ -157,11 +157,11 @@ export function BusinessFormModal({
             : "Tax will be fixed at 0% and invoices will be marked non-GST."}
           {!editing && (
             branch
-              ? ` This company will be added to ${branch.name} (${branch.code}).`
+              ? ` This becomes a sub company of ${branch.name} (${branch.code}).`
               : " A Main Branch is created automatically."
           )}
         </p>
-        <ModalActions saving={saving} onClose={onClose} label={editing ? "Save changes" : "Create company"} busyLabel={editing ? "Saving..." : "Creating..."} />
+        <ModalActions saving={saving} onClose={onClose} label={editing ? "Save changes" : "Create sub company"} busyLabel={editing ? "Saving..." : "Creating..."} />
       </form>
     </Modal>
   );
@@ -223,13 +223,13 @@ export function BranchFormModal({
   }
 
   return (
-    <Modal title={editing ? "Edit branch" : "Add branch"} onClose={onClose}>
+    <Modal title={editing ? "Edit main company" : "Create main company"} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3.5">
         {error && <ModalError message={error} />}
-        <ModalField id="branch-name" label="Branch name *">
-          <input id="branch-name" required autoFocus maxLength={120} className="input-field" value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="e.g. Mumbai Branch" />
+        <ModalField id="branch-name" label="Main company name *">
+          <input id="branch-name" required autoFocus maxLength={120} className="input-field" value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="e.g. Mecatronix Group" />
         </ModalField>
-        <ModalField id="branch-code" label="Branch code *">
+        <ModalField id="branch-code" label="Short code *">
           <input id="branch-code" required minLength={2} maxLength={24} pattern="[A-Za-z0-9_\-]{2,24}" title="2-24 letters, numbers, underscores or hyphens" className="input-field uppercase" value={form.code} onChange={(event) => update("code", event.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))} placeholder="MUM" />
         </ModalField>
         <ModalField id="branch-address" label="Address">
@@ -238,7 +238,7 @@ export function BranchFormModal({
         <p className="rounded-lg bg-blue-50 px-3 py-2 text-[11px] leading-5 text-blue-700">
           Use the same branch code in other companies to make them available under one branch. Parties, suppliers, and items are shared by that branch; transactions stay company-specific.
         </p>
-        <ModalActions saving={saving} onClose={onClose} label={editing ? "Save changes" : "Create branch"} busyLabel={editing ? "Saving..." : "Creating..."} />
+        <ModalActions saving={saving} onClose={onClose} label={editing ? "Save changes" : "Create main company"} busyLabel={editing ? "Saving..." : "Creating..."} />
       </form>
     </Modal>
   );

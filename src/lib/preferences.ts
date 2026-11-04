@@ -1,4 +1,4 @@
-import { api, getActiveBusinessId, getApiError } from '@/lib/api';
+import { api, getActiveBusinessId, getApiError, onWorkspaceChanged } from '@/lib/api';
 import {
   ITEM_TABLE_COLUMN_DEFAULTS,
   REGULAR_PRINT_DEFAULTS,
@@ -33,8 +33,11 @@ export const DEFAULT_GENERAL_PREFERENCES: GeneralPreferences = {
 
 /** Defaults for every section; they mirror the server's declarations in business-preferences.ts. */
 export const PREFERENCE_DEFAULTS = {
+  profile: { businessType:'',businessCategory:'',pincode:'' },
   general: DEFAULT_GENERAL_PREFERENCES,
   transaction: {
+    billingName: true,
+    eWayBill: true,
     autoRoundOff: false,
     negativeStock: true,
     showTimeOnTransaction: false,
@@ -63,6 +66,12 @@ export const PREFERENCE_DEFAULTS = {
     showGstinOnPrint: true,
   },
   item: {
+    showMrp: true,
+    showBrand: true,
+    showBatch: true,
+    showBarcode: true,
+    showSerial: true,
+    showCount: true,
     itemCategories: true,
     wholesalePrice: false,
     lowStockAlert: true,
@@ -80,13 +89,13 @@ export type Preferences<S extends PreferenceSection> = (typeof PREFERENCE_DEFAUL
 const SECTIONS = Object.keys(PREFERENCE_DEFAULTS) as PreferenceSection[];
 
 type Listener = () => void;
+export type CompanyPreferences = Snapshot;
 type Snapshot = { [S in PreferenceSection]: Preferences<S> };
 export type SaveStatus = { state: 'idle' | 'saving' | 'saved' | 'error'; error: string };
 
 const listeners = new Set<Listener>();
 const statusListeners = new Set<Listener>();
 let cache: { businessId: string | null; snapshot: Snapshot } | null = null;
-let status: SaveStatus = { state: 'idle', error: '' };
 
 function storageKey(businessId: string | null) {
   return `imart:preferences:${businessId ?? 'default'}`;
@@ -102,7 +111,7 @@ function mergeKnown<T extends Record<string, unknown>>(defaults: T, stored: unkn
   return result as T;
 }
 
-function buildSnapshot(stored: unknown): Snapshot {
+export function normalizePreferences(stored: unknown): Snapshot {
   const source = stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : {};
   return Object.fromEntries(
     SECTIONS.map((section) => [section, mergeKnown(PREFERENCE_DEFAULTS[section], source[section])]),
@@ -112,14 +121,14 @@ function buildSnapshot(stored: unknown): Snapshot {
 function readCached(businessId: string | null): Snapshot {
   try {
     const raw = localStorage.getItem(storageKey(businessId));
-    return buildSnapshot(raw ? JSON.parse(raw) : null);
+    return normalizePreferences(raw ? JSON.parse(raw) : null);
   } catch {
-    return buildSnapshot(null);
+    return normalizePreferences(null);
   }
 }
 
 function current(): Snapshot {
-  if (typeof window === 'undefined') return buildSnapshot(null);
+  if (typeof window === 'undefined') return normalizePreferences(null);
   const businessId = getActiveBusinessId();
   if (!cache || cache.businessId !== businessId) cache = { businessId, snapshot: readCached(businessId) };
   return cache.snapshot;
@@ -141,8 +150,11 @@ export function subscribePreferences(listener: Listener) {
   return () => { listeners.delete(listener); };
 }
 
-function replaceSnapshot(snapshot: Snapshot) {
-  const businessId = getActiveBusinessId();
+function replaceSnapshot(snapshot: Snapshot, businessId = getActiveBusinessId()) {
+  if (businessId !== getActiveBusinessId()) {
+    try { localStorage.setItem(storageKey(businessId), JSON.stringify(snapshot)); } catch { /* Storage unavailable. */ }
+    return false;
+  }
   const changedSections = SECTIONS.filter((section) => JSON.stringify(current()[section]) !== JSON.stringify(snapshot[section]));
   // Untouched sections keep their object identity so useSyncExternalStore consumers do not re-render.
   const next = Object.fromEntries(SECTIONS.map((section) => [section, changedSections.includes(section) ? snapshot[section] : current()[section]])) as Snapshot;
@@ -156,65 +168,70 @@ function replaceSnapshot(snapshot: Snapshot) {
 export async function syncPreferences(): Promise<boolean> {
   const businessId = getActiveBusinessId();
   if (!businessId) return false;
+  const revision = revisions.get(businessId) ?? 0;
   const { data } = await api.get<unknown>(`/businesses/${businessId}/preferences`);
-  return replaceSnapshot(buildSnapshot(data));
+  if (revision !== (revisions.get(businessId) ?? 0) || pending.has(businessId) || inFlight.has(businessId)) return false;
+  return replaceSnapshot(normalizePreferences(data), businessId);
 }
 
-// ---- Saving -------------------------------------------------------------
-
-const SAVE_DELAY_MS = 500;
-let pending: Partial<Record<PreferenceSection, Record<string, unknown>>> = {};
-let timer: ReturnType<typeof setTimeout> | undefined;
-let inFlight = false;
-
-function setStatus(next: SaveStatus) {
-  status = next;
-  statusListeners.forEach((listener) => listener());
+type Patch = Partial<Record<PreferenceSection, Record<string, unknown>>>;
+const pending = new Map<string, Patch>();
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const inFlight = new Set<string>();
+const revisions = new Map<string, number>();
+const statuses = new Map<string, SaveStatus>();
+const IDLE: SaveStatus = { state: 'idle', error: '' };
+function setStatus(next: SaveStatus, businessId: string) {
+  statuses.set(businessId, next);
+  if (businessId === getActiveBusinessId()) { statusListeners.forEach((listener) => listener()); }
 }
-
-export function getSaveStatus() {
-  return status;
+export function getSaveStatus() { return statuses.get(getActiveBusinessId() ?? '') ?? IDLE; }
+export function subscribeSaveStatus(listener: Listener) { statusListeners.add(listener); return () => { statusListeners.delete(listener); }; }
+function applyPatch(snapshot: Snapshot, patch: Patch): Snapshot {
+  return Object.fromEntries(SECTIONS.map((section) => [section, { ...snapshot[section], ...patch[section] }])) as Snapshot;
 }
-
-export function subscribeSaveStatus(listener: Listener) {
-  statusListeners.add(listener);
-  return () => { statusListeners.delete(listener); };
-}
-
-async function flush() {
-  if (inFlight) { timer = setTimeout(() => void flush(), SAVE_DELAY_MS); return; }
-  const batch = pending;
-  pending = {};
-  timer = undefined;
-  if (!Object.keys(batch).length) return;
-  const businessId = getActiveBusinessId();
-  if (!businessId) return;
-  inFlight = true;
-  setStatus({ state: 'saving', error: '' });
+async function flush(businessId: string) {
+  if (inFlight.has(businessId)) return;
+  clearTimeout(timers.get(businessId));
+  timers.delete(businessId);
+  const batch = pending.get(businessId);
+  if (!batch) return;
+  pending.delete(businessId);
+  inFlight.add(businessId);
+  setStatus({ state: 'saving', error: '' }, businessId);
   try {
     const { data } = await api.patch<unknown>(`/businesses/${businessId}/preferences`, batch);
-    replaceSnapshot(buildSnapshot(data));
-    setStatus({ state: Object.keys(pending).length ? 'saving' : 'saved', error: '' });
+    // A server response must never overwrite edits made while this request ran.
+    replaceSnapshot(applyPatch(normalizePreferences(data), pending.get(businessId) ?? {}), businessId);
+    setStatus({ state: pending.has(businessId) ? 'saving' : 'saved', error: '' }, businessId);
   } catch (error: unknown) {
-    pending = {};
-    clearTimeout(timer);
-    // Roll the optimistic values back to what the server has.
-    await syncPreferences().catch(() => undefined);
-    setStatus({ state: 'error', error: getApiError(error, 'Could not save your changes. They were not applied.') });
+    try {
+      const { data } = await api.get<unknown>(`/businesses/${businessId}/preferences`);
+      replaceSnapshot(applyPatch(normalizePreferences(data), pending.get(businessId) ?? {}), businessId);
+    } catch { /* Keep the local values visible with an explicit save error. */ }
+    setStatus({ state: 'error', error: getApiError(error, 'Could not save your changes. Please retry.') }, businessId);
   } finally {
-    inFlight = false;
+    inFlight.delete(businessId);
+    if (pending.has(businessId)) void flush(businessId);
   }
 }
-
-/** Applies a change immediately and saves it to the server shortly after (changes are batched). */
 export function updatePreferences<S extends PreferenceSection>(section: S, patch: Partial<Preferences<S>>) {
-  replaceSnapshot({ ...current(), [section]: { ...current()[section], ...patch } } as Snapshot);
-  pending = { ...pending, [section]: { ...pending[section], ...patch } };
-  setStatus({ state: 'saving', error: '' });
-  clearTimeout(timer);
-  timer = setTimeout(() => void flush(), SAVE_DELAY_MS);
+  const businessId = getActiveBusinessId();
+  if (!businessId) return;
+  revisions.set(businessId, (revisions.get(businessId) ?? 0) + 1);
+  replaceSnapshot({ ...current(), [section]: { ...current()[section], ...patch } } as Snapshot, businessId);
+  const previous = pending.get(businessId) ?? {};
+  pending.set(businessId, { ...previous, [section]: { ...previous[section], ...patch } });
+  setStatus({ state: 'saving', error: '' }, businessId);
+  clearTimeout(timers.get(businessId));
+  timers.set(businessId, setTimeout(() => void flush(businessId), 100));
 }
-
-export function resetPreferences<S extends PreferenceSection>(section: S) {
-  updatePreferences(section, PREFERENCE_DEFAULTS[section]);
+export function resetPreferences<S extends PreferenceSection>(section: S) { updatePreferences(section, PREFERENCE_DEFAULTS[section]); }
+if (typeof window !== 'undefined') {
+  onWorkspaceChanged(() => {
+    cache = null;
+    listeners.forEach((listener) => listener());
+    statusListeners.forEach((listener) => listener());
+    void syncPreferences().catch(() => undefined);
+  });
 }

@@ -1,3 +1,2 @@
-import SalesOrderRegister from '@/components/sales/SalesOrderRegister';
-
-export default function SalesOrdersPage() { return <SalesOrderRegister />; }
+﻿import SalesOrdersWorkspace from '@/components/sales/SalesOrdersWorkspace';
+export default function SalesOrdersPage(){return <SalesOrdersWorkspace/>;}

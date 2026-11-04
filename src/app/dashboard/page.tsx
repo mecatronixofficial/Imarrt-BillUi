@@ -25,12 +25,15 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import StatusBadge from '@/components/StatusBadge';
+import ReferenceHome from '@/components/ReferenceHome';
 import { ErrorState, LoadingState } from '@/components/ContentState';
 import { getActiveBranchId, getActiveBusinessId, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
+import { buildBusinessReport, inDateRange, localDate, reportDates } from '@/lib/business-report';
+import { sumMoney } from '@/lib/billing';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { getPreferences } from '@/lib/preferences';
 import { usePreferences } from '@/lib/useGeneralPreferences';
-import type { Branch, Party, Invoice, Item, ProductionOrder, ProductionStageType } from '@/types';
+import type { Branch, BusinessDocument, Expense, Party, Invoice, Item, ProductionOrder, ProductionStageType } from '@/types';
 
 const STAGES: Array<{ type: ProductionStageType; label: string; icon: typeof Scissors; color: string }> = [
   { type: 'MASTER', label: 'Master', icon: Users, color: 'bg-slate-600' },
@@ -45,18 +48,24 @@ const STAGES: Array<{ type: ProductionStageType; label: string; icon: typeof Sci
 
 type DashboardData = {
   invoices: Invoice[];
+  documents: BusinessDocument[];
+  expenses: Expense[];
   production: ProductionOrder[];
   parties: Party[];
   items: Item[];
 };
 
-const EMPTY_DATA: DashboardData = { invoices: [], production: [], parties: [], items: [] };
+const EMPTY_DATA: DashboardData = { invoices: [], documents: [], expenses: [], production: [], parties: [], items: [] };
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [partialWarning, setPartialWarning] = useState('');
+  const [range, setRange] = useState('MONTH');
+  const [from, setFrom] = useState(localDate);
+  const [to, setTo] = useState(localDate);
+  const itemPreferences = usePreferences('item');
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -90,6 +99,8 @@ export default function DashboardPage() {
       getAllPages<ProductionOrder>('/production-orders'),
       getAllPages<Party>('/parties', masterDataConfig),
       getAllPages<Item>('/items', masterDataConfig),
+      getAllPages<BusinessDocument>('/documents'),
+      getAllPages<Expense>('/expenses'),
     ]);
 
     const failed = results.filter((result) => result.status === 'rejected');
@@ -105,9 +116,11 @@ export default function DashboardPage() {
       production: results[1].status === 'fulfilled' ? results[1].value.data : [],
       parties: results[2].status === 'fulfilled' ? results[2].value.data : [],
       items: results[3].status === 'fulfilled' ? results[3].value.data : [],
+      documents: results[4].status === 'fulfilled' ? results[4].value.data : [],
+      expenses: results[5].status === 'fulfilled' ? results[5].value.data : [],
     });
     if (failed.length > 0) {
-      const sectionNames = ['Invoices', 'Production', 'Parties', 'Items'];
+      const sectionNames = ['Invoices', 'Production', 'Parties', 'Items', 'Purchases', 'Expenses'];
       const unavailable = results.flatMap((result, index) => result.status === 'rejected' ? [sectionNames[index]] : []);
       const branchHint = !hasSpecificBranch && unavailable.some((name) => name === 'Parties' || name === 'Items')
         ? ' Select or create an active branch.'
@@ -121,11 +134,21 @@ export default function DashboardPage() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const insights = useMemo(() => calculateInsights(data), [data]);
+  const dates = useMemo(() => reportDates(range, from, to), [range, from, to]);
+  const insights = useMemo(() => calculateInsights(data, dates, itemPreferences), [data, dates, itemPreferences]);
 
   return (
     <div className="min-w-0">
+      {loading && <section className="brand-dashboard-state"><LoadingState label="Preparing your business overview..." /></section>}
+      {!loading && error && <section className="brand-dashboard-state"><ErrorState message={error} onRetry={loadDashboard} /></section>}
+      {!loading && !error && partialWarning && <div role="status" className="m-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{partialWarning}<button type="button" className="ml-3 underline" onClick={() => void loadDashboard()}>Retry</button></div>}
+      {!loading && !error && <ReferenceHome invoices={data.invoices} documents={data.documents} expenses={data.expenses} items={data.items} parties={data.parties} report={insights.report} dates={dates} range={range} from={from} to={to} onRange={setRange} onFrom={setFrom} onTo={setTo} onRefresh={() => void loadDashboard()} lowStockThreshold={itemPreferences.lowStockThreshold} />}
+      <details className="reference-dashboard-details"><summary>Production & detailed overview</summary>
       <HeroHeader insights={!loading && !error ? insights : undefined} />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <label className="text-xs font-semibold text-slate-600">Date range <select aria-label="Dashboard date range" className="input-field ml-2 w-auto" value={range} onChange={(event) => setRange(event.target.value)}><option value="ALL">All time</option><option value="TODAY">Today</option><option value="WEEK">This Week</option><option value="MONTH">This Month</option><option value="YEAR">This Year</option><option value="CUSTOM">Custom</option></select></label>
+        {range === 'CUSTOM' && <><input aria-label="From date" type="date" className="input-field w-auto" value={from} max={to} onChange={(event) => setFrom(event.target.value)} /><input aria-label="To date" type="date" className="input-field w-auto" value={to} min={from} onChange={(event) => setTo(event.target.value)} /></>}
+      </div>
 
       {loading ? (
         <section className="card"><LoadingState label="Preparing your business dashboard..." /></section>
@@ -148,6 +171,13 @@ export default function DashboardPage() {
             <SummaryCard icon={TrendingUp} label="Projected profit" value={formatCurrency(insights.projectedProfit)} detail={`${insights.averageMargin}% average margin`} tone={insights.projectedProfit >= 0 ? 'violet' : 'red'} />
           </section>
 
+          <section className="mb-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4" aria-label="Sales and purchases">
+            <SummaryCard icon={ReceiptText} label="Total sales" value={formatCurrency(insights.report.sales)} detail="Issued sales less returns" tone="emerald" />
+            <SummaryCard icon={Boxes} label="Total purchases" value={formatCurrency(insights.report.purchases)} detail="Issued bills less returns" tone="violet" />
+            <SummaryCard icon={CircleDollarSign} label="Payables" value={formatCurrency(insights.report.payable)} detail="Outstanding supplier bills" tone="amber" />
+            <SummaryCard icon={Factory} label="Total expenses" value={formatCurrency(sumMoney([insights.report.productionCost, insights.report.expenses]))} detail="Production and general expenses" tone="blue" />
+          </section>
+
           <section className="mb-4 grid min-w-0 items-stretch gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.75fr)]">
             <ProductionOverview orders={data.production} stageTotals={insights.stageTotals} />
             <FinancialSnapshot insights={insights} />
@@ -160,6 +190,7 @@ export default function DashboardPage() {
           </section>
         </>
       )}
+      </details>
     </div>
   );
 }
@@ -686,6 +717,9 @@ function ProductionOverview({ orders, stageTotals }: { orders: ProductionOrder[]
 
 function FinancialSnapshot({ insights }: { insights: ReturnType<typeof calculateInsights> }) {
   const { paymentReminders } = usePreferences('party');
+  const maximum = Math.max(1, ...insights.report.months.map((month) => Math.max(month.value, month.purchases)));
+  const chartPath = insights.report.months.map((month, index) => `${index ? 'L' : 'M'}${index * 100} ${150 - month.value / maximum * 140}`).join(' ');
+  const purchasePath = insights.report.months.map((month, index) => `${index ? 'L' : 'M'}${index * 100} ${150 - month.purchases / maximum * 140}`).join(' ');
   return (
    <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_12px_40px_rgba(15,23,42,0.07)]">
   {/* Header */}
@@ -738,7 +772,7 @@ function FinancialSnapshot({ insights }: { insights: ReturnType<typeof calculate
           </p>
 
           <p className="mt-1 text-[9px] font-medium text-slate-400">
-            Total invoiced
+            Total invoiced · solid: sales, dashed: purchases
           </p>
         </div>
 
@@ -757,10 +791,10 @@ function FinancialSnapshot({ insights }: { insights: ReturnType<typeof calculate
       <div className="relative mt-4 h-[190px]">
         {/* Y Axis Labels */}
         <div className="absolute bottom-6 left-0 top-1 flex w-8 flex-col justify-between text-[8px] font-medium text-slate-400">
-          <span>100%</span>
-          <span>75%</span>
-          <span>50%</span>
-          <span>25%</span>
+          <span>{new Intl.NumberFormat('en-IN',{notation:'compact',maximumFractionDigits:1}).format(maximum*1)}</span>
+          <span>{new Intl.NumberFormat('en-IN',{notation:'compact',maximumFractionDigits:1}).format(maximum*0.75)}</span>
+          <span>{new Intl.NumberFormat('en-IN',{notation:'compact',maximumFractionDigits:1}).format(maximum*0.5)}</span>
+          <span>{new Intl.NumberFormat('en-IN',{notation:'compact',maximumFractionDigits:1}).format(maximum*0.25)}</span>
           <span>0</span>
         </div>
 
@@ -830,34 +864,13 @@ function FinancialSnapshot({ insights }: { insights: ReturnType<typeof calculate
 
             {/* Area */}
             <path
-              d="
-                M0 125
-                C35 110, 55 90, 90 101
-                C120 111, 140 68, 180 73
-                C215 77, 220 95, 250 78
-                C280 62, 290 110, 325 88
-                C350 73, 360 32, 392 54
-                C420 72, 430 45, 455 49
-                C475 50, 485 25, 500 20
-                L500 150
-                L0 150
-                Z
-              "
+              d={chartPath + " L500 150 L0 150 Z"}
               fill="url(#revenueAreaGradient)"
             />
 
             {/* Glow Line */}
             <path
-              d="
-                M0 125
-                C35 110, 55 90, 90 101
-                C120 111, 140 68, 180 73
-                C215 77, 220 95, 250 78
-                C280 62, 290 110, 325 88
-                C350 73, 360 32, 392 54
-                C420 72, 430 45, 455 49
-                C475 50, 485 25, 500 20
-              "
+              d={chartPath}
               fill="none"
               stroke="#67e8f9"
               strokeWidth="7"
@@ -867,16 +880,7 @@ function FinancialSnapshot({ insights }: { insights: ReturnType<typeof calculate
 
             {/* Main Line */}
             <path
-              d="
-                M0 125
-                C35 110, 55 90, 90 101
-                C120 111, 140 68, 180 73
-                C215 77, 220 95, 250 78
-                C280 62, 290 110, 325 88
-                C350 73, 360 32, 392 54
-                C420 72, 430 45, 455 49
-                C475 50, 485 25, 500 20
-              "
+              d={chartPath}
               fill="none"
               stroke="url(#revenueLineGradient)"
               strokeWidth="3.5"
@@ -884,16 +888,13 @@ function FinancialSnapshot({ insights }: { insights: ReturnType<typeof calculate
               strokeLinejoin="round"
               className="transition-all duration-500"
             />
+            <path d={purchasePath} fill="none" stroke="#7c3aed" strokeWidth="2" strokeDasharray="5 3" />
           </svg>
         </div>
 
         {/* X labels */}
         <div className="absolute bottom-0 left-9 right-1 flex items-center justify-between text-[8px] font-semibold text-slate-500">
-          <span>Invoiced</span>
-          <span>Collected</span>
-          <span>Receivable</span>
-          <span>Margin</span>
-          <span>Profit</span>
+          {insights.report.months.map((month) => <span key={month.label}>{month.label}</span>)}
         </div>
       </div>
 
@@ -1342,7 +1343,7 @@ function BusinessPulse({ data, insights }: { data: DashboardData; insights: Retu
   <div className="grid gap-2.5 sm:grid-cols-3">
     {/* Add Party */}
     <Link
-      href="/parties"
+      href="/parties?create=1"
       className="
         group
         relative
@@ -1690,16 +1691,18 @@ function QuickLink({ href, label, icon: Icon }: { href: string; label: string; i
   return <Link href={href} className="group flex items-center gap-2 rounded-lg px-2 py-1.5 text-[10px] font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-700"><Icon aria-hidden="true" size={13} /><span className="flex-1">{label}</span><ArrowRight aria-hidden="true" size={12} className="opacity-0 transition group-hover:opacity-100" /></Link>;
 }
 
-function calculateInsights(data: DashboardData) {
-  const invoiced = data.invoices.reduce((total, invoice) => total + Number(invoice.grandTotal), 0);
-  const collected = data.invoices.reduce((total, invoice) => total + Number(invoice.amountPaid), 0);
+function calculateInsights(data: DashboardData, dates = {}, itemPreferences = getPreferences('item')) {
+  const invoices = data.invoices.filter((invoice) => !['DRAFT', 'CANCELLED'].includes(invoice.status) && inDateRange(invoice.issueDate, dates));
+  const report = buildBusinessReport({ invoices: data.invoices, documents: data.documents, orders: data.production, expenses: data.expenses }, dates);
+  const invoiced = report.sales;
+  const collected = report.collected;
   const outstanding = Math.max(0, invoiced - collected);
   const now = Date.now();
   const weekAhead = now + 7 * 24 * 60 * 60 * 1000;
   const active = data.production.filter(({ status }) => !['DRAFT', 'COMPLETED', 'CANCELLED'].includes(status));
-  const confirmedProduction = data.production.filter(({ status }) => status !== 'DRAFT');
+  const confirmedProduction = data.production.filter(({ status }) => !['DRAFT', 'CANCELLED'].includes(status));
   const totalProductionRevenue = confirmedProduction.reduce((total, order) => total + order.summary.revenue, 0);
-  const projectedProfit = confirmedProduction.reduce((total, order) => total + order.summary.profit, 0);
+  const projectedProfit = sumMoney(confirmedProduction.map((order) => order.summary.profit));
   const stageTotals = Object.fromEntries(STAGES.map(({ type }) => {
     const stages = active.flatMap((order) => order.stages.filter((stage) => stage.type === type));
     const planned = stages.reduce((total, stage) => total + stage.plannedQty, 0);
@@ -1708,17 +1711,18 @@ function calculateInsights(data: DashboardData) {
   })) as Record<ProductionStageType, { planned: number; completed: number; progress: number }>;
 
   return {
+    report,
     invoiced,
     collected,
     outstanding,
     collectionRate: invoiced ? Math.min(100, Number(((collected / invoiced) * 100).toFixed(1))) : 0,
-    unpaidInvoices: data.invoices.filter(({ status }) => status === 'UNPAID' || status === 'PARTIALLY_PAID').length,
-    overdueInvoices: data.invoices.filter((invoice) => invoice.dueDate && new Date(invoice.dueDate).getTime() < now && invoice.status !== 'PAID' && invoice.status !== 'CANCELLED').length,
+    unpaidInvoices: invoices.filter(({ status }) => status === 'UNPAID' || status === 'PARTIALLY_PAID').length,
+    overdueInvoices: invoices.filter((invoice) => invoice.dueDate && new Date(invoice.dueDate).getTime() < now && invoice.status !== 'PAID' && invoice.status !== 'CANCELLED').length,
     activeOrders: active.length,
     piecesInProduction: active.reduce((total, order) => total + order.orderedQty, 0),
     projectedProfit,
     averageMargin: totalProductionRevenue ? Number(((projectedProfit / totalProductionRevenue) * 100).toFixed(1)) : 0,
-    lowStock: getPreferences('item').lowStockAlert ? data.items.filter((item) => Number(item.stockQty) <= getPreferences('item').lowStockThreshold).length : 0,
+    lowStock: itemPreferences.lowStockAlert ? data.items.filter((item) => Number(item.stockQty) <= Number(item.lowStockThreshold ?? itemPreferences.lowStockThreshold)).length : 0,
     ordersDueSoon: active.filter((order) => order.dueDate && new Date(order.dueDate).getTime() >= now && new Date(order.dueDate).getTime() <= weekAhead).length,
     stageTotals,
   };

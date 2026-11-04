@@ -4,14 +4,19 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, Clock3, Download, FileImage, FileText, IndianRupee, Loader2, Mail, MessageCircle, Paperclip, ReceiptText, Send, Share2, Trash2, XCircle } from 'lucide-react';
+import DocumentConversionDialog from '@/components/documents/DocumentConversionDialog';
+import { conversionReversal } from '@/lib/document-conversion';
+import DocumentActions from '@/components/documents/DocumentActions';
 import StatusBadge from '@/components/StatusBadge';
-import Modal from '@/components/Modal';
+import InvoicePaymentsModal from '@/components/invoices/InvoicePaymentsModal';
+import InvoicePaymentHistory from '@/components/invoices/InvoicePaymentHistory';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ErrorState, LoadingState } from '@/components/ContentState';
 import { toast } from '@/components/ToastProvider';
+import { invoiceOutstanding } from '@/lib/outstanding';
 import { api, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate, formatQuantity, formatTransactionDate } from '@/lib/format';
-import { getPreferences } from '@/lib/preferences';
+import { getPreferences, normalizePreferences } from '@/lib/preferences';
 import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
 import type { Invoice, InvoiceDelivery, InvoiceDeliveryChannel } from '@/types';
 
@@ -20,6 +25,7 @@ export default function InvoiceDetailPage() {
   const router = useRouter();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [showPayment, setShowPayment] = useState(false);
+  const [showReversal, setShowReversal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [downloadingAttachment, setDownloadingAttachment] = useState('');
@@ -133,12 +139,12 @@ export default function InvoiceDetailPage() {
 
   function invoiceSummary() {
     if (!invoice) return '';
-    return renderMessage(getPreferences('message').invoiceMessage, templateValues(Number(invoice.grandTotal)));
+    return renderMessage(normalizePreferences(invoice?.business?.preferences).message.invoiceMessage, templateValues(Number(invoice.grandTotal)));
   }
 
   function reminderSummary() {
     if (!invoice) return '';
-    const balance = Math.max(0, Number(invoice.grandTotal) - Number(invoice.amountPaid));
+    const balance = Math.max(0, invoiceOutstanding(invoice));
     return renderMessage(getPreferences('message').paymentReminderMessage, templateValues(balance));
   }
 
@@ -193,7 +199,8 @@ export default function InvoiceDetailPage() {
     return <><div className="card"><ErrorState message="Invoice not found." /></div></>;
   }
 
-  const balanceDue = Math.max(0, Number(invoice.grandTotal) - Number(invoice.amountPaid));
+  const balanceDue = Math.max(0, invoiceOutstanding(invoice));
+  const reversal = conversionReversal(invoice);
 
   return (
     <>
@@ -207,6 +214,16 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
       </div>
+
+      {reversal && (
+        <section className="card mb-4 p-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Conversion options</h2>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => setShowReversal(true)} className="btn-secondary">{reversal.label}</button>
+            {invoice.conversionSource && <Link href={`/documents/${reversal.sourceId}${invoice.business?.id ? '?companyId=' + encodeURIComponent(invoice.business.id) : ''}`} className="text-xs font-semibold text-blue-700 hover:underline">Converted from {invoice.conversionSource.documentNumber}</Link>}
+          </div>
+        </section>
+      )}
 
       {offerShare && (
         <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
@@ -222,15 +239,13 @@ export default function InvoiceDetailPage() {
         <Link href="/invoices" className="btn-secondary inline-flex items-center gap-2">
           <ArrowLeft aria-hidden="true" size={15} /> Back
         </Link>
-        {balanceDue > 0 && invoice.status !== 'CANCELLED' && (
-          <button type="button" onClick={() => setShowPayment(true)} className="btn-secondary inline-flex items-center gap-2">
-            <IndianRupee aria-hidden="true" size={15} /> Record payment
-          </button>
-        )}
+        <button type="button" onClick={() => setShowPayment(true)} className="btn-secondary inline-flex items-center gap-2">
+          <IndianRupee aria-hidden="true" size={15} /> Record payment
+        </button>
         <button type="button" onClick={() => shareWhatsApp()} disabled={!(invoice.party.whatsappNumber || invoice.party.phone)} className="btn-secondary inline-flex items-center gap-2 text-emerald-700 disabled:opacity-50">
           <MessageCircle aria-hidden="true" size={15} /> WhatsApp
         </button>
-        {balanceDue > 0 && invoice.status !== 'CANCELLED' && (
+        {balanceDue > 0 && !['CANCELLED','DRAFT'].includes(invoice.status) && (
           <button type="button" onClick={() => shareWhatsApp(reminderSummary())} disabled={!(invoice.party.whatsappNumber || invoice.party.phone)} className="btn-secondary inline-flex items-center gap-2 text-amber-700 disabled:opacity-50">
             <MessageCircle aria-hidden="true" size={15} /> Payment reminder
           </button>
@@ -319,19 +334,7 @@ export default function InvoiceDetailPage() {
           <h2 className="flex items-center gap-2 font-bold text-slate-900"><IndianRupee size={17} className="text-emerald-600" /> Payment history</h2>
           <p className="mt-1 text-xs text-slate-500">Payments recorded against this invoice.</p>
         </div>
-        {invoice.payments?.length ? (
-          <div className="divide-y divide-slate-100">
-            {invoice.payments.map((payment) => (
-              <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
-                <div>
-                  <p className="font-semibold capitalize text-slate-800">{payment.method.replaceAll('_', ' ')}</p>
-                  <p className="text-xs text-slate-500">{formatDate(payment.paidAt)}{payment.reference ? ` · ${payment.reference}` : ''}</p>
-                </div>
-                <span className="font-bold tabular-nums text-emerald-700">{formatCurrency(payment.amount)}</span>
-              </div>
-            ))}
-          </div>
-        ) : <p className="p-5 text-xs text-slate-500">No payments recorded yet.</p>}
+        <InvoicePaymentHistory payments={invoice.payments} />
       </section>
 
       <section className="card mt-5 overflow-hidden">
@@ -377,17 +380,17 @@ export default function InvoiceDetailPage() {
       </section>
 
       {showPayment && (
-        <PaymentModal
+        <InvoicePaymentsModal
           invoiceId={invoice.id}
-          maxAmount={balanceDue}
           onClose={() => setShowPayment(false)}
           onSaved={() => {
-            setShowPayment(false);
             void loadInvoice();
           }}
         />
       )}
       {confirmDelete && <ConfirmDialog title="Delete invoice?" message={`Delete invoice ${invoice.invoiceNumber}? This cannot be undone.`} busy={deleting} onCancel={() => setConfirmDelete(false)} onConfirm={() => void deleteInvoice()} />}
+      {showReversal && <DocumentConversionDialog record={invoice} action="reverse" onClose={() => setShowReversal(false)} />}
+      <DocumentActions onRecordPayment={() => setShowPayment(true)} id={invoice.id} resource="invoices" companyId={invoice.business?.id} branchId={invoice.branchId} canEdit={invoice.status!=='CANCELLED'&&Number(invoice.amountPaid)===0&&!invoice.creditTotal} canCancel={!['CANCELLED', 'DRAFT'].includes(invoice.status)} onUpdated={()=>void loadInvoice()} />
     </>
   );
 }
@@ -403,67 +406,5 @@ function SummaryCard({ label, value, tone }: { label: string; value: string; ton
       <p className="text-xs font-semibold uppercase tracking-wide opacity-75">{label}</p>
       <p className="mt-2 text-xl font-bold tabular-nums sm:text-2xl">{value}</p>
     </div>
-  );
-}
-
-function PaymentModal({ invoiceId, maxAmount, onClose, onSaved }: { invoiceId: string; maxAmount: number; onClose: () => void; onSaved: () => void }) {
-  const [amount, setAmount] = useState(String(maxAmount));
-  const [method, setMethod] = useState('cash');
-  const [reference, setReference] = useState('');
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (saving) return;
-    const paymentAmount = Number(amount);
-    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || paymentAmount > maxAmount) {
-      setError(`Enter an amount greater than zero and no more than ${formatCurrency(maxAmount)}.`);
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      await api.post(`/invoices/${invoiceId}/payments`, { amount: paymentAmount, method, reference: reference.trim() || undefined });
-      onSaved();
-    } catch (saveError: unknown) {
-      setError(getApiError(saveError, 'Could not record payment.'));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal title="Record payment" onClose={onClose} size="sm">
-      <form onSubmit={handleSubmit} className="space-y-3.5">
-        {error && <div role="alert" className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
-        <div>
-          <label htmlFor="payment-amount" className="label">Amount</label>
-          <input id="payment-amount" type="number" required autoFocus min="0.01" max={maxAmount} step="0.01" className="input-field" value={amount} onChange={(event) => setAmount(event.target.value)} />
-          <p className="mt-1.5 text-xs text-slate-500">Balance due: {formatCurrency(maxAmount)}</p>
-        </div>
-        <div>
-          <label htmlFor="payment-method" className="label">Method</label>
-          <select id="payment-method" className="input-field" value={method} onChange={(event) => setMethod(event.target.value)}>
-            <option value="cash">Cash</option>
-            <option value="bank_transfer">Bank transfer</option>
-            <option value="upi">UPI</option>
-            <option value="cheque">Cheque</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div>
-          <label htmlFor="payment-reference" className="label">Reference (optional)</label>
-          <input id="payment-reference" className="input-field" value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Transaction ID or cheque number" />
-        </div>
-        <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-          <button type="submit" disabled={saving} className="btn-primary inline-flex min-w-24 items-center justify-center gap-2">
-            {saving && <Loader2 aria-hidden="true" size={15} className="animate-spin" />}
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </form>
-    </Modal>
   );
 }

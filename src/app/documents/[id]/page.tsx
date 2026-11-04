@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -20,19 +20,23 @@ import {
   XCircle,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import DocumentConversionDialog from '@/components/documents/DocumentConversionDialog';
+import { conversionOptions, conversionReversal } from '@/lib/document-conversion';
+import DocumentActions from '@/components/documents/DocumentActions';
+import { canEdit, editPath } from '@/components/transactionActions';
 import StatusBadge from '@/components/StatusBadge';
 import { ErrorState, LoadingState } from '@/components/ContentState';
 import { toast } from '@/components/ToastProvider';
 import { api, getApiError } from '@/lib/api';
 import { DOCUMENT_CONFIG } from '@/lib/documents';
 import { formatCurrency, formatDate, formatQuantity, formatTransactionDate } from '@/lib/format';
-import { getPreferences } from '@/lib/preferences';
+import { getPreferences, normalizePreferences } from '@/lib/preferences';
 import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
-import type { BusinessDocument, BusinessDocumentStatus, Invoice } from '@/types';
+import type { BusinessDocument, BusinessDocumentStatus } from '@/types';
 
 export default function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  const [workflow, setWorkflow] = useState<'convert' | 'reverse' | null>(null);
   const [document, setDocument] = useState<BusinessDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -101,7 +105,7 @@ export default function DocumentDetailPage() {
     if (!document) return '';
     const party = document.party?.name || document.supplier?.name || 'Party';
     if (document.party) {
-      const message = getPreferences('message');
+      const message = normalizePreferences(document.business?.preferences).message;
       const estimate = document.type === 'QUOTATION' || document.type === 'PROFORMA_INVOICE';
       return renderMessage(estimate ? message.estimateMessage : message.invoiceMessage, {
         FirmName: document.business?.legalName || document.business?.name || '',
@@ -154,29 +158,14 @@ export default function DocumentDetailPage() {
     finally { setBusy(''); }
   }
 
-  async function convert(target: 'invoice' | 'proforma') {
-    if (!document) return;
-    setBusy(`convert-${target}`); setError('');
-    try {
-      if (target === 'invoice') {
-        const { data } = await api.post<Invoice>(`/documents/${document.id}/convert-to-invoice`);
-        toast.success('Converted to invoice', { description: data.invoiceNumber });
-        router.push(`/invoices/${data.id}`);
-      } else {
-        const { data } = await api.post<BusinessDocument>(`/documents/${document.id}/convert-to-proforma`);
-        toast.success('Converted to proforma invoice', { description: data.documentNumber });
-        router.push(`/documents/${data.id}`);
-      }
-    } catch (convertError: unknown) { setError(getApiError(convertError, `Could not convert to ${target}.`)); }
-    finally { setBusy(''); }
-  }
 
   if (loading) return <><div className="card"><LoadingState label="Loading document..." /></div></>;
   if (!document || error && !document) return <><div className="card"><ErrorState message={error || 'Document not found.'} onRetry={loadDocument} /></div></>;
 
   const config = DOCUMENT_CONFIG[document.type];
   const party = document.supplier || document.party;
-  const canConvert = !['CONVERTED', 'CANCELLED'].includes(document.status) && (document.type === 'QUOTATION' || document.type === 'PROFORMA_INVOICE');
+  const canConvert = conversionOptions(document).length > 0;
+  const reversal = conversionReversal(document);
 
   return (
     <>
@@ -185,6 +174,17 @@ export default function DocumentDetailPage() {
         description={`${config.label} · ${party?.name || 'No party'} · Created ${formatDate(document.createdAt)}`}
         action={<div className="flex flex-wrap items-center justify-end gap-2"><Link href="/documents" className="btn-secondary inline-flex items-center gap-2"><ArrowLeft size={15} /> Back</Link><button type="button" onClick={() => void downloadPdf()} disabled={Boolean(busy)} className="btn-primary inline-flex items-center gap-2">{busy === 'download' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} PDF</button></div>}
       />
+      {(canConvert || reversal) && (
+        <section className="card mb-4 p-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Conversion options</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {canConvert && <button type="button" disabled={Boolean(busy)} onClick={() => setWorkflow('convert')} className="btn-primary inline-flex items-center gap-2"><ExternalLink size={15} /> Convert document</button>}
+            {document.convertedInvoiceId && <Link href={'/invoices/' + document.convertedInvoiceId} className="btn-secondary">View sale invoice</Link>}
+            {document.conversionTarget && document.conversionTarget.type !== 'INVOICE' && <Link href={'/documents/' + document.conversionTarget.id} className="btn-secondary">View converted record</Link>}
+            {reversal && <button type="button" disabled={Boolean(busy)} onClick={() => setWorkflow('reverse')} className="btn-secondary inline-flex items-center gap-2"><RotateCcw size={15} /> {reversal.label}</button>}
+          </div>
+        </section>
+      )}
       {error && <div role="alert" className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {offerShare && document.party && (
         <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
@@ -234,11 +234,11 @@ export default function DocumentDetailPage() {
         <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
           <section className="card p-4"><h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Share and export</h2><div className="grid grid-cols-2 gap-2"><ActionButton icon={MessageCircle} label="WhatsApp" onClick={shareWhatsApp} tone="text-emerald-700 bg-emerald-50 hover:bg-emerald-100" /><ActionButton icon={Mail} label="Email" onClick={shareEmail} tone="text-blue-700 bg-blue-50 hover:bg-blue-100" /><ActionButton icon={Share2} label="Share PDF" loading={busy === 'share'} onClick={() => void nativeShare()} tone="text-indigo-700 bg-indigo-50 hover:bg-indigo-100" /><ActionButton icon={Printer} label="Print" loading={busy === 'print'} onClick={() => void printPdf()} tone="text-slate-700 bg-slate-100 hover:bg-slate-200" /><ActionButton icon={Download} label="Download" loading={busy === 'download'} onClick={() => void downloadPdf()} tone="text-violet-700 bg-violet-50 hover:bg-violet-100" /><ActionButton icon={copied ? CheckCircle2 : Copy} label={copied ? 'Copied' : 'Copy details'} onClick={() => void copySummary()} tone="text-amber-700 bg-amber-50 hover:bg-amber-100" /></div></section>
 
-          {canConvert && <section className="card p-4"><h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Convert document</h2><p className="mt-2 text-xs leading-5 text-slate-500">Reuse all party, tax, and line details without entering them again.</p><div className="mt-3 space-y-2">{document.type === 'QUOTATION' && <button type="button" disabled={Boolean(busy)} onClick={() => void convert('proforma')} className="btn-secondary flex w-full items-center justify-center gap-2"><RotateCcw size={15} /> Convert to proforma</button>}<button type="button" disabled={Boolean(busy)} onClick={() => void convert('invoice')} className="btn-primary flex w-full items-center justify-center gap-2">{busy === 'convert-invoice' ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />} Convert to invoice</button></div></section>}
-
           {!['CONVERTED', 'CANCELLED'].includes(document.status) && <section className="card p-4"><h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Workflow status</h2><div className="mt-3 space-y-2">{document.status === 'DRAFT' && <button type="button" onClick={() => void changeStatus('ISSUED')} disabled={Boolean(busy)} className="btn-primary flex w-full items-center justify-center gap-2"><Send size={15} /> Mark as issued</button>}{document.status === 'ISSUED' && <><button type="button" onClick={() => void changeStatus('ACCEPTED')} disabled={Boolean(busy)} className="btn-secondary flex w-full items-center justify-center gap-2 text-emerald-700"><FileCheck2 size={15} /> Mark accepted</button><button type="button" onClick={() => void changeStatus('REJECTED')} disabled={Boolean(busy)} className="btn-secondary flex w-full items-center justify-center gap-2 text-red-600"><XCircle size={15} /> Mark rejected</button></>}<button type="button" onClick={() => void changeStatus('CANCELLED')} disabled={Boolean(busy)} className="w-full rounded-lg px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50">Cancel document</button></div></section>}
         </aside>
       </div>
+      {workflow && <DocumentConversionDialog record={document} action={workflow} onClose={() => setWorkflow(null)} onUpdated={() => void loadDocument()} />}
+      <DocumentActions id={document.id} resource="documents" companyId={document.businessId} editHref={canEdit(document) ? editPath(document, "editId") : undefined} duplicateHref={editPath(document, "duplicateId")} />
     </>
   );
 }

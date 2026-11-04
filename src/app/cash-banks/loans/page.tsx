@@ -1,0 +1,1 @@
+import FinanceWorkspace from '@/components/accounting/FinanceWorkspace';export default function Page(){return <FinanceWorkspace mode="loans"/>}

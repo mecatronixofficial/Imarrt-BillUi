@@ -1,14 +1,8 @@
 'use client';
-
 import type { ReactNode } from 'react';
-import PageHeader from '@/components/PageHeader';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import BackButton from '@/components/BackButton';
 import { SettingsAccess } from '@/components/settings/SettingsControls';
-
-export default function PreferencesLayout({ children }: { children: ReactNode }) {
-  return (
-    <>
-      <PageHeader title="Preferences" description="Defaults applied across invoices, print-outs, tax, messaging, parties, and items." />
-      <div className="min-w-0 space-y-4"><SettingsAccess>{children}</SettingsAccess></div>
-    </>
-  );
-}
+const tabs=[['general','GENERAL'],['transaction','TRANSACTION'],['print','PRINT'],['taxes-gst','TAXES & GST'],['transaction-message','TRANSACTION MESSAGE'],['party','PARTY'],['item','ITEM']];
+export default function PreferencesLayout({children}:{children:ReactNode}){const pathname=usePathname();return <div className="reference-settings"><aside className="reference-settings-nav"><div className="brand-settings-heading"><BackButton fallback="/settings"/><h1>Settings</h1></div>{tabs.map(([key,label])=><Link key={key} href={'/settings/'+key} aria-current={pathname==='/settings/'+key?'page':undefined}>{label}</Link>)}<Link href="/security">ACCOUNT SECURITY</Link><Link href="/businesses">MULTI FIRM</Link><Link href="/dashboard">CLOSE SETTINGS</Link></aside><SettingsAccess><div className="reference-settings-content">{children}</div></SettingsAccess></div>}

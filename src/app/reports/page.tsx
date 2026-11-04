@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import Link from "next/link";
+import ReferenceReports from "@/components/ReferenceReports";
 
 import {
   AlertTriangle,
@@ -41,11 +42,15 @@ import {
 
 import type {
   BusinessDocument,
+  Expense,
   Invoice,
   Item,
   Party,
   ProductionOrder,
 } from "@/types";
+
+import { buildBusinessReport, reportDates } from '@/lib/business-report';
+import { usePreferences } from '@/lib/useGeneralPreferences';
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -65,6 +70,7 @@ export default function ReportsPage() {
   const [invoices, setInvoices] =
     useState<Invoice[]>([]);
 
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [documents, setDocuments] =
     useState<BusinessDocument[]>([]);
 
@@ -102,6 +108,7 @@ export default function ReportsPage() {
           orderRes,
           partyRes,
           itemRes,
+          expenseRes,
         ] = await Promise.all([
           getAllPages<Invoice>(
             "/invoices",
@@ -122,8 +129,10 @@ export default function ReportsPage() {
           getAllPages<Item>(
             "/items",
           ),
+          getAllPages<Expense>("/expenses"),
         ]);
 
+        setExpenses(expenseRes.data);
         setInvoices(
           invoiceRes.data,
         );
@@ -165,312 +174,8 @@ export default function ReportsPage() {
   /* Report                                                                   */
   /* ------------------------------------------------------------------------ */
 
-  const report =
-    useMemo(() => {
-      const now =
-        new Date();
-
-      const cutoff =
-        new Date(now);
-
-      if (range === "30D") {
-        cutoff.setDate(
-          now.getDate() - 30,
-        );
-      }
-
-      if (range === "90D") {
-        cutoff.setDate(
-          now.getDate() - 90,
-        );
-      }
-
-      if (range === "YEAR") {
-        cutoff.setMonth(
-          0,
-          1,
-        );
-      }
-
-      cutoff.setHours(
-        0,
-        0,
-        0,
-        0,
-      );
-
-      const inRange = (
-        value: string,
-      ) =>
-        range === "ALL" ||
-        new Date(value) >=
-          cutoff;
-
-      const activeInvoices =
-        invoices.filter(
-          (invoice) =>
-            invoice.status !==
-              "CANCELLED" &&
-            inRange(
-              invoice.issueDate,
-            ),
-        );
-
-      const purchaseDocs =
-        documents.filter(
-          (document) =>
-            document.type ===
-              "PURCHASE_INVOICE" &&
-            document.status !==
-              "CANCELLED" &&
-            inRange(
-              document.issueDate,
-            ),
-        );
-
-      const sales =
-        activeInvoices.reduce(
-          (
-            sum,
-            invoice,
-          ) =>
-            sum +
-            Number(
-              invoice.grandTotal,
-            ),
-          0,
-        );
-
-      const collected =
-        activeInvoices.reduce(
-          (
-            sum,
-            invoice,
-          ) =>
-            sum +
-            Number(
-              invoice.amountPaid,
-            ),
-          0,
-        );
-
-      const purchases =
-        purchaseDocs.reduce(
-          (
-            sum,
-            document,
-          ) =>
-            sum +
-            Number(
-              document.grandTotal,
-            ),
-          0,
-        );
-
-      const productionCost =
-        orders
-          .filter((order) =>
-            inRange(
-              order.createdAt,
-            ),
-          )
-          .reduce(
-            (
-              sum,
-              order,
-            ) =>
-              sum +
-              Number(
-                order.summary
-                  ?.totalMakingCost ||
-                  0,
-              ),
-            0,
-          );
-
-      const byStatus = [
-        "PAID",
-        "PARTIALLY_PAID",
-        "UNPAID",
-        "DRAFT",
-      ].map(
-        (status) => ({
-          status,
-
-          count:
-            activeInvoices.filter(
-              (invoice) =>
-                invoice.status ===
-                status,
-            ).length,
-
-          total:
-            activeInvoices
-              .filter(
-                (invoice) =>
-                  invoice.status ===
-                  status,
-              )
-              .reduce(
-                (
-                  sum,
-                  invoice,
-                ) =>
-                  sum +
-                  Number(
-                    invoice.grandTotal,
-                  ),
-                0,
-              ),
-        }),
-      );
-
-      const customerMap =
-        new Map<
-          string,
-          {
-            name: string;
-            total: number;
-            paid: number;
-            count: number;
-          }
-        >();
-
-      activeInvoices.forEach(
-        (invoice) => {
-          const current =
-            customerMap.get(
-              invoice.party.id,
-            ) ?? {
-              name:
-                invoice.party
-                  .name,
-              total: 0,
-              paid: 0,
-              count: 0,
-            };
-
-          current.total +=
-            Number(
-              invoice.grandTotal,
-            );
-
-          current.paid +=
-            Number(
-              invoice.amountPaid,
-            );
-
-          current.count += 1;
-
-          customerMap.set(
-            invoice.party.id,
-            current,
-          );
-        },
-      );
-
-      const topCustomers = [
-        ...customerMap.values(),
-      ]
-        .sort(
-          (a, b) =>
-            b.total -
-            a.total,
-        )
-        .slice(0, 5);
-
-      const months =
-        Array.from(
-          {
-            length: 6,
-          },
-          (_, index) => {
-            const date =
-              new Date(
-                now.getFullYear(),
-                now.getMonth() -
-                  5 +
-                  index,
-                1,
-              );
-
-            const next =
-              new Date(
-                date.getFullYear(),
-                date.getMonth() +
-                  1,
-                1,
-              );
-
-            return {
-              label:
-                date.toLocaleDateString(
-                  "en-IN",
-                  {
-                    month:
-                      "short",
-                  },
-                ),
-
-              value:
-                invoices
-                  .filter(
-                    (
-                      invoice,
-                    ) =>
-                      invoice.status !==
-                        "CANCELLED" &&
-                      new Date(
-                        invoice.issueDate,
-                      ) >= date &&
-                      new Date(
-                        invoice.issueDate,
-                      ) < next,
-                  )
-                  .reduce(
-                    (
-                      sum,
-                      invoice,
-                    ) =>
-                      sum +
-                      Number(
-                        invoice.grandTotal,
-                      ),
-                    0,
-                  ),
-            };
-          },
-        );
-
-      return {
-        sales,
-        collected,
-
-        outstanding:
-          Math.max(
-            0,
-            sales -
-              collected,
-          ),
-
-        purchases,
-        productionCost,
-
-        profit:
-          sales -
-          purchases -
-          productionCost,
-
-        byStatus,
-        topCustomers,
-        months,
-      };
-    }, [
-      documents,
-      invoices,
-      orders,
-      range,
-    ]);
+  const report = useMemo(() => buildBusinessReport({ invoices, documents, orders, expenses }, reportDates(range)), [invoices, documents, orders, expenses, range]);
+  const itemPreferences = usePreferences('item');
 
   /* ------------------------------------------------------------------------ */
   /* Low Stock                                                                */
@@ -482,7 +187,7 @@ export default function ReportsPage() {
         (item) =>
           Number(
             item.stockQty,
-          ) <= 5,
+          ) <= Number(item.lowStockThreshold ?? itemPreferences.lowStockThreshold) && itemPreferences.lowStockAlert,
       )
       .sort(
         (a, b) =>
@@ -534,6 +239,7 @@ export default function ReportsPage() {
         "Production cost",
         report.productionCost,
       ],
+      ["General expenses", report.expenses],
       [
         "Estimated profit",
         report.profit,
@@ -597,7 +303,7 @@ export default function ReportsPage() {
   /* ------------------------------------------------------------------------ */
 
   return (
-    <div className="min-h-screen bg-slate-50/60">
+    <div><ReferenceReports invoices={invoices} documents={documents} items={items} parties={parties} expenses={expenses} orders={orders} loading={loading} error={error} onRetry={()=>void loadReports()}/><details className="reference-dashboard-details"><summary>Detailed business analytics</summary><div className="min-h-screen bg-slate-50/60">
       {/* ================================================================ */}
       {/* PREMIUM HEADER                                                   */}
       {/* ================================================================ */}
@@ -1377,7 +1083,7 @@ export default function ReportsPage() {
           </div>
         </>
       )}
-    </div>
+    </div></details></div>
   );
 }
 

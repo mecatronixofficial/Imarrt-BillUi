@@ -76,7 +76,11 @@ export default function LoginPage() {
       }
 
       resetSession();
-      const currentUser = await getCurrentUser().catch(() => null);
+      const currentUser = await getCurrentUser();
+      if (!currentUser) {
+        setError('Your sign-in session could not be verified. Please try again and make sure cookies are allowed for this app.');
+        return;
+      }
       const role = currentUser?.role === 'SUPER_ADMIN'
         ? 'Super admin'
         : currentUser?.role
