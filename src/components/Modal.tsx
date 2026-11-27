@@ -10,7 +10,7 @@ type ModalProps = {
   onClose: () => void;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   className?: string;
-  initialFocusRef?: RefObject<HTMLElement>;
+  initialFocusRef?: RefObject<HTMLElement | null>;
 };
 
 export default function Modal({ title, children, onClose, size = 'md', className = '', initialFocusRef }: ModalProps) {
@@ -33,6 +33,8 @@ export default function Modal({ title, children, onClose, size = 'md', className
     const previouslyFocused = document.activeElement as HTMLElement | null;
     document.body.style.overflow = 'hidden';
     const handleKeyDown = (event: KeyboardEvent) => {
+      const dialogs = document.querySelectorAll('[aria-modal="true"]');
+      if (dialogs[dialogs.length - 1] !== dialogRef.current) return;
       if (event.key === 'Escape') onCloseRef.current();
       if (event.key !== 'Tab') return;
 

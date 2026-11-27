@@ -1,47 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Ban,
-  BarChart3,
   CheckCircle2,
   CircleDollarSign,
   ClipboardList,
-  Clock3,
   FileText,
   Hourglass,
-  IndianRupee,
-  PieChart,
-  Plus,
   ReceiptText,
   RotateCcw,
   ShoppingBag,
-  Timer,
-  Trophy,
   Truck,
-  Users,
-  Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { ErrorState, LoadingState } from "@/components/ContentState";
-import {
-  ColumnChart,
-  HeroBanner,
-  HeroLink,
-  Panel,
-  RankedBars,
-  RecordList,
-  RegisterCard,
-  StatCard,
-  StatusBreakdown,
-  formatCompact,
-  monthlySeries,
-  percentChange,
-  type RecordRow,
-  type Tone,
-} from "@/components/workspace/WorkspaceKit";
-import { getAllPages, getApiError } from "@/lib/api";
+import { formatCompact, monthlySeries, percentChange, type RecordRow, type Tone } from "@/components/workspace/WorkspaceKit";
+import SalesOverview from "./SalesOverview";
+import { getAllPages, getApiError, onWorkspaceChanged } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { BusinessDocument, Invoice, ProductionOrder } from "@/types";
 
@@ -73,27 +49,38 @@ export default function SalesPage() {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const requestController = useRef<AbortController | null>(null);
 
   const loadData = useCallback(async () => {
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     setLoading(true);
     setError("");
     try {
       const [invoiceResponse, documentResponse, orderResponse] = await Promise.all([
-        getAllPages<Invoice>("/invoices"),
-        getAllPages<BusinessDocument>("/documents"),
-        getAllPages<ProductionOrder>("/production-orders"),
+        getAllPages<Invoice>("/invoices", { signal: controller.signal }),
+        getAllPages<BusinessDocument>("/documents", { signal: controller.signal }),
+        getAllPages<ProductionOrder>("/production-orders", { signal: controller.signal }),
       ]);
+      if (controller.signal.aborted) return;
       setInvoices(invoiceResponse.data);
       setDocuments(documentResponse.data);
       setOrders(orderResponse.data);
     } catch (loadError: unknown) {
+      if (controller.signal.aborted) return;
       setError(getApiError(loadError, "Could not load sale workspace."));
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, []);
   useEffect(() => {
     void loadData();
+    const unsubscribe = onWorkspaceChanged(() => {
+      setInvoices([]); setDocuments([]); setOrders([]);
+      void loadData();
+    });
+    return () => { unsubscribe(); requestController.current?.abort(); };
   }, [loadData]);
 
   const view = useMemo(() => {
@@ -191,77 +178,11 @@ export default function SalesPage() {
     returns: { stat: String(view.creditNotes.length), label: `notes · ${formatCompact(view.creditValue)}` },
   };
 
-  return (
-    <>
-      <HeroBanner
-        eyebrow="Live sales overview"
-        title="Sales command centre"
-        description="Invoices, estimates, payments received and customer orders at a glance, with what needs your attention today."
-        actions={
-          <>
-            <HeroLink href="/sales/quotations/new" icon={FileText}>Estimate</HeroLink>
-            <HeroLink href="/invoices/new" icon={Plus} primary>New invoice</HeroLink>
-          </>
-        }
-      />
-      {loading ? (
-        <section className="card">
-          <LoadingState label="Preparing sale workspace..." />
-        </section>
-      ) : error ? (
-        <section className="card">
-          <ErrorState message={error} onRetry={loadData} />
-        </section>
-      ) : (
-        <>
-          <section className="mb-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4" aria-label="Sales summary">
-            <StatCard icon={IndianRupee} label="Total sales" value={formatCurrency(view.sales)} detail={`${formatCurrency(view.monthSales)} this month`} tone="blue" delta={view.salesChange} />
-            <StatCard icon={Wallet} label="Payments received" value={formatCurrency(view.received)} detail={`${view.collectionRate}% collection rate`} tone="emerald" />
-            <StatCard icon={Clock3} label="Outstanding" value={formatCurrency(view.outstanding)} detail={`${view.overdue.length} overdue · ${formatCurrency(view.overdueAmount)}`} tone="amber" />
-            <StatCard icon={FileText} label="Open estimates" value={String(view.quotations.length)} detail={`${formatCurrency(view.quotationValue)} quoted · ${view.openOrders} open orders`} tone="violet" />
-          </section>
-
-          <section className="mb-4 grid min-w-0 items-stretch gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-            <Panel title="Sales trend" description="Invoiced value, last 6 months" icon={BarChart3} action={{ href: "/invoices", label: "All invoices" }}>
-              <ColumnChart points={view.trend} format={formatCurrency} name="Sales" />
-            </Panel>
-            <Panel title="Invoice status" description="Where your invoices stand" icon={PieChart} tone="violet">
-              <StatusBreakdown segments={view.statusSegments} empty="No invoices yet." />
-            </Panel>
-          </section>
-
-          <section className="mb-4 grid min-w-0 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <Panel title="Top customers" description="By billed value" icon={Trophy} tone="amber" action={{ href: "/parties", label: "Parties" }}>
-              <RankedBars
-                rows={view.topCustomers.map((customer) => ({ label: customer.name, sub: `${customer.count} invoice${customer.count === 1 ? "" : "s"} · ${formatCurrency(customer.due)} due`, value: customer.billed }))}
-                format={formatCurrency}
-                empty="Customers appear here once you create invoices."
-              />
-            </Panel>
-            <Panel title="Recent invoices" description="Latest activity" icon={ReceiptText} action={{ href: "/invoices", label: "View all" }}>
-              <RecordList rows={recentRows} empty="No invoices yet." />
-            </Panel>
-            <Panel title="Needs attention" description="Overdue payments to chase" icon={Timer} tone="red" className="md:col-span-2 xl:col-span-1">
-              <RecordList rows={overdueRows} empty="Nothing is overdue. Nice work." />
-            </Panel>
-          </section>
-
-          <section>
-            <div className="mb-3 flex items-center gap-2">
-              <Users aria-hidden="true" size={17} className="text-blue-600" />
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Sale workspace</h2>
-                <p className="text-[10px] text-slate-400">Choose a register to continue</p>
-              </div>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {Object.entries(REGISTERS).map(([key, register]) => (
-                <RegisterCard key={key} {...register} stat={stats[key].stat} statLabel={stats[key].label} />
-              ))}
-            </div>
-          </section>
-        </>
-      )}
-    </>
-  );
+  return <SalesOverview
+    loading={loading} error={error} onRefresh={()=>void loadData()}
+    summary={view} estimateCount={view.quotations.length} overdueCount={view.overdue.length}
+    trend={view.trend} status={view.statusSegments} customers={view.topCustomers}
+    recent={recentRows} overdue={overdueRows}
+    registers={Object.entries(REGISTERS).map(([key, register])=>({ ...register, stat:stats[key].stat, statLabel:stats[key].label }))}
+  />;
 }

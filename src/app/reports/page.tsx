@@ -806,7 +806,7 @@ export default function ReportsPage() {
                 </div>
 
                 <Link
-                  href="/parties"
+                  href="/parties/details"
                   className="group inline-flex items-center gap-1 text-[8px] font-extrabold text-blue-600 transition hover:text-blue-800"
                 >
                   View Parties

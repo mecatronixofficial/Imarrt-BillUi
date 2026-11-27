@@ -1,4 +1,4 @@
-﻿import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -34,6 +34,7 @@ function responseFor(endpoint, url) {
   if(endpoint.endsWith('/members'))return [user];
   if(endpoint==='/branches')return [branch];
   if(endpoint==='/workspace-branches')return [{id:ids.group,name:'Test workspace',code:'TEST',isActive:true,createdAt:date,businesses:[business]}];
+  if(endpoint==='/party-groups')return [];
   if(endpoint==='/parties')return [party];
   if(endpoint==='/parties/next-code')return {code:'P-0002'};
   if(endpoint===`/parties/${ids.party}`)return party;
@@ -90,8 +91,8 @@ try {
  return page;
  }
  if(!process.env.REFERENCE_EDITORS_ONLY) {
- const routes=['/dashboard','/parties',`/parties/${ids.party}`,'/items',`/items/${ids.item}`,'/invoices',`/invoices/${ids.invoice}`,'/invoices/new','/documents',`/documents/${ids.quote}`,'/sales','/sales/quotations','/sales/proforma','/sales/orders','/sales/orders/new','/sales/delivery-challans','/sales/returns','/sales/payment-in','/purchases','/purchases/bills','/purchases/bills/new','/purchases/orders','/purchases/returns','/purchases/returns/new','/purchases/payment-out','/purchases/expenses','/inventory','/inventory/godowns','/inventory/adjustments','/cash-banks','/cash-banks/cash','/cash-banks/loans','/cash-banks/cheques','/sales/other-income','/reports','/profile','/settings','/settings/general','/settings/party','/settings/item','/settings/transaction','/settings/taxes-gst','/settings/transaction-message','/settings/print','/team','/security','/businesses'];
- for(const route of routes){const page=await makePage({width:1440,height:1000});const response=await page.goto(origin+route,{waitUntil:'networkidle0',timeout:30000});assert.ok(response && response.status()<400,`Broken page: ${route}`);const text=await page.evaluate(()=>document.body.innerText);assert.ok(!text.includes('Application error:'),route);checks.push({route,viewport:'desktop',passed:true});if(['/dashboard','/parties','/items','/invoices/new','/invoices','/settings/transaction','/settings/print','/cash-banks','/cash-banks/loans','/profile','/reports'].includes(route))await page.screenshot({path:path.join(outputDirectory,'desktop-'+route.slice(1).replaceAll('/','-').replaceAll('?','-').replaceAll('=','-')+'.png'),fullPage:true});await page.close();if(checks.length%5===0)console.log(`Rendered ${checks.length} desktop routes`);}
+ const routes=['/dashboard','/parties','/parties/details',`/parties/${ids.party}`,'/items',`/items/${ids.item}`,'/invoices',`/invoices/${ids.invoice}`,'/invoices/new','/documents',`/documents/${ids.quote}`,'/sales','/sales/quotations','/sales/proforma','/sales/orders','/sales/orders/new','/sales/delivery-challans','/sales/returns','/sales/payment-in','/purchases','/purchases/bills','/purchases/bills/new','/purchases/orders','/purchases/returns','/purchases/returns/new','/purchases/payment-out','/purchases/expenses','/inventory','/inventory/godowns','/inventory/adjustments','/cash-banks','/cash-banks/cash','/cash-banks/loans','/cash-banks/cheques','/sales/other-income','/reports','/profile','/settings','/settings/general','/settings/party','/settings/item','/settings/transaction','/settings/taxes-gst','/settings/transaction-message','/settings/print','/team','/security','/businesses'];
+ for(const route of routes){const page=await makePage({width:1440,height:1000});const response=await page.goto(origin+route,{waitUntil:'networkidle0',timeout:30000});assert.ok(response && response.status()<400,`Broken page: ${route}`);const text=await page.evaluate(()=>document.body.innerText);assert.ok(!text.includes('Application error:'),route);checks.push({route,viewport:'desktop',passed:true});if(['/dashboard','/parties','/parties/details','/items','/invoices/new','/invoices','/settings/transaction','/settings/print','/cash-banks','/cash-banks/loans','/profile','/reports'].includes(route))await page.screenshot({path:path.join(outputDirectory,'desktop-'+route.slice(1).replaceAll('/','-').replaceAll('?','-').replaceAll('=','-')+'.png'),fullPage:true});await page.close();if(checks.length%5===0)console.log(`Rendered ${checks.length} desktop routes`);}
  for(const viewport of [{name:'desktop1920',width:1920,height:1080},{name:'desktop1280',width:1280,height:900},{name:'tablet1024',width:1024,height:900},{name:'tablet768',width:768,height:1024},{name:'mobile430',width:430,height:932},{name:'mobile390',width:390,height:844},{name:'mobile360',width:360,height:800}]){
   for(const route of ['/dashboard','/invoices/new','/parties','/items','/reports','/cash-banks/loans','/settings/general']){
    const page=await makePage(viewport);await page.goto(origin+route,{waitUntil:'networkidle0',timeout:30000});const dimensions=await page.evaluate(()=>({width:innerWidth,content:document.documentElement.scrollWidth}));assert.ok(dimensions.content<=dimensions.width+2,`${viewport.name} global overflow at ${route}: ${dimensions.content}/${dimensions.width}`);checks.push({route,viewport:viewport.name,passed:true});
@@ -100,7 +101,7 @@ try {
   }
   console.log(`Rendered ${viewport.name} layouts`);
  }
- for(const [route,label] of [['/parties','Add Party'],['/items','Add Item'],['/sales/payment-in','Add Payment-In'],['/cash-banks/loans','Add Loan Account'],['/sales/other-income','Add Other Income']]){
+ for(const [route,label] of [['/parties/details','Add Party'],['/items','Add Item'],['/sales/payment-in','Add Payment-In'],['/cash-banks/loans','Add Loan Account'],['/sales/other-income','Add Other Income']]){
  const page=await makePage({width:1440,height:1000});await page.goto(origin+route,{waitUntil:'networkidle0',timeout:30000});const buttons=await page.$$('button');let clicked=false;for(const button of buttons){const labelText=await button.evaluate(el=>el.textContent?.trim());if(labelText===label){await button.click();clicked=true;break;}}assert.ok(clicked,'Create control exists: '+route);await page.waitForSelector('[role=dialog]');const text=await page.$eval('[role=dialog]',el=>el.innerText);assert.ok(text.includes('Save'),route+' save control');await page.screenshot({path:path.join(outputDirectory,'dialog-'+route.slice(1).replaceAll('/','-')+'.png'),fullPage:true});await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('[role=dialog]'));checks.push({route,interaction:'open and close create dialog',passed:true});await page.close();}
 
  }

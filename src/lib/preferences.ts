@@ -38,13 +38,18 @@ export const PREFERENCE_DEFAULTS = {
   transaction: {
     billingName: true,
     eWayBill: true,
-    autoRoundOff: false,
+    /** Round Off is on by default; each transaction can still turn it off. */
+    autoRoundOff: true,
     negativeStock: true,
     showTimeOnTransaction: false,
     editPriceOnInvoice: true,
     additionalCharges: false,
     autoNumbering: true,
     numberingPrefix: 'invoice' as 'invoice' | 'bill' | 'none',
+    /** Company-wise invoice prefix template; the server fills it from `numberingPrefix` for companies that never set one. */
+    invoicePrefix: 'INV-',
+    /** Minimum digits of the running number: 2 gives INV-01, INV-02 … INV-100. */
+    invoiceNumberDigits: 2,
   },
   taxes: {
     taxType: 'igst-cgst-sgst' as 'igst-cgst-sgst' | 'igst' | 'cgst-sgst',

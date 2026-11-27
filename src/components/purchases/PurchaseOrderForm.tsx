@@ -27,8 +27,9 @@ import { SupplierQuickModal } from '@/components/documents/DocumentForm';
 import { calculateDocument, type DocumentDraftLine } from '@/components/documents/documentTotals';
 import { totalsOptionsFor } from '@/components/invoices/invoiceTotals';
 import { printPurchaseOrder } from '@/components/purchases/purchaseOrderActions';
-import { CHARGES, CompanyChip, EditorTabBar, GodownPill, GST_RATES, MetaRow, noCharges, PAYMENT_TERMS, SUPPLY_STATES, addDays, today } from '@/components/transactions/EditorParts';
+import { CHARGES, CompanyChip, EditorTabBar, GodownPill, MetaRow, noCharges, PAYMENT_TERMS, SUPPLY_STATES, TaxPercentInput, addDays, today } from '@/components/transactions/EditorParts';
 import { api, getActiveBusinessId, getAllPages, getApiError } from '@/lib/api';
+import { useBackNavigation, useFormDirty, useUnsavedChanges } from '@/lib/navigation';
 import { formatCurrency } from '@/lib/format';
 import { prepareUploads } from '@/lib/imageCompression';
 import { whatsappLink } from '@/lib/messageTemplates';
@@ -219,6 +220,15 @@ export default function PurchaseOrderForm({ orderId, duplicateId }: { orderId?: 
   // A negative adjustment cannot be a line (prices must be >= 0), so it is applied as extra discount.
   const adjustmentDiscount = Math.max(0, -(Number(charges.adjustment) || 0));
   const roundOff = roundOffChoice ?? Boolean(transactionPrefs.autoRoundOff);
+  // Unsaved-changes protection: compare what the user can change with the values the form loaded with.
+  const [orderSaved, setOrderSaved] = useState(false);
+  const hasUnsavedChanges = useFormDirty({
+    businessId, supplierId, warehouseId, transactionInfo, orderNumber, orderDate, termDays, deliveryDate, placeOfSupply, discount, charges,
+    roundOffChoice, terms, notes, paymentSource, paymentReference, attachments: attachments.length,
+    lines: lines.filter((line) => line.description?.trim() || line.itemId || line.unitPrice).map(({ key: _key, ...line }) => line),
+  }, !loading && !loadError);
+  useUnsavedChanges(hasUnsavedChanges && !orderSaved && !saving);
+  const { goBack } = useBackNavigation(orderId ? `/purchases/orders/${orderId}` : '/purchases/orders');
   const totalOptions = useMemo(() => ({ ...totalsOptionsFor(transactionPrefs, taxPrefs, false), roundOff }), [transactionPrefs, taxPrefs, roundOff]);
   const totals = useMemo(() => calculateDocument([...lines, ...chargeLines], discount + adjustmentDiscount, true, totalOptions), [adjustmentDiscount, chargeLines, discount, lines, totalOptions]);
   const itemTotals = useMemo(() => calculateDocument(lines, 0, true, { noTax: totalOptions.noTax }), [lines, totalOptions.noTax]);
@@ -356,6 +366,7 @@ export default function PurchaseOrderForm({ orderId, duplicateId }: { orderId?: 
       ({ data: saved } = orderId
         ? await api.patch<PurchaseOrder>(`/purchase-orders/${orderId}`, payload, { headers: companyHeaders })
         : await api.post<PurchaseOrder>('/purchase-orders', payload, { headers: companyHeaders }));
+      setOrderSaved(true);
       if (attachments.length) {
         const formData = new FormData();
         (await prepareUploads(attachments.map(({ file }) => file))).forEach((file) => formData.append('files', file, file.name));
@@ -364,7 +375,8 @@ export default function PurchaseOrderForm({ orderId, duplicateId }: { orderId?: 
       toast.success(orderId ? 'Purchase order updated' : 'Purchase order saved', { description: `${saved.orderNumber} · ${formatCurrency(saved.grandTotal)}` });
       if (shareTarget) share(shareTarget, saved);
       // An order saved under another company is not visible from this company's pages.
-      router.push(businessId === getActiveBusinessId() ? `/purchases/orders/${saved.id}` : '/purchases/orders');
+      // Replace the editor in history: Back from the saved order returns to where the editor was opened from.
+      router.replace(businessId === getActiveBusinessId() ? `/purchases/orders/${saved.id}` : '/purchases/orders');
     } catch (failure) {
       const message = saved
         ? `${saved.orderNumber} was saved, but its attachments could not be uploaded. Open the order to try again.`
@@ -376,7 +388,8 @@ export default function PurchaseOrderForm({ orderId, duplicateId }: { orderId?: 
     }
   }
 
-  const close = () => router.push(orderId ? `/purchases/orders/${orderId}` : '/purchases/orders');
+  // Closing goes back to wherever the editor was opened from; the order (or order list) is only the fallback.
+  const close = () => void goBack();
 
   return (
     <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white">
@@ -645,15 +658,13 @@ export default function PurchaseOrderForm({ orderId, duplicateId }: { orderId?: 
                 </div>
                 <div className={styles.totalsRow}>
                   <span>Tax</span>
-                  <select
-                    aria-label="Tax for all items"
+                  <TaxPercentInput
+                    ariaLabel="Tax for all items"
                     disabled={!showTax}
-                    value={!showTax ? '' : activeRates.length === 1 ? String(activeRates[0]) : activeRates.length === 0 && taxChoice !== null ? String(taxChoice) : ''}
-                    onChange={(event) => { const rate = Number(event.target.value); setTaxChoice(rate); setLines((current) => current.map((line) => ({ ...line, taxRate: rate }))); }}
-                  >
-                    {(!showTax || activeRates.length !== 1) && <option value="">{!showTax ? 'NONE' : activeRates.length > 1 ? 'Mixed' : 'NONE'}</option>}
-                    {GST_RATES.map((rate) => <option key={rate} value={rate}>{rate === 0 ? 'None' : `GST@${rate}%`}</option>)}
-                  </select>
+                    placeholder={showTax && activeRates.length > 1 ? 'Mixed' : '0'}
+                    value={!showTax ? null : activeRates.length === 1 ? activeRates[0] : activeRates.length === 0 ? taxChoice : null}
+                    onChange={(rate) => { setTaxChoice(rate); setLines((current) => current.map((line) => ({ ...line, taxRate: rate }))); }}
+                  />
                   <output>{formatCurrency(totals.tax)}</output>
                 </div>
                 {CHARGES.map(([key, label]) => (

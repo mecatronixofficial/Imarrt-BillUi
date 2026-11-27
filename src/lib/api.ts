@@ -1,6 +1,7 @@
 import axios, { AxiosHeaders, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig, isAxiosError } from 'axios';
 import type { RawAxiosHeaders } from 'axios';
 import type { Branch, Business, Role } from '@/types';
+import { isPasscodeChallenge, passcodeAction, requestActionPasscode } from './actionPasscode';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
@@ -45,6 +46,7 @@ function isSharedMasterRequest(url: string) {
   const path = url.split('?')[0];
   if (path === '/items' || path.startsWith('/items/')) return true;
   if (path === '/suppliers' || path.startsWith('/suppliers/')) return true;
+  if (path === '/party-groups' || path.startsWith('/party-groups/')) return true;
   if (path === '/parties') return true;
   return /^\/parties\/[^/]+$/.test(path);
 }
@@ -209,7 +211,7 @@ api.interceptors.request.use(async (config) => {
 
   (config as RetryableRequestConfig)._authGeneration = authGeneration;
 
-  const isUnscoped = url.startsWith('/auth/') || url === '/businesses' || url.startsWith('/businesses/');
+  const isUnscoped = url === '/action-security' || url.startsWith('/auth/') || url === '/businesses' || url.startsWith('/businesses/');
   if (isUnscoped) return config;
 
   const requestedBusinessId = config.headers.get('X-Business-Id')?.toString() || getPageScopedBusinessId() || undefined;
@@ -314,6 +316,12 @@ api.interceptors.response.use(
   },
   async (error) => {
     const config = error.config as RetryableRequestConfig | undefined;
+    if (config && isPasscodeChallenge(error.response?.status, error.response?.data?.message)) {
+      const passcode = await requestActionPasscode(error.response.data.message, passcodeAction(config.method, config.url));
+      if (!passcode) throw new axios.Cancel('Change cancelled. No data was saved.');
+      config.headers.set('X-Action-Passcode', passcode);
+      return api(config);
+    }
     const isAuthMutation =
       config?.url?.includes('/auth/login') ||
       config?.url?.includes('/auth/register') ||

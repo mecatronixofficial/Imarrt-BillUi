@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
-  ArrowLeft,
   CheckCircle2,
   Copy,
   Download,
@@ -30,9 +29,11 @@ import { toast } from '@/components/ToastProvider';
 import { api, getApiError } from '@/lib/api';
 import { DOCUMENT_CONFIG } from '@/lib/documents';
 import { formatCurrency, formatDate, formatQuantity, formatTransactionDate } from '@/lib/format';
+import { roundOffAmount } from '@/components/invoices/invoiceTotals';
 import { getPreferences, normalizePreferences } from '@/lib/preferences';
 import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
 import type { BusinessDocument, BusinessDocumentStatus } from '@/types';
+import BackButton from '@/components/BackButton';
 
 export default function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -43,6 +44,17 @@ export default function DocumentDetailPage() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [offerShare, setOfferShare] = useState(false);
+  const [hideRate, setHideRate] = useState(() => {
+    try { return localStorage.getItem('dc_hide_rate') === '1'; } catch { return false; }
+  });
+
+  function toggleHideRate() {
+    setHideRate(v => {
+      const next = !v;
+      try { localStorage.setItem('dc_hide_rate', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  }
 
   // Set by the document form when the company wants a WhatsApp share offered right after saving.
   useEffect(() => {
@@ -60,7 +72,8 @@ export default function DocumentDetailPage() {
 
   async function getPdfFile() {
     if (!document) throw new Error('Document not loaded');
-    const { data } = await api.get<Blob>(`/documents/${document.id}/pdf`, { responseType: 'blob' });
+    const params = document.type === 'DELIVERY_CHALLAN' && hideRate ? '?hideRate=true' : '';
+    const { data } = await api.get<Blob>(`/documents/${document.id}/pdf${params}`, { responseType: 'blob' });
     return new File([data], `${document.documentNumber}.pdf`, { type: 'application/pdf' });
   }
 
@@ -172,7 +185,7 @@ export default function DocumentDetailPage() {
       <PageHeader
         title={document.documentNumber}
         description={`${config.label} · ${party?.name || 'No party'} · Created ${formatDate(document.createdAt)}`}
-        action={<div className="flex flex-wrap items-center justify-end gap-2"><Link href="/documents" className="btn-secondary inline-flex items-center gap-2"><ArrowLeft size={15} /> Back</Link><button type="button" onClick={() => void downloadPdf()} disabled={Boolean(busy)} className="btn-primary inline-flex items-center gap-2">{busy === 'download' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} PDF</button></div>}
+        action={<div className="flex flex-wrap items-center justify-end gap-2"><BackButton fallback="/documents" /><button type="button" onClick={() => void downloadPdf()} disabled={Boolean(busy)} className="btn-primary inline-flex items-center gap-2">{busy === 'download' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} PDF</button></div>}
       />
       {(canConvert || reversal) && (
         <section className="card mb-4 p-4">
@@ -210,7 +223,17 @@ export default function DocumentDetailPage() {
             {(document.transportName || document.vehicleNumber || document.eWayBillNumber) && <div className="grid grid-cols-3 gap-4 border-b border-slate-200 py-5"><Info label="Transport" value={document.transportName || '—'} /><Info label="Vehicle" value={document.vehicleNumber || '—'} /><Info label="E-way bill" value={document.eWayBillNumber || '—'} /></div>}
 
             <div className="my-6 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-900 text-left text-[10px] uppercase tracking-wider text-slate-300"><tr><th className="px-4 py-3">#</th><th className="px-4 py-3">Description</th><th className="px-4 py-3 text-right">Qty</th><th className="px-4 py-3 text-right">Rate</th><th className="px-4 py-3 text-right">Tax</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody className="divide-y divide-slate-100">{document.items?.map((item, index) => <tr key={item.id}><td className="px-4 py-3 text-slate-400">{index + 1}</td><td className="px-4 py-3"><p className="font-semibold text-slate-800">{item.description}</p>{item.hsnSac && <p className="mt-0.5 text-[10px] text-slate-400">HSN/SAC {item.hsnSac}</p>}</td><td className="px-4 py-3 text-right text-slate-600">{formatQuantity(item.quantity)} {item.unit}</td><td className="px-4 py-3 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td><td className="px-4 py-3 text-right text-slate-600">{Number(item.taxRate).toFixed(2)}%</td><td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(item.lineTotal)}</td></tr>)}</tbody></table>
+              {document.type === 'DELIVERY_CHALLAN' && (
+                <div style={{display:'flex',justifyContent:'flex-end',padding:'6px 10px 4px'}}>
+                  <button type="button" onClick={toggleHideRate}
+                    style={{fontSize:'11px',fontWeight:600,padding:'3px 10px',borderRadius:6,border:'1px solid #1d4ed8',
+                      background:hideRate?'#1d4ed8':'#dbeafe',color:hideRate?'#fff':'#1d4ed8',cursor:'pointer',transition:'all .15s'}}
+                    aria-pressed={hideRate}>
+                    {hideRate ? 'Rate Hidden' : 'Hide Rate'}
+                  </button>
+                </div>
+              )}
+              <table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-900 text-left text-[10px] uppercase tracking-wider text-slate-300"><tr><th className="px-4 py-3">#</th><th className="px-4 py-3">Description</th><th className="px-4 py-3 text-right">Qty</th>{!(document.type === 'DELIVERY_CHALLAN' && hideRate) && <th className="px-4 py-3 text-right">Rate</th>}<th className="px-4 py-3 text-right">Tax</th>{!(document.type === 'DELIVERY_CHALLAN' && hideRate) && <th className="px-4 py-3 text-right">Amount</th>}</tr></thead><tbody className="divide-y divide-slate-100">{document.items?.map((item, index) => <tr key={item.id}><td className="px-4 py-3 text-slate-400">{index + 1}</td><td className="px-4 py-3"><p className="font-semibold text-slate-800">{item.description}</p>{item.hsnSac && <p className="mt-0.5 text-[10px] text-slate-400">HSN/SAC {item.hsnSac}</p>}</td><td className="px-4 py-3 text-right text-slate-600">{formatQuantity(item.quantity)} {item.unit}</td>{!(document.type === 'DELIVERY_CHALLAN' && hideRate) && <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td>}<td className="px-4 py-3 text-right text-slate-600">{Number(item.taxRate).toFixed(2)}%</td>{!(document.type === 'DELIVERY_CHALLAN' && hideRate) && <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(item.lineTotal)}</td>}</tr>)}</tbody></table>
             </div>
 
             {document.attachments?.length ? (
@@ -227,7 +250,7 @@ export default function DocumentDetailPage() {
               </div>
             ) : null}
 
-            <div className="grid gap-6 sm:grid-cols-[1fr_290px]"><div className="space-y-4 text-xs leading-5 text-slate-500">{document.paymentMethod && <div><p className="font-bold uppercase tracking-wider text-slate-400">Payment type</p><p className="mt-1 capitalize">{document.paymentMethod.replaceAll('_', ' ')}</p></div>}{document.reason && <div><p className="font-bold uppercase tracking-wider text-slate-400">Reason</p><p className="mt-1 whitespace-pre-line">{document.reason}</p></div>}{document.terms && <div><p className="font-bold uppercase tracking-wider text-slate-400">Terms and conditions</p><p className="mt-1 whitespace-pre-line">{document.terms}</p></div>}{document.notes && <div className="rounded-lg bg-indigo-50 p-3 text-indigo-700"><strong>Notes:</strong> {document.notes}</div>}</div><div className="rounded-xl bg-slate-50 p-4 text-sm"><div className="flex justify-between py-1.5"><span className="text-slate-500">Subtotal</span><span>{formatCurrency(document.subTotal)}</span></div><div className="flex justify-between py-1.5"><span className="text-slate-500">Tax</span><span>{formatCurrency(document.taxTotal)}</span></div><div className="flex justify-between py-1.5"><span className="text-slate-500">Discount</span><span>-{formatCurrency(document.discount)}</span></div><div className="mt-2 flex justify-between border-t-2 border-blue-600 pt-3 text-lg font-black text-slate-950"><span>Total</span><span>{formatCurrency(document.grandTotal)}</span></div></div></div>
+            <div className="grid gap-6 sm:grid-cols-[1fr_290px]"><div className="space-y-4 text-xs leading-5 text-slate-500">{document.paymentMethod && <div><p className="font-bold uppercase tracking-wider text-slate-400">Payment type</p><p className="mt-1 capitalize">{document.paymentMethod.replaceAll('_', ' ')}</p></div>}{document.reason && <div><p className="font-bold uppercase tracking-wider text-slate-400">Reason</p><p className="mt-1 whitespace-pre-line">{document.reason}</p></div>}{document.terms && <div><p className="font-bold uppercase tracking-wider text-slate-400">Terms and conditions</p><p className="mt-1 whitespace-pre-line">{document.terms}</p></div>}{document.notes && <div className="rounded-lg bg-indigo-50 p-3 text-indigo-700"><strong>Notes:</strong> {document.notes}</div>}</div><div className="rounded-xl bg-slate-50 p-4 text-sm"><div className="flex justify-between py-1.5"><span className="text-slate-500">Subtotal</span><span>{formatCurrency(document.subTotal)}</span></div><div className="flex justify-between py-1.5"><span className="text-slate-500">Tax</span><span>{formatCurrency(document.taxTotal)}</span></div><div className="flex justify-between py-1.5"><span className="text-slate-500">Discount</span><span>-{formatCurrency(document.discount)}</span></div>{roundOffAmount(document) !== 0 && <div className="flex justify-between py-1.5"><span className="text-slate-500">Round off</span><span>{roundOffAmount(document) < 0 ? '-' : ''}{formatCurrency(Math.abs(roundOffAmount(document)))}</span></div>}<div className="mt-2 flex justify-between border-t-2 border-blue-600 pt-3 text-lg font-black text-slate-950"><span>Total</span><span>{formatCurrency(document.grandTotal)}</span></div></div></div>
           </div>
         </article>
 

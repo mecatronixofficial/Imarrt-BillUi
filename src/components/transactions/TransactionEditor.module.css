@@ -1496,3 +1496,81 @@
   .termsCard { max-width: none; }
   .footerSpacer { display: none; }
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * Responsive item table (sale invoice) and shared editor fixes.
+ * Every column has a readable fixed width and Item takes any spare room. The table's minimum width
+ * is set inline from the visible columns; when the screen is narrower it scrolls sideways with
+ * # and Item pinned on the left and Amount pinned on the right, so the row being edited stays clear.
+ * ------------------------------------------------------------------------------------------- */
+.tableScroll { overflow-y: hidden; overscroll-behavior-x: contain; }
+
+.invoiceTable { width: 100%; }
+.invoiceTable thead th.numberCol { width: 52px; }
+.invoiceTable thead th.itemCol { width: auto; }
+.invoiceTable thead th[data-tracking-column] { width: 96px; }
+.invoiceTable thead th.qtyCol { width: 84px; }
+.invoiceTable thead th.unitCol { width: 96px; }
+.invoiceTable thead th.priceCol { width: 112px; }
+.invoiceTable thead th.taxCol { width: 84px; }
+.invoiceTable thead th.amountCol { width: 128px; }
+.invoiceTable thead th.addCol { width: 40px; }
+.invoiceTable thead th { padding: 0 8px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.invoiceTable td[data-tracking-column] input { width: 100%; min-width: 0; }
+
+/* Pinned columns need an opaque background and a soft edge so scrolled cells pass underneath. */
+.invoiceTable th:first-child,
+.invoiceTable td:first-child,
+.invoiceTable .itemCol,
+.invoiceTable .itemCell,
+.invoiceTable .amountCol,
+.invoiceTable .amount,
+.invoiceTable th:last-child,
+.invoiceTable td:last-child {
+  position: sticky;
+  z-index: 2;
+  background: #fff;
+}
+.invoiceTable th:first-child,
+.invoiceTable td:first-child { left: 0; }
+.invoiceTable .itemCol,
+.invoiceTable .itemCell { left: 52px; box-shadow: 6px 0 8px -8px rgba(15, 23, 42, .35); }
+.invoiceTable th:last-child,
+.invoiceTable td:last-child { right: 0; }
+.invoiceTable .amountCol,
+.invoiceTable .amount { right: 40px; box-shadow: -6px 0 8px -8px rgba(15, 23, 42, .35); }
+.invoiceTable tbody tr:hover td:first-child,
+.invoiceTable tbody tr:hover .itemCell,
+.invoiceTable tbody tr:hover .amount,
+.invoiceTable tbody tr:hover td:last-child { background: #f7f9ff; }
+
+/* Footer row: TOTAL sits in the # column, the two buttons in the Item column, nothing wraps. */
+.invoiceTable tfoot .totalCell {
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+.totalLabel { justify-content: flex-start; flex-wrap: nowrap; gap: 8px; }
+.addRow { flex-shrink: 0; height: 30px; padding: 0 10px; font-size: 12px; white-space: nowrap; }
+
+/* The tab title is a label, not text to select (a stray double-click painted it yellow). */
+.tab > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Phones: pinning Item would leave no room to scroll, so only # stays pinned and Item is narrower. */
+@media (max-width: 767px) {
+  .invoiceTable .itemCol,
+  .invoiceTable .itemCell,
+  .invoiceTable .amountCol,
+  .invoiceTable .amount { position: static; box-shadow: none; }
+  .invoiceTable thead th.itemCol { width: 180px; }
+  .totalLabel { gap: 6px; }
+  .addRow { padding: 0 8px; font-size: 11px; }
+}

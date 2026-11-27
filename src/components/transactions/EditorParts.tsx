@@ -18,6 +18,51 @@ export const CHARGES = [['shipping', 'Shipping', 'Shipping charges'], ['packing'
 export type ChargeKey = (typeof CHARGES)[number][0];
 export const noCharges: Record<ChargeKey, string> = { shipping: '', packing: '', adjustment: '' };
 
+/** Turns typed text into a tax rate: 0–100 with at most 2 decimals, or null when it is not a number yet. */
+export function parseTaxPercent(text: string): number | null {
+  const clean = text.replace('%', '').trim();
+  if (!clean) return 0;
+  if (!/^\d{0,3}(\.\d{0,2})?$/.test(clean) || clean === '.') return null;
+  const rate = Number(clean);
+  return Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : null;
+}
+
+/**
+ * Tax percentage typed by hand (e.g. 18, 12.5, 0.25). Any company can charge tax, so this replaces the
+ * fixed GST dropdown. The typed text is kept while editing so "12." or "0.2" can be completed.
+ */
+export function TaxPercentInput({ value, onChange, ariaLabel, className, placeholder = '0', disabled }: {
+  value: number | null; onChange: (rate: number) => void; ariaLabel: string; className?: string; placeholder?: string; disabled?: boolean;
+}) {
+  const shown = value === null || value === 0 ? '' : String(value);
+  const [draft, setDraft] = useState<string | null>(null);
+  const text = draft ?? shown;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, width: '100%' }}>
+      <input
+        type="text"
+        inputMode="decimal"
+        aria-label={ariaLabel}
+        title="Type the tax percentage, e.g. 18 or 12.5"
+        className={className}
+        style={{ minWidth: 0, flex: 1 }}
+        placeholder={placeholder}
+        disabled={disabled}
+        value={text}
+        aria-invalid={parseTaxPercent(text) === null}
+        onChange={(event) => {
+          const next = event.target.value.replace(/[^\d.]/g, '');
+          setDraft(next);
+          const rate = parseTaxPercent(next);
+          if (rate !== null) onChange(rate);
+        }}
+        onBlur={() => setDraft(null)}
+      />
+      <span aria-hidden="true">%</span>
+    </span>
+  );
+}
+
 const isoDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 export const today = () => isoDate(new Date());
 export const addDays = (value: string, days: number) => {

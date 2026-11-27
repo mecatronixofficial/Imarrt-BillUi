@@ -14,6 +14,7 @@ import { subtractMoney, sumMoney } from '@/lib/billing';
 import { compareCashTransactions } from '@/lib/cash-ledger';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { LoanEmiFields, transactionDate, transactionType, useBankTransactionActions, useLoanAccounts, type BankTransaction } from './BankTransactionActions';
+import { usePageState } from '@/lib/navigation';
 
 type Flow = 'ALL' | 'IN' | 'OUT';
 type Filters = { types: string[]; name: string; from: string; to: string; flow: Flow };
@@ -32,7 +33,7 @@ export default function CashInHandWorkspace() {
   const [isOwner, setIsOwner] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = usePageState('CashInHandWorkspace.search', '');
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [newestFirst, setNewestFirst] = useState(true);
   const [selected, setSelected] = useState('');

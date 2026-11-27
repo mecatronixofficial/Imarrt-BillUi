@@ -22,6 +22,7 @@ import {
 } from "@/components/ContentState";
 import { api, getAllPages, getApiError } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { usePageState } from '@/lib/navigation';
 import type {
   Party,
   ProductionOrder,
@@ -49,8 +50,8 @@ export default function SalesOrderRegister() {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("ALL");
+  const [query, setQuery] = usePageState('SalesOrderRegister.query', "");
+  const [filter, setFilter] = usePageState<Filter>('SalesOrderRegister.filter', "ALL");
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

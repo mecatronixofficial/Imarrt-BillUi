@@ -8,7 +8,6 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
   ArrowDownLeft,
-  ArrowLeft,
   ArrowUpRight,
   Boxes,
   FileSpreadsheet,
@@ -36,6 +35,8 @@ import { multiplyMoney, sumMoney } from '@/lib/billing';
 import { formatCurrency, formatDate, formatQuantity } from '@/lib/format';
 import { useGeneralPreferences, usePreferences } from '@/lib/useGeneralPreferences';
 import type { Item } from '@/types';
+import BackButton from '@/components/BackButton';
+import { usePageState } from '@/lib/navigation';
 const InvoiceModal = dynamic(() => import('@/components/invoices/InvoiceModal'), { ssr: false });
 const DocumentModal = dynamic(() => import('@/components/documents/DocumentModal'), { ssr: false });
 
@@ -72,7 +73,7 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
   const [selectedId,setSelectedId]=useState(itemId??'');
 
   const [items, setItems] = useState<Item[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = usePageState('ItemWorkspace.search', '');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -324,7 +325,7 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
 
   return (
     <>
-      <ReferenceMaster title="Items" rows={filteredItems.map(i=>({id:i.id,name:i.name,value:formatQuantity(Number(i.stockQty))}))} selectedId={selectedId||items[0]?.id||''} query={search} onQuery={setSearch} onSelect={id=>{setSelectedId(id);if(id===selectedId)void loadItem(id);}} onAdd={openAddItem} onEdit={()=>item&&openEditItem(item)} onDelete={canDeleteItem&&item?()=>requestDeleteItem(item):undefined} loading={loading} error={error} onRetry={()=>void loadItems()} detailLoading={itemLoading||transactionLoading} detailError={itemError||transactionError} name={item?.name} facts={[{label:'SALE PRICE',value:formatCurrency(Number(item?.salePrice??0))},{label:'PURCHASE PRICE',value:formatCurrency(Number(item?.purchasePrice??0))},{label:'STOCK QUANTITY',value:formatQuantity(Number(item?.stockQty??0))+' '+(item?.unit??'')},{label:'STOCK VALUE',value:formatCurrency(multiplyMoney(item?.stockQty??0,item?.purchasePrice??0))}]} headers={['TYPE','INVOICE / REF. NO','DATE','QUANTITY','PRICE / UNIT','STATUS','ACTIONS']} transactions={transactions.map(t=>({id:t.id,cells:[t.type,<Link key="ref" href={t.href}>{t.number}</Link>,formatDate(t.date),formatQuantity(t.quantity)+' '+(item?.unit??''),formatCurrency(t.rate),t.status,<div key="actions" className="reference-row-actions flex justify-end"><RowActions label={`Actions for ${transactionLabel(t)} ${t.number}`} actions={transactionActions(t)}/></div>]}))} onExport={exportTransactions} actions={<Link href="/inventory/adjustments" className="btn-primary">ADJUST ITEM</Link>}/>
+      <ReferenceMaster title="Items" rows={filteredItems.map(i=>({id:i.id,name:i.name,value:formatQuantity(Number(i.stockQty))}))} selectedId={selectedId||items[0]?.id||''} query={search} onQuery={setSearch} onSelect={id=>{setSelectedId(id);if(id===selectedId)void loadItem(id);}} onAdd={openAddItem} onEdit={()=>item&&openEditItem(item)} onDelete={canDeleteItem&&item?()=>requestDeleteItem(item):undefined} loading={loading} error={error} onRetry={()=>void loadItems()} detailLoading={itemLoading||transactionLoading} detailError={itemError||transactionError} name={item?.name} facts={[{label:'SALE PRICE',value:formatCurrency(Number(item?.salePrice??0))},{label:'PURCHASE PRICE',value:formatCurrency(Number(item?.purchasePrice??0))},{label:'STOCK QUANTITY',value:formatQuantity(Number(item?.stockQty??0))+' '+(item?.unit??'')},{label:'STOCK VALUE',value:formatCurrency(multiplyMoney(item?.stockQty??0,item?.purchasePrice??0))}]} headers={['TYPE','INVOICE / REF. NO','QUANTITY','PRICE / UNIT','STATUS','ACTIONS']} transactions={transactions.map(t=>({id:t.id,cells:[t.type,<Link key="ref" href={t.href}>{t.number}</Link>,formatQuantity(t.quantity)+' '+(item?.unit??''),formatCurrency(t.rate),t.status,<div key="actions" className="reference-row-actions flex justify-end"><RowActions label={`Actions for ${transactionLabel(t)} ${t.number}`} actions={transactionActions(t)}/></div>]}))} onExport={exportTransactions} actions={<Link href="/inventory/adjustments" className="btn-primary">ADJUST ITEM</Link>}/>
       <div className="reference-legacy-master min-h-screen bg-slate-50/70 p-4 sm:p-6">
         {itemId ? (
           /* ================================================================ */
@@ -349,10 +350,7 @@ export function ItemWorkspace({ itemId }: { itemId?: string }) {
                 <div className="relative border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-blue-50/60 px-4 py-4 sm:px-5">
                   <div className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full bg-blue-100/70 blur-3xl" />
 
-                  <Link href="/items" className="relative mb-3 inline-flex items-center gap-1.5 text-[9px] font-bold text-blue-600 hover:text-blue-700">
-                    <ArrowLeft size={12} />
-                    Back to Items
-                  </Link>
+                  <BackButton fallback="/items" className="relative mb-3" />
 
                   <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">

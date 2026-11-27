@@ -23,6 +23,7 @@ import {
 import { toast } from "@/components/ToastProvider";
 import { api, getAllPages, getApiError } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { usePageState } from '@/lib/navigation';
 import type {
   ProductionCost,
   ProductionCostCategory,
@@ -58,7 +59,7 @@ export default function ProductionCostRegister({
   const [rows, setRows] = useState<CostRow[]>([]);
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = usePageState('ProductionCostRegister.query', "");
   const [category, setCategory] = useState<"ALL" | ProductionCostCategory>(
     "ALL",
   );

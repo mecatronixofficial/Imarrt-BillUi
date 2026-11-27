@@ -1,4 +1,4 @@
-﻿import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -34,6 +34,7 @@ function responseFor(endpoint, url) {
   if(endpoint.endsWith('/members'))return [user];
   if(endpoint==='/branches')return [branch];
   if(endpoint==='/workspace-branches')return [{id:ids.group,name:'Test workspace',code:'TEST',isActive:true,createdAt:date,businesses:[business]}];
+  if(endpoint==='/party-groups')return [];
   if(endpoint==='/parties')return [party];
   if(endpoint==='/parties/next-code')return {code:'P-0002'};
   if(endpoint===`/parties/${ids.party}`)return party;
@@ -90,7 +91,7 @@ try {
  return page;
  }
 
- const appRoutes=['/purchases/orders',`/parties/${ids.party}`,`/items/${ids.item}`,`/invoices/${ids.invoice}`,`/documents/${ids.quote}`,'/dashboard','/parties','/items','/invoices','/invoices/new','/documents/new','/sales','/sales/payment-in','/sales/proforma/new','/sales/quotations/new','/sales/orders/new','/sales/delivery-challans/new','/sales/returns/new','/purchases','/purchases/bills/new','/purchases/returns/new','/purchases/payment-out','/purchases/expenses','/production','/inventory','/inventory/godowns','/inventory/adjustments','/cash-banks','/cash-banks/cash','/cash-banks/loans','/cash-banks/cheques','/sales/other-income','/reports','/profile','/settings','/settings/general','/settings/party','/settings/item','/settings/transaction','/settings/taxes-gst','/settings/transaction-message','/settings/print','/team','/security','/businesses'];
+ const appRoutes=['/purchases/orders',`/parties/${ids.party}`,`/items/${ids.item}`,`/invoices/${ids.invoice}`,`/documents/${ids.quote}`,'/dashboard','/parties','/parties/details','/items','/invoices','/invoices/new','/documents/new','/sales','/sales/payment-in','/sales/proforma/new','/sales/quotations/new','/sales/orders/new','/sales/delivery-challans/new','/sales/returns/new','/purchases','/purchases/bills/new','/purchases/returns/new','/purchases/payment-out','/purchases/expenses','/production','/inventory','/inventory/godowns','/inventory/adjustments','/cash-banks','/cash-banks/cash','/cash-banks/loans','/cash-banks/cheques','/sales/other-income','/reports','/profile','/settings','/settings/general','/settings/party','/settings/item','/settings/transaction','/settings/taxes-gst','/settings/transaction-message','/settings/print','/team','/security','/businesses'];
  for(const route of appRoutes){
   const page=await makePage({width:1440,height:1000});
   await page.goto(origin+route,{waitUntil:'networkidle0'});

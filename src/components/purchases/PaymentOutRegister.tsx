@@ -13,14 +13,16 @@ import PaymentOutForm from "@/components/purchases/PaymentOutForm";
 import { api, getAllPages, getApiError, getCurrentUser } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { BusinessDocument, PaymentOutReceipt } from "@/types";
+import { usePageState } from '@/lib/navigation';
 
 type FormState = { receipt?: PaymentOutReceipt; supplierId?: string; billId?: string } | null;
 
 export default function PaymentOutRegister() {
   const [rows, setRows] = useState<PaymentOutReceipt[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = usePageState('PaymentOutRegister.query', "");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [supplier, setSupplier] = useState("ALL");
   const [form, setForm] = useState<FormState>(null);
   const [voiding, setVoiding] = useState<PaymentOutReceipt | null>(null);
   const [deleting, setDeleting] = useState<PaymentOutReceipt | null>(null);
@@ -64,12 +66,20 @@ export default function PaymentOutRegister() {
 
   const activeRows = useMemo(() => rows.filter((row) => !row.voidedAt), [rows]);
   const voidedCount = rows.length - activeRows.length;
+  const supplierList = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of rows) { const n = r.supplier?.name || "Not assigned"; map.set(n, (map.get(n) ?? 0) + 1); }
+    return [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows]);
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     const visible = showVoided ? rows : activeRows;
-    if (!term) return visible;
-    return visible.filter((row) => [row.receiptNumber, row.supplier?.name, row.reference, ...row.paymentTypes, ...row.bills.flatMap((bill) => [bill.documentNumber, bill.referenceNumber])].some((value) => value?.toLowerCase().includes(term)));
-  }, [activeRows, query, rows, showVoided]);
+    return visible.filter((row) => {
+      const matchSupplier = supplier === "ALL" || (row.supplier?.name || "Not assigned") === supplier;
+      const matchQuery = !term || [row.receiptNumber, row.supplier?.name, row.reference, ...row.paymentTypes, ...row.bills.flatMap((bill) => [bill.documentNumber, bill.referenceNumber])].some((value) => value?.toLowerCase().includes(term));
+      return matchSupplier && matchQuery;
+    });
+  }, [activeRows, query, rows, showVoided, supplier]);
   const totals = useMemo(() => ({
     paid: activeRows.reduce((sum, row) => sum + row.paid, 0),
     discount: activeRows.reduce((sum, row) => sum + row.discount, 0),
@@ -122,141 +132,168 @@ export default function PaymentOutRegister() {
         <Metric label="Discount received" value={formatCurrency(totals.discount)} wide />
       </div>
       <section className="card reference-payment-register overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">Payment Out register</h2>
-            <p className="mt-0.5 text-[10px] text-slate-400">Supplier payments for the active company and branch</p>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            {voidedCount > 0 && (
-              <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-500">
-                <input type="checkbox" checked={showVoided} onChange={(event) => setShowVoided(event.target.checked)} />
-                Show voided ({voidedCount})
-              </label>
-            )}
-            <div className="relative w-full sm:w-80">
-              {!query && <Search aria-hidden="true" size={15} className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-400" />}
-              <input
-                type="text"
-                aria-label="Search payment out"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Receipt, party, bill, reference..."
-                className={`input-field w-full pr-10 ${query ? "!pl-4" : "!pl-12"}`}
-              />
-              {query && (
-                <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700">
-                  <X aria-hidden="true" size={14} />
+        <div style={{ display: "flex", gap: 0, minHeight: 400 }}>
+          {/* Supplier sidebar */}
+          <div style={{ width: 200, flexShrink: 0, borderRight: "1px solid #e9eaf0", display: "flex", flexDirection: "column", background: "#f8fafc" }}>
+            <div style={{ padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: "1px solid #e9eaf0" }}>Suppliers</div>
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              <button
+                type="button"
+                onClick={() => setSupplier("ALL")}
+                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", fontSize: 12, fontWeight: supplier === "ALL" ? 700 : 500, background: supplier === "ALL" ? "#1d4ed8" : "transparent", color: supplier === "ALL" ? "#fff" : "#334155", border: "none", cursor: "pointer", textAlign: "left" }}
+              >
+                <span>All</span>
+                <span style={{ fontSize: 10, fontWeight: 700, background: supplier === "ALL" ? "rgba(255,255,255,0.25)" : "#e2e8f0", color: supplier === "ALL" ? "#fff" : "#64748b", borderRadius: 999, padding: "1px 6px" }}>{rows.length}</span>
+              </button>
+              {supplierList.map((s) => (
+                <button
+                  key={s.name}
+                  type="button"
+                  onClick={() => setSupplier(s.name === supplier ? "ALL" : s.name)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 12px", fontSize: 12, fontWeight: supplier === s.name ? 700 : 400, background: supplier === s.name ? "#1d4ed8" : "transparent", color: supplier === s.name ? "#fff" : "#475569", border: "none", cursor: "pointer", textAlign: "left" }}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, marginRight: 6 }}>{s.name}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, background: supplier === s.name ? "rgba(255,255,255,0.25)" : "#e2e8f0", color: supplier === s.name ? "#fff" : "#64748b", borderRadius: 999, padding: "1px 6px", flexShrink: 0 }}>{s.count}</span>
                 </button>
-              )}
+              ))}
             </div>
           </div>
-        </div>
-        {loading ? (
-          <LoadingState label="Loading payments..." />
-        ) : error ? (
-          <ErrorState message={error} onRetry={() => void load()} />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={CircleDollarSign}
-            title="No outgoing payments"
-            description={query ? "Try a different search." : "Record a payment to a supplier to settle their purchase bills."}
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] text-sm">
-              <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Receipt No</th>
-                  <th className="px-4 py-3">Party</th>
-                  <th className="px-4 py-3">Payment type</th>
-                  <th className="px-4 py-3">Bills settled</th>
-                  <th className="px-4 py-3 text-right">Paid</th>
-                  <th className="px-4 py-3 text-right">Discount</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((row) => {
-                  const voided = Boolean(row.voidedAt);
-                  return (
-                    <tr key={row.id} className={voided ? "bg-slate-50/70 text-slate-400" : "hover:bg-slate-50"}>
-                      <td className="whitespace-nowrap px-4 py-3.5 text-slate-500">{formatDate(row.paidAt)}</td>
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        <button type="button" onClick={() => setForm({ receipt: row })} className="font-bold text-blue-700 hover:underline">{row.receiptNumber}</button>
-                        {row.attachmentCount > 0 && (
-                          <span title={`${row.attachmentCount} attachment${row.attachmentCount === 1 ? "" : "s"}`} className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] text-slate-400">
-                            <Paperclip size={11} />{row.attachmentCount}
-                          </span>
-                        )}
-                      </td>
-                      <td className="max-w-[200px] truncate px-4 py-3.5 font-semibold text-slate-700" title={row.supplier?.name}>{row.supplier?.name || "Not assigned"}</td>
-                      <td className="max-w-[180px] truncate px-4 py-3.5 text-slate-600" title={row.paymentTypes.join(", ")}>{row.paymentTypes.join(", ") || "Discount only"}{row.reference ? <span className="block text-[10px] text-slate-400">Ref: {row.reference}</span> : null}</td>
-                      <td className="max-w-[220px] px-4 py-3.5 text-xs text-slate-600">
-                        {row.bills.slice(0, 2).map((bill) => (
-                          <Link key={bill.id} href={`/documents/${bill.id}`} className="block truncate hover:text-blue-700 hover:underline">
-                            {bill.referenceNumber || bill.documentNumber} · {formatCurrency(bill.settled)}
-                          </Link>
-                        ))}
-                        {row.bills.length > 2 && <span className="text-[10px] text-slate-400">+{row.bills.length - 2} more</span>}
-                      </td>
-                      <td className={`whitespace-nowrap px-4 py-3.5 text-right font-bold ${voided ? "text-slate-400 line-through" : "text-red-600"}`}>{formatCurrency(row.paid)}</td>
-                      <td className="whitespace-nowrap px-4 py-3.5 text-right text-slate-600">{row.discount ? formatCurrency(row.discount) : "—"}</td>
-                      <td className="px-4 py-3.5">
-                        {voided ? (
-                          <span title={row.voidReason ? `Reason: ${row.voidReason}` : undefined} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">Voided</span>
-                        ) : (
-                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">Paid</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex justify-end">
-                          {restoringId === row.id ? (
-                            <span className="flex h-8 w-8 items-center justify-center text-slate-400" role="status" aria-label="Restoring payment">
-                              <Loader2 size={16} className="animate-spin" />
-                            </span>
-                          ) : (
-                            <Popover
-                              label={`Actions for ${row.receiptNumber}`}
-                              align="right"
-                              trigger={(menuOpen) => (
-                                <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-slate-100 hover:text-slate-800 ${menuOpen ? "bg-slate-100 text-slate-800" : "text-slate-500"}`}>
-                                  <MoreVertical size={16} />
-                                </span>
-                              )}
-                            >
-                              {(close) => (
-                                <div role="menu" className="w-56 py-1">
-                                  <MenuButton icon={<Pencil size={15} />} onClick={() => { close(); setForm({ receipt: row }); }}>{voided ? "View details" : "View / Edit details"}</MenuButton>
-                                  {row.supplierId && !voided && (
-                                    <MenuButton icon={<Plus size={15} />} onClick={() => { close(); setForm({ supplierId: row.supplierId ?? undefined }); }}>New payment to this party</MenuButton>
-                                  )}
-                                  {row.bills.slice(0, 3).map((bill) => (
-                                    <MenuLink key={bill.id} icon={<ExternalLink size={15} />} href={`/documents/${bill.id}`} onClick={close}>Open bill {bill.referenceNumber || bill.documentNumber}</MenuLink>
-                                  ))}
-                                  {voided ? (
-                                    <MenuButton icon={<RotateCcw size={15} />} onClick={() => { close(); void restore(row); }}>Restore payment</MenuButton>
-                                  ) : (
-                                    <MenuButton icon={<Ban size={15} />} danger onClick={() => { close(); setVoiding(row); }}>Void payment</MenuButton>
-                                  )}
-                                  {canDelete && (
-                                    <MenuButton icon={<Trash2 size={15} />} danger onClick={() => { close(); setDeleting(row); }}>Delete permanently</MenuButton>
-                                  )}
-                                </div>
-                              )}
-                            </Popover>
-                          )}
-                        </div>
-                      </td>
+
+          {/* Right panel */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+            <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Payment Out register</h2>
+                <p className="mt-0.5 text-[10px] text-slate-400">Supplier payments for the active company and branch</p>
+              </div>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                {voidedCount > 0 && (
+                  <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+                    <input type="checkbox" checked={showVoided} onChange={(event) => setShowVoided(event.target.checked)} />
+                    Show voided ({voidedCount})
+                  </label>
+                )}
+                <div className="relative w-full sm:w-72">
+                  {!query && <Search aria-hidden="true" size={15} className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-400" />}
+                  <input
+                    type="text"
+                    aria-label="Search payment out"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Receipt, party, bill, reference..."
+                    className={`input-field w-full pr-10 ${query ? "!pl-4" : "!pl-12"}`}
+                  />
+                  {query && (
+                    <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700">
+                      <X aria-hidden="true" size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            {loading ? (
+              <LoadingState label="Loading payments..." />
+            ) : error ? (
+              <ErrorState message={error} onRetry={() => void load()} />
+            ) : filtered.length === 0 ? (
+              <EmptyState
+                icon={CircleDollarSign}
+                title="No outgoing payments"
+                description={query ? "Try a different search." : "Record a payment to a supplier to settle their purchase bills."}
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3">Party</th>
+                      <th className="px-4 py-3">Payment type</th>
+                      <th className="px-4 py-3">Bills settled</th>
+                      <th className="px-4 py-3 text-right">Paid</th>
+                      <th className="px-4 py-3 text-right">Discount</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right"><span className="sr-only">Actions</span></th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filtered.map((row) => {
+                      const voided = Boolean(row.voidedAt);
+                      return (
+                        <tr key={row.id} className={voided ? "bg-slate-50/70 text-slate-400" : "hover:bg-slate-50"}>
+                          <td className="px-4 py-3.5 font-semibold text-slate-700" style={{ minWidth: 160, maxWidth: 240 }} title={row.supplier?.name}>
+                            <button type="button" onClick={() => setForm({ receipt: row })} className="font-bold text-blue-700 hover:underline block truncate">{row.supplier?.name || "Not assigned"}</button>
+                            {row.attachmentCount > 0 && (
+                              <span title={`${row.attachmentCount} attachment${row.attachmentCount === 1 ? "" : "s"}`} className="inline-flex items-center gap-0.5 text-[10px] text-slate-400">
+                                <Paperclip size={11} />{row.attachmentCount}
+                              </span>
+                            )}
+                          </td>
+                          <td className="max-w-[180px] truncate px-4 py-3.5 text-slate-600" title={row.paymentTypes.join(", ")}>{row.paymentTypes.join(", ") || "Discount only"}{row.reference ? <span className="block text-[10px] text-slate-400">Ref: {row.reference}</span> : null}</td>
+                          <td className="max-w-[220px] px-4 py-3.5 text-xs text-slate-600">
+                            {row.bills.slice(0, 2).map((bill) => (
+                              <Link key={bill.id} href={`/documents/${bill.id}`} className="block truncate hover:text-blue-700 hover:underline">
+                                {bill.referenceNumber || bill.documentNumber} · {formatCurrency(bill.settled)}
+                              </Link>
+                            ))}
+                            {row.bills.length > 2 && <span className="text-[10px] text-slate-400">+{row.bills.length - 2} more</span>}
+                          </td>
+                          <td className={`whitespace-nowrap px-4 py-3.5 text-right font-bold ${voided ? "text-slate-400 line-through" : "text-red-600"}`}>{formatCurrency(row.paid)}</td>
+                          <td className="whitespace-nowrap px-4 py-3.5 text-right text-slate-600">{row.discount ? formatCurrency(row.discount) : "—"}</td>
+                          <td className="px-4 py-3.5">
+                            {voided ? (
+                              <span title={row.voidReason ? `Reason: ${row.voidReason}` : undefined} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">Voided</span>
+                            ) : (
+                              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">Paid</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <div className="flex justify-end">
+                              {restoringId === row.id ? (
+                                <span className="flex h-8 w-8 items-center justify-center text-slate-400" role="status" aria-label="Restoring payment">
+                                  <Loader2 size={16} className="animate-spin" />
+                                </span>
+                              ) : (
+                                <Popover
+                                  label={`Actions for ${row.receiptNumber}`}
+                                  align="right"
+                                  trigger={(menuOpen) => (
+                                    <span className={`flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-slate-100 hover:text-slate-800 ${menuOpen ? "bg-slate-100 text-slate-800" : "text-slate-500"}`}>
+                                      <MoreVertical size={16} />
+                                    </span>
+                                  )}
+                                >
+                                  {(close) => (
+                                    <div role="menu" className="w-56 py-1">
+                                      <MenuButton icon={<Pencil size={15} />} onClick={() => { close(); setForm({ receipt: row }); }}>{voided ? "View details" : "View / Edit details"}</MenuButton>
+                                      {row.supplierId && !voided && (
+                                        <MenuButton icon={<Plus size={15} />} onClick={() => { close(); setForm({ supplierId: row.supplierId ?? undefined }); }}>New payment to this party</MenuButton>
+                                      )}
+                                      {row.bills.slice(0, 3).map((bill) => (
+                                        <MenuLink key={bill.id} icon={<ExternalLink size={15} />} href={`/documents/${bill.id}`} onClick={close}>Open bill {bill.referenceNumber || bill.documentNumber}</MenuLink>
+                                      ))}
+                                      {voided ? (
+                                        <MenuButton icon={<RotateCcw size={15} />} onClick={() => { close(); void restore(row); }}>Restore payment</MenuButton>
+                                      ) : (
+                                        <MenuButton icon={<Ban size={15} />} danger onClick={() => { close(); setVoiding(row); }}>Void payment</MenuButton>
+                                      )}
+                                      {canDelete && (
+                                        <MenuButton icon={<Trash2 size={15} />} danger onClick={() => { close(); setDeleting(row); }}>Delete permanently</MenuButton>
+                                      )}
+                                    </div>
+                                  )}
+                                </Popover>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </section>
 
       {form && (

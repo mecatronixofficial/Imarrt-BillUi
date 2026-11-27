@@ -35,7 +35,7 @@ function canCancel(record: TransactionRecord) {
   return ['ISSUED', 'ACCEPTED'].includes(record.status) && !(Number(record.paidAmount) > 0);
 }
 
-function canDeleteRecord(record: TransactionRecord) {
+export function canDeleteRecord(record: TransactionRecord) {
   return isInvoice(record) ? true : ['DRAFT', 'CANCELLED'].includes(record.status);
 }
 

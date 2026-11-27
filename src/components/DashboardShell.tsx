@@ -16,13 +16,16 @@ import FloatingQuickActions from './FloatingQuickActions';
 
 const PAGE_META: Record<string, { title: string; section: string }> = {
   '/dashboard': { title: 'Dashboard', section: 'Overview' },
-  '/parties': { title: 'Parties', section: 'Sales' },
+  '/parties': { title: 'Parties dashboard', section: 'Parties' },
+  '/parties/details': { title: 'Party Details', section: 'Parties' },
+  '/parties/groups': { title: 'Party Groups', section: 'Parties' },
   '/items': { title: 'Items', section: 'Inventory' },
   '/invoices/new': { title: 'New invoice', section: 'Sales' },
   '/invoices': { title: 'Invoices', section: 'Sales' },
   '/sales/payment-in': { title: 'Payment in', section: 'Sales' },
   '/sales': { title: 'Sales', section: 'Sales' },
   '/purchases/payment-out': { title: 'Payment out', section: 'Purchases' },
+  '/purchases/suppliers': { title: 'Suppliers', section: 'Purchases' },
   '/purchases': { title: 'Purchases', section: 'Purchases' },
   '/documents': { title: 'Documents', section: 'Transactions' },
   '/production': { title: 'Production', section: 'Operations' },

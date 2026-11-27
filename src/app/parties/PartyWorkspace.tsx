@@ -6,16 +6,17 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import Link from "next/link";
+import { isCancel } from 'axios';
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 
 import {
   ArrowDownLeft,
-  ArrowLeft,
   ArrowUpRight,
   FileSpreadsheet,
   FileText,
@@ -39,6 +40,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import Modal from "@/components/Modal";
+import PartyGroupSelect from '@/components/parties/PartyGroupSelect';
+import AddPartyGroupModal from '@/components/parties/AddPartyGroupModal';
 import ReferenceMaster from "@/components/ReferenceMaster";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import RowActions, { type RowAction } from "@/components/RowActions";
@@ -52,14 +55,18 @@ import {
 } from "@/components/ContentState";
 
 import { api, getAllPages, getApiError, getCurrentUser } from "@/lib/api";
+import { askPartyPasscode, passcodeHeaders } from "@/lib/partyPasscode";
+import { codeSet, isCodeTaken } from "@/lib/codes";
 
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useGeneralPreferences, usePreferences } from "@/lib/useGeneralPreferences";
 
-import type { Invoice, Party, PartyLedger, PartyTransaction, PaymentInRecord } from "@/types";
+import type { Invoice, Party, PartyGroup, PartyLedger, PartyTransaction, PaymentInRecord } from "@/types";
 
 import { EmbeddedFormProvider } from "@/components/EmbeddedFormContext";
 import { toast } from "@/components/ToastProvider";
+import BackButton from '@/components/BackButton';
+import { usePageState } from '@/lib/navigation';
 
 const InvoiceModal = dynamic(() => import("@/components/invoices/InvoiceModal"), { ssr: false });
 const DocumentModal = dynamic(() => import("@/components/documents/DocumentModal"), { ssr: false });
@@ -103,21 +110,30 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
 
   const [parties, setParties] = useState<Party[]>([]);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = usePageState('PartyWorkspace.search', "");
+  const [groupFilter, setGroupFilter] = useState('');
+  useEffect(() => { setGroupFilter(new URLSearchParams(window.location.search).get('group') ?? ''); }, []);
 
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState("");
 
   const [ledger, setLedger] = useState<PartyLedger | null>(null);
+  const ledgerRequest = useRef(0);
 
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [detailError, setDetailError] = useState("");
 
   const [showForm, setShowForm] = useState(false);
+  const [showGroupForm, setShowGroupForm] = useState(false);
 
   const [editingParty, setEditingParty] = useState<Party | null>(null);
+
+  // Passcode entered when Edit was clicked; sent with the party update.
+  const [editPasscode, setEditPasscode] = useState<string | null>(null);
+
+  const editPasscodePending = useRef(false);
 
   const [formTab, setFormTab] = useState<"profile" | "credit">("profile");
 
@@ -187,6 +203,7 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
   /* ====================================================================== */
 
   const loadLedger = useCallback(async (id: string) => {
+    const request = ++ledgerRequest.current;
     setDetailLoading(true);
 
     setDetailError("");
@@ -194,22 +211,20 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
     try {
       const { data } = await api.get<PartyLedger>(`/parties/${id}/ledger`);
 
-      setLedger(data);
+      if (request === ledgerRequest.current) setLedger(data);
     } catch (loadError: unknown) {
+      if (request !== ledgerRequest.current) return;
       setLedger(null);
 
       setDetailError(
         getApiError(loadError, "Could not load party details."),
       );
     } finally {
-      setDetailLoading(false);
+      if (request === ledgerRequest.current) setDetailLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    const id=selectedId||parties[0]?.id;
-    if(id) void loadLedger(id);
-  }, [selectedId,parties,loadLedger]);
+
 
   /* ====================================================================== */
   /* FILTER                                                                 */
@@ -218,18 +233,38 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
   const filteredParties = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    if (!query) {
-      return parties;
-    }
-
     return parties.filter((party) =>
-      [party.code, party.name, party.phone, party.email].some((value) =>
-        value?.toLowerCase().includes(query),
-      ),
+      (!showGroupBadge || !groupFilter || (groupFilter === 'ungrouped' ? !party.groupId && !party.group : (party.groupId || party.group) === groupFilter)) &&
+      (!query || [party.code, party.name, party.phone, party.email, party.group].some((value) => value?.toLowerCase().includes(query))),
     );
-  }, [parties, search]);
+  }, [parties, search, groupFilter, showGroupBadge]);
 
-  const party = ledger?.party ?? null;
+  // Group id -> code, so the party window can show which group code a party belongs to.
+  const [groupCodes, setGroupCodes] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (!showGroupBadge) return;
+    let active = true;
+    api.get<PartyGroup[]>('/party-groups')
+      .then(({ data }) => { if (active) setGroupCodes(new Map(data.filter((group) => group.code).map((group) => [group.id, group.code!]))); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [showGroupBadge, parties]);
+  const groupLabel = (target: Party | null) => {
+    if (!target?.group) return target?.group;
+    const code = target.groupId ? groupCodes.get(target.groupId) : undefined;
+    // Show only the group code; fall back to the name for groups without one.
+    return code ?? target.group;
+  };
+
+  const groupOptions = useMemo(() => [...new Map(parties.filter((party) => party.group).map((party) => [party.groupId || party.group!, party.group!])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [parties]);
+
+  const visibleId = filteredParties.some((party) => party.id === selectedId) ? selectedId : filteredParties[0]?.id ?? '';
+  useEffect(() => {
+    if (visibleId) void loadLedger(visibleId);
+    else { ledgerRequest.current += 1; setLedger(null); setDetailError(''); setDetailLoading(false); }
+  }, [visibleId, parties, loadLedger]);
+
+  const party = visibleId ? ledger?.party ?? null : null;
 
   /* ====================================================================== */
   /* SUMMARY                                                                */
@@ -272,7 +307,23 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
     setShowForm(true);
   }
 
-  function openEditParty(target: Party, tab: "profile" | "credit" = "profile") {
+  async function openEditParty(target: Party, tab: "profile" | "credit" = "profile") {
+    if (editPasscodePending.current) return;
+
+    editPasscodePending.current = true;
+
+    let passcode: string | null;
+
+    try {
+      passcode = await askPartyPasscode("edit-party");
+    } finally {
+      editPasscodePending.current = false;
+    }
+
+    if (!passcode) return;
+
+    setEditPasscode(passcode);
+
     setEditingParty(target);
 
     setFormTab(tab);
@@ -285,6 +336,7 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
       return;
     }
 
+    setDeletePartyError('');
     setConfirmDeleteParty(target);
   }
 
@@ -300,7 +352,11 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
     setDeletePartyError("");
 
     try {
-      await api.delete(`/parties/${target.id}`);
+      const passcode = await askPartyPasscode("delete-party");
+
+      if (!passcode) return;
+
+      await api.delete(`/parties/${target.id}`, passcodeHeaders(passcode));
 
       setParties((current) => current.filter((entry) => entry.id !== target.id));
 
@@ -309,16 +365,15 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
       setConfirmDeleteParty(null);
 
       if (partyId === target.id) {
-        router.push("/parties");
+        router.push("/parties/details");
       }
     } catch (deleteError: unknown) {
+      if (isCancel(deleteError) && deleteError.message === 'Change cancelled. No data was saved.') return;
       const message = getApiError(deleteError, "Could not delete party.");
 
       setDeletePartyError(message);
 
       toast.error(message);
-
-      setConfirmDeleteParty(null);
     } finally {
       setDeletingPartyId("");
     }
@@ -525,7 +580,7 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
 
   return (
     <>
-      <ReferenceMaster title="Parties" rows={filteredParties.map(p=>({id:p.id,name:p.name,value:formatCurrency(Number(p.balanceDue??0))}))} selectedId={selectedId||parties[0]?.id||''} query={search} onQuery={setSearch} onSelect={id=>{setSelectedId(id);if(id===selectedId)void loadLedger(id);}} onAdd={openAddParty} onEdit={()=>party&&openEditParty(party,"profile")} onDelete={canDeleteParty&&party?()=>requestDeleteParty(party):undefined} loading={loading} error={error} onRetry={()=>void loadParties()} detailLoading={detailLoading} detailError={detailError} name={party?.name} facts={[{label:'GSTIN',value:party?.gstin},{label:'Billing Address',value:party?.billingAddr},{label:'Phone',value:party?.phone}]} headers={['Type','Number','Date','Total','Balance / Unused','Status','Actions']} transactions={(ledger?.transactions??[]).map(t=>({id:t.id,cells:[t.type.replaceAll('_',' '),t.invoiceId?<Link href={'/invoices/'+t.invoiceId}>{t.number}</Link>:t.number,formatDate(t.date),formatCurrency(Number(t.amount)),formatCurrency(Number(t.balance)),<span key="status" className={Number(t.balance)?'reference-status-open':'reference-status-paid'}>{Number(t.balance)?'Unpaid':'Paid'}</span>,<div key="actions" className="reference-row-actions flex justify-end"><RowActions label={`Actions for ${transactionLabel(t)} ${t.number}`} actions={transactionActions(t)}/></div>]}))} onExport={exportTransactions} actions={<div className="flex gap-3"><button type="button" disabled={!hasWhatsApp} aria-label="WhatsApp selected party" onClick={()=>openWhatsApp('Hello '+(party?.name??''))} className="text-emerald-500"><MessageCircle size={18}/></button><button type="button" disabled={!party?.email} aria-label="Email selected party" onClick={openEmail}><Mail size={18}/></button></div>}/>
+      <ReferenceMaster title="Parties" heading="Party Details" addLabel="Add Party Group" headerActions={<button type="button" className="btn-primary inline-flex items-center gap-2 whitespace-nowrap" onClick={openAddParty}><Plus size={16}/> Add Party</button>} listTools={showGroupBadge ? <div className="px-3 pb-3"><select aria-label="Filter by party group" className="input-field" value={groupFilter} onChange={event=>setGroupFilter(event.target.value)}><option value="">All groups</option><option value="ungrouped">No group</option>{groupFilter && groupFilter !== "ungrouped" && !groupOptions.some(([id])=>id===groupFilter) && <option value={groupFilter}>Selected group (no parties)</option>}{groupOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></div> : undefined} rows={filteredParties.map(p=>({id:p.id,name:p.name,meta:[p.code,showGroupBadge?p.group:undefined].filter(Boolean).join(' · ')||undefined,value:formatCurrency(Number(p.balanceDue??0))}))} selectedId={visibleId} query={search} onQuery={setSearch} onSelect={id=>{setSelectedId(id);if(id===selectedId)void loadLedger(id);}} onAdd={()=>setShowGroupForm(true)} onEdit={()=>party&&openEditParty(party,"profile")} onDelete={canDeleteParty&&party?()=>requestDeleteParty(party):undefined} loading={loading} error={error} onRetry={()=>void loadParties()} detailLoading={detailLoading} detailError={detailError} name={party?.name} factsLayout="table" facts={[{label:'Party Code',value:party?.code},...(showGroupBadge?[{label:'Party Group',value:groupLabel(party)}]:[]),{label:'GSTIN',value:party?.gstin},{label:'Billing Address',value:party?.billingAddr},{label:'Phone',value:party?.phone}]} headers={['Type','Number','Amount','Balance','Status','Actions']} transactions={(ledger?.transactions??[]).map(t=>({id:t.id,cells:[({PAYMENT_IN:'Payment In',SALE_INVOICE:'Sale Invoice',OPENING_BALANCE:'Opening',CREDIT_NOTE:'Credit Note'} as Record<string,string>)[t.type]??t.type.replaceAll('_',' '),t.invoiceId?<Link href={'/invoices/'+t.invoiceId}>{t.number}</Link>:t.number,formatCurrency(Math.abs(Number(t.amount))),formatCurrency(Number(t.balance)),<span key="status" className={t.type==='PAYMENT_IN'||t.type==='OPENING_BALANCE'?'reference-status-paid':Number(t.balance)?'reference-status-open':'reference-status-paid'}>{t.type==='PAYMENT_IN'?'Received':t.type==='OPENING_BALANCE'?'Opening':Number(t.balance)?'Unpaid':'Paid'}</span>,<div key="actions" className="reference-row-actions flex justify-end"><RowActions label={`Actions for ${transactionLabel(t)} ${t.number}`} actions={transactionActions(t)}/></div>]}))} onExport={exportTransactions} actions={<div className="flex gap-3"><button type="button" disabled={!hasWhatsApp} aria-label="WhatsApp selected party" onClick={()=>openWhatsApp('Hello '+(party?.name??''))} className="text-emerald-500"><MessageCircle size={18}/></button><button type="button" disabled={!party?.email} aria-label="Email selected party" onClick={openEmail}><Mail size={18}/></button></div>}/>
       <div className="reference-legacy-master min-h-screen bg-slate-50/70 p-4 sm:p-6">
         {partyId ? (
           /* ================================================================ */
@@ -556,13 +611,7 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
                 <div className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-blue-200/40 blur-3xl" />
 
                 <div className="relative px-5 py-5">
-                  <Link
-                    href="/parties"
-                    className="mb-3 inline-flex items-center gap-1.5 text-[9px] font-bold text-blue-600 hover:text-blue-700"
-                  >
-                    <ArrowLeft size={12} />
-                    Back to Parties
-                  </Link>
+                  <BackButton fallback="/parties/details" className="mb-3" />
 
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0 flex-1">
@@ -999,19 +1048,19 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
       {/* PARTY FORM                                                         */}
       {/* ================================================================== */}
 
+      {showGroupForm && <AddPartyGroupModal onClose={() => setShowGroupForm(false)} onSaved={() => setShowGroupForm(false)} />}
+
       {showForm && (
         <PartyFormModal
           party={editingParty}
+          passcode={editingParty ? editPasscode : null}
+          takenCodes={codeSet(parties, editingParty?.id)}
           initialTab={formTab}
           onClose={() => setShowForm(false)}
           onSaved={(_saved, keepOpen) => {
             setShowForm(Boolean(keepOpen));
 
-            if (selectedId || partyId) {
-              void loadLedger(selectedId || partyId!);
-            } else {
-              void loadParties();
-            }
+            void loadParties();
           }}
         />
       )}
@@ -1023,10 +1072,11 @@ export function PartyWorkspace({ partyId }: { partyId?: string }) {
       {confirmDeleteParty && (
         <ConfirmDialog
           title="Delete party?"
-          message={`Delete ${confirmDeleteParty.name} and hide it from the party register? Its invoices and ledger history are kept for your records.`}
-          confirmLabel="Delete"
+          message={`Delete ${confirmDeleteParty.name}? You will be asked for your Settings passcode next. Parties with linked transactions cannot be deleted.`}
+          confirmLabel="Continue to passcode"
+          error={deletePartyError}
           busy={deletingPartyId === confirmDeleteParty.id}
-          onCancel={() => setConfirmDeleteParty(null)}
+          onCancel={() => { if (!deletingPartyId) { setConfirmDeleteParty(null); setDeletePartyError(''); } }}
           onConfirm={() => void performDeleteParty()}
         />
       )}
@@ -1743,6 +1793,7 @@ type PartyFormState = {
   name: string;
   billingName: string;
   group: string;
+  groupId: string;
   email: string;
   phone: string;
   whatsappNumber: string;
@@ -1778,6 +1829,7 @@ function createForm(party: Party | null): PartyFormState {
     billingName: party?.billingName ?? "",
 
     group: party?.group ?? "",
+    groupId: party?.groupId ?? '',
 
     email: party?.email ?? "",
 
@@ -1817,11 +1869,18 @@ function createForm(party: Party | null): PartyFormState {
 
 function PartyFormModal({
   party,
+  passcode,
+  takenCodes,
   initialTab,
   onClose,
   onSaved,
 }: {
   party: Party | null;
+
+  passcode?: string | null;
+
+  /** Codes already used by other parties, lower-cased. */
+  takenCodes: Set<string>;
 
   initialTab: "profile" | "credit";
 
@@ -1879,10 +1938,12 @@ function PartyFormModal({
   /* SAVE                                                                   */
   /* ====================================================================== */
 
+  const codeTaken = isCodeTaken(form.code, takenCodes);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (saving) {
+    if (saving || codeTaken) {
       return;
     }
 
@@ -1909,7 +1970,8 @@ function PartyFormModal({
 
         billingName: form.billingName.trim() || undefined,
 
-        group: showCategories ? form.group.trim() || undefined : undefined,
+        group: undefined,
+        groupId: showCategories ? form.groupId || null : undefined,
 
         email: form.email.trim().toLowerCase() || undefined,
 
@@ -1941,7 +2003,7 @@ function PartyFormModal({
       };
 
       const { data } = party
-        ? await api.patch<Party>(`/parties/${party.id}`, payload)
+        ? await api.patch<Party>(`/parties/${party.id}`, payload, passcodeHeaders(passcode))
         : await api.post<Party>("/parties", payload);
 
       (party ? toast.warning : toast.success)(party ? "Party updated" : "Party created", { description: data.name });
@@ -1950,6 +2012,7 @@ function PartyFormModal({
       onSaved(data, saveAndNew);
       if (saveAndNew) { setForm(createForm(null)); setHasDifferentWhatsApp(false); void fetchNextCode(); }
     } catch (saveError: unknown) {
+      if (isCancel(saveError) && saveError.message === 'Change cancelled. No data was saved.') return;
       const message = getApiError(saveError, "Could not save party.");
 
       setError(message);
@@ -1963,12 +2026,12 @@ function PartyFormModal({
   const partyInput=(key:keyof PartyFormState,label:string,type='text')=><FormField label={label}><input className="input-field" type={type} required={key==='name'} value={String(form[key])} onChange={e=>setForm({...form,[key]:e.target.value})} placeholder={label} autoFocus={key==='name'} /></FormField>;
   return <Modal title={party?'Edit Party':'Add Party'} onClose={onClose} size="xl" className="reference-party-form !max-w-[1035px]"><form onSubmit={handleSubmit}>
   {error&&<p role="alert" className="my-3 text-red-600">{error}</p>}
-  <div className="reference-party-basics">{partyInput('name','Party Name *')}<FormField label="GSTIN"><input className="input-field" value={form.gstin} maxLength={15} onChange={e=>setForm({...form,gstin:e.target.value.toUpperCase(),gstType:e.target.value?'REGISTERED_REGULAR':'UNREGISTERED'})} placeholder="GSTIN"/></FormField>{partyInput('phone','Phone Number','tel')}{showCategories&&partyInput('group','Party Group')}</div>
+  <div className="reference-party-basics"><FormField label="Party Code"><div className="flex gap-2"><input className={`input-field ${codeTaken?'!border-red-500':''}`} aria-label="Party Code" aria-invalid={codeTaken} aria-describedby={codeTaken?'party-code-error':undefined} maxLength={30} value={form.code} disabled={generatingCode} onChange={e=>setForm({...form,code:e.target.value})} placeholder={generatingCode?'Generating...':'Auto-generated'}/>{!party&&<button type="button" className="whitespace-nowrap text-xs font-semibold text-blue-600 disabled:opacity-50" disabled={generatingCode} onClick={()=>void fetchNextCode()}>Generate</button>}</div>{codeTaken&&<p id="party-code-error" role="alert" className="mt-1 text-xs text-red-600">Party code {form.code.trim()} already exists. Enter a different code.</p>}</FormField>{partyInput('name','Party Name *')}<FormField label="GSTIN"><input className="input-field" value={form.gstin} maxLength={15} onChange={e=>setForm({...form,gstin:e.target.value.toUpperCase(),gstType:e.target.value?'REGISTERED_REGULAR':'UNREGISTERED'})} placeholder="GSTIN"/></FormField>{partyInput('phone','Phone Number','tel')}{showCategories&&<FormField label="Party Group"><PartyGroupSelect value={form.groupId} legacyName={form.group} onChange={(groupId,group)=>setForm(current=>({...current,groupId,group}))}/></FormField>}</div>
   <div className="reference-party-tabs" role="tablist" aria-label="Party details"><button type="button" role="tab" aria-selected={tab==='profile'} onClick={()=>setTab('profile')}>GST & Address</button><button type="button" role="tab" aria-selected={tab==='credit'} onClick={()=>setTab('credit')}>Credit & Balance <small>New</small></button><button type="button" role="tab" aria-selected={tab==='additional'} onClick={()=>setTab('additional')}>Additional Fields</button></div>
   {tab==='profile'&&<div className="reference-party-address"><div><FormField label="GST Type"><select className="input-field" value={form.gstType} onChange={e=>setForm({...form,gstType:e.target.value as PartyFormState['gstType']})}><option value="UNREGISTERED">Unregistered / Consumer</option><option value="REGISTERED_REGULAR">Registered Business - Regular</option><option value="REGISTERED_COMPOSITION">Registered Business - Composition</option><option value="CONSUMER">Consumer</option><option value="OVERSEAS">Overseas</option><option value="SEZ">Special Economic Zone</option></select></FormField>{partyInput('email','Email ID','email')}{showTin&&partyInput('tin','TIN')}</div><FormField label="Billing Address"><textarea className="input-field" rows={4} value={form.billingAddr} onChange={e=>setForm({...form,billingAddr:e.target.value})} placeholder="Billing Address"/></FormField><FormField label="Shipping Address"><textarea className="input-field" rows={4} value={form.shippingAddr} onChange={e=>setForm({...form,shippingAddr:e.target.value})} placeholder="Add Shipping Address"/><button type="button" className="mt-2 text-blue-600 text-xs" onClick={()=>setForm({...form,shippingAddr:form.billingAddr})}>Use billing address</button></FormField></div>}
   {tab==='credit'&&<div className="reference-party-credit">{showOpening&&<><FormField label="Opening Balance"><input className="input-field" type="number" min="0" step="0.01" value={form.openingBalance} onChange={e=>setForm({...form,openingBalance:e.target.value})}/></FormField><FormField label="Balance Type"><select className="input-field" value={form.openingBalanceType} onChange={e=>setForm({...form,openingBalanceType:e.target.value as PartyFormState['openingBalanceType']})}><option value="RECEIVABLE">To Receive</option><option value="PAYABLE">To Pay</option></select></FormField></>}<FormField label="Credit Limit"><input className="input-field" type="number" min="0" step="0.01" placeholder="No Limit" value={form.creditLimit} onChange={e=>setForm({...form,creditLimit:e.target.value})}/></FormField><p className="text-xs text-slate-500">Use 0 for no credit limit.</p></div>}
   {tab==='additional'&&<div className="reference-party-additional">{partyInput('code','Party Code')}{partyInput('billingName','Billing Name')}<FormField label="WhatsApp Number"><input className="input-field" type="tel" value={hasDifferentWhatsApp?form.whatsappNumber:form.phone} onChange={e=>{setHasDifferentWhatsApp(true);setForm({...form,whatsappNumber:e.target.value});}}/></FormField><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.whatsappOptIn} onChange={e=>setForm({...form,whatsappOptIn:e.target.checked})}/>WhatsApp delivery consent</label><FormField label="Invoice Delivery"><select className="input-field" value={form.invoiceDeliveryMode} onChange={e=>setForm({...form,invoiceDeliveryMode:e.target.value as PartyFormState['invoiceDeliveryMode']})}><option value="MANUAL">Manual</option><option value="AUTOMATIC">Automatic</option></select></FormField><FormField label="Delivery Channel"><select className="input-field" value={form.invoiceDeliveryChannel} onChange={e=>setForm({...form,invoiceDeliveryChannel:e.target.value as PartyFormState['invoiceDeliveryChannel']})}><option value="BOTH">Email & WhatsApp</option><option value="EMAIL">Email</option><option value="WHATSAPP">WhatsApp</option></select></FormField><FormField label="Notes"><textarea className="input-field" value={form.notes} rows={3} onChange={e=>setForm({...form,notes:e.target.value})}/></FormField></div>}
-  <footer className="reference-form-footer"><button type="button" disabled={saving} onClick={onClose} className="btn-secondary">Cancel</button><button type="submit" value="new" disabled={saving} className="btn-secondary">Save & New</button><button type="submit" disabled={saving} className="btn-primary min-w-28">{saving?'Saving...':'Save'}</button></footer></form></Modal>;
+  <footer className="reference-form-footer"><button type="button" disabled={saving} onClick={onClose} className="btn-secondary">Cancel</button><button type="submit" value="new" disabled={saving||codeTaken} className="btn-secondary">Save & New</button><button type="submit" disabled={saving||codeTaken} className="btn-primary min-w-28">{saving?'Saving...':'Save'}</button></footer></form></Modal>;
 }
 
 /* ========================================================================== */

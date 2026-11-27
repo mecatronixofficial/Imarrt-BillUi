@@ -1,56 +1,22 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
+import { useBackNavigation } from '@/lib/navigation';
 
-const PreviousPage = createContext<{ previous: string | null; reset: () => void }>({ previous: null, reset: () => undefined });
+// Kept for existing imports: the history tracking now lives in the central navigation module.
+export { NavigationProvider as NavigationHistory, fallbackRoute as parentPage } from '@/lib/navigation';
 
-/** Track only pages visited inside this app, so direct links never navigate off-site. */
-export function NavigationHistory({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const visited = useRef<string[]>([]);
-  const [previous, setPrevious] = useState<string | null>(null);
-
-  useEffect(() => {
-    const current = pathname + window.location.search;
-    const pages = visited.current;
-    if (pages.at(-1) !== current) {
-      if (pages.at(-2) === current) pages.pop();
-      else pages.push(current);
-      if (pages.length > 100) pages.shift();
-    }
-    setPrevious(pages.at(-2) ?? null);
-  }, [pathname]);
-
-  return <PreviousPage.Provider value={{ previous, reset: () => { visited.current = []; setPrevious(null); } }}>{children}</PreviousPage.Provider>;
-}
-
-export function parentPage(pathname: string): string {
-  if (pathname === '/dashboard') return '/businesses';
-  if (pathname.startsWith('/settings/')) return '/settings';
-  if (pathname === '/forgot-password' || pathname === '/reset-password') return '/login';
-  const segments = pathname.split('/').filter(Boolean);
-  return segments.length > 1 ? '/' + segments.slice(0, -1).join('/') : '/dashboard';
-}
-
-export default function BackButton({ fallback, className = '' }: { fallback?: string; className?: string }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { previous, reset } = useContext(PreviousPage);
-
+/**
+ * The app's one Back button. Goes to the page the user actually came from (with its filters, page and
+ * scroll), asks before discarding unsaved changes, and uses `fallback` (or the module's parent page)
+ * only when there is no previous page in this tab.
+ */
+export default function BackButton({ fallback, className = '', label = 'Back' }: { fallback?: string; className?: string; label?: string }) {
+  const { goBack } = useBackNavigation(fallback);
   return (
-    <button
-      type="button"
-      className={`brand-back ${className}`}
-      aria-label="Go back"
-      onClick={() => {
-        if (previous && window.history.length > 1) router.back();
-        else { reset(); router.replace(fallback ?? parentPage(pathname)); }
-      }}
-    >
+    <button type="button" className={`brand-back ${className}`} aria-label={label === 'Back' ? 'Go back' : label} onClick={() => void goBack()}>
       <ArrowLeft size={17} aria-hidden="true" />
-      <span>Back</span>
+      <span>{label}</span>
     </button>
   );
 }

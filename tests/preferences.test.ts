@@ -14,12 +14,13 @@ test('pending preference saves retain their original company after a workspace s
  try {
   values.set('activeBusinessId','company-a');
   const preferences=await import('../src/lib/preferences');
-  preferences.updatePreferences('transaction',{autoRoundOff:true});
+  // Round off is on by default, so company A turns it off; company B must keep the default.
+  preferences.updatePreferences('transaction',{autoRoundOff:false});
   values.set('activeBusinessId','company-b');fakeWindow.dispatchEvent(new Event('imart:workspace-changed'));
   await new Promise((resolve)=>setTimeout(resolve,180));
   assert.deepEqual(urls,['/businesses/company-a/preferences']);
-  assert.equal(preferences.getPreferences('transaction').autoRoundOff,false);
-  assert.equal(JSON.parse(values.get('imart:preferences:company-a')!).transaction.autoRoundOff,true);
+  assert.equal(preferences.getPreferences('transaction').autoRoundOff,true);
+  assert.equal(JSON.parse(values.get('imart:preferences:company-a')!).transaction.autoRoundOff,false);
   values.set('activeBusinessId','company-a');fakeWindow.dispatchEvent(new Event('imart:workspace-changed'));
   await new Promise((resolve)=>setTimeout(resolve,0));
   let releaseFirst!:(value:unknown)=>void,releaseSecond!:(value:unknown)=>void;

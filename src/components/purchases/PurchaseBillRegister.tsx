@@ -34,6 +34,7 @@ import { documentOutstanding } from "@/lib/outstanding";
 import { whatsappLink } from "@/lib/messageTemplates";
 import { setPendingBillUploads } from "@/lib/pendingBillUploads";
 import type { BusinessDocument } from "@/types";
+import { usePageState } from '@/lib/navigation';
 
 type BillState = "PAID" | "UNPAID" | "PARTIAL" | "OVERDUE" | "DRAFT" | "CANCELLED";
 type StatusFilter = "ALL" | BillState;
@@ -184,16 +185,16 @@ export default function PurchaseBillRegister() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-  const [status, setStatus] = useState<StatusFilter>("ALL");
-  const [period, setPeriod] = useState<Period>("ALL");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [status, setStatus] = usePageState<StatusFilter>('PurchaseBillRegister.status', "ALL");
+  const [period, setPeriod] = usePageState<Period>('PurchaseBillRegister.period', "ALL");
+  const [from, setFrom] = usePageState('PurchaseBillRegister.from', "");
+  const [to, setTo] = usePageState('PurchaseBillRegister.to', "");
   const [firm, setFirm] = useState("ALL");
   const [godown, setGodown] = useState("ALL");
   const [user, setUser] = useState("ALL");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = usePageState('PurchaseBillRegister.query', "");
   const [columnFilters, setColumnFilters] = useState<Partial<Record<ColumnKey, ColumnFilter>>>({});
-  const [sort, setSort] = useState<{ key: ColumnKey; asc: boolean }>({ key: "date", asc: false });
+  const [sort, setSort] = usePageState<{ key: ColumnKey; asc: boolean }>('PurchaseBillRegister.sort', { key: "date", asc: false });
   const [canDelete, setCanDelete] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [confirm, setConfirm] = useState<{ row: BillRow; action: "cancel" | "delete" } | null>(null);
@@ -204,7 +205,7 @@ export default function PurchaseBillRegister() {
     if (new URLSearchParams(window.location.search).get("status") === "overdue") setStatus("OVERDUE");
     void getCurrentUser().then((current) => setCanDelete(current?.role === "OWNER" || current?.role === "SUPER_ADMIN")).catch(() => undefined);
     void getAllPages<{ id: string; name: string }>("/inventory/godowns").then(({ data }) => setGodowns(data)).catch(() => undefined);
-  }, []);
+  }, [setStatus]);
 
   // Dates and godown are filtered by the server; everything else is filtered locally.
   useEffect(() => {

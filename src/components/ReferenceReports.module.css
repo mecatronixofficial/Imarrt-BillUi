@@ -1,0 +1,65 @@
+.reports { min-width: 0; }
+
+.reports :global(.reference-register) table {
+  width: 100%;
+  min-width: 0 !important;
+  table-layout: fixed;
+}
+
+.reports :global(.reference-register) th,
+.reports :global(.reference-register) td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.reports :global(.reference-reports-nav) section { min-width: 0; }
+
+.reports :global(.reference-filters) label {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.reports :global(.reference-filters) input { min-width: 0; max-width: 100%; }
+
+@media screen and (max-width: 767px) {
+  .reports .detailTable,
+  .reports .detailTable tbody { display: block; }
+  .reports .detailTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .reports .detailTable tbody tr {
+    display: block;
+    margin-bottom: 12px;
+    border: 1px solid #e2e8f0;
+  }
+  .reports .detailTable tbody td {
+    display: grid;
+    grid-template-columns: minmax(80px, 38%) minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 8px 10px;
+    border-right: 0;
+    border-bottom: 1px solid #e9eaf0;
+  }
+  .reports .detailTable tbody td::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .reports .detailTable tbody td:last-child { border-bottom: 0; }
+}
+
+@media (max-width: 639px) {
+  .reports :global(.reference-reports-nav) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+    overflow-y: auto;
+  }
+  .reports :global(.reference-reports-nav) button { overflow-wrap: anywhere; }
+}

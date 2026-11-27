@@ -48,11 +48,14 @@ const CREATE: Result[] = [
 
 const NAVIGATE: Result[] = [
   page('/dashboard', 'Dashboard', 'View your complete business overview', LayoutDashboard, 'home'),
-  page('/parties', 'Parties', 'Manage customers and suppliers', Users, 'customer supplier'),
+  page('/parties/groups', 'Party Groups', 'Create groups and assign parties', Users, 'category group customer'),
+  page('/parties', 'Parties Dashboard', 'Party balances, groups and overview', Users, 'customer supplier overview'),
+  page('/parties/details', 'Party Details', 'Profiles, balances and party transactions', Users, 'customer ledger contact'),
   page('/items', 'Items', 'Products, services and inventory', Package, 'inventory stock product'),
   page('/sales', 'Sales', 'Invoices, estimates and sales orders', CircleDollarSign),
   page('/invoices', 'Sale Invoices', 'All customer invoices and balances', ReceiptText),
   page('/purchases', 'Purchases', 'Bills, expenses and purchase orders', ShoppingCart),
+  page('/purchases/suppliers', 'Suppliers', 'Supplier list, purchases and dues', Building2, 'vendor supplier job work payable'),
   page('/documents', 'Documents', 'Quotes, returns and delivery challans', Files, 'challan credit debit note'),
   page('/cash-banks', 'Cash & Banks', 'Manage accounts and payment details', Landmark),
   page('/production', 'Production', 'Track garment production workflow', Factory),
@@ -62,6 +65,7 @@ const NAVIGATE: Result[] = [
 const MANAGE: Result[] = [
   page('/businesses', 'Companies & Branches', 'Choose and manage business workspaces', Building2, 'business branch company'),
   page('/team', 'Team', 'Members, roles and permissions', Users),
+  page('/settings/passcode', 'Add & edit passcode', 'Require your passcode when saving changes', ShieldCheck, 'pin passcode lock'),
   page('/security', 'Security', 'Account security and MFA protection', ShieldCheck, 'mfa password'),
   page('/settings', 'Settings', 'Configure business preferences', Settings),
 ];
@@ -119,7 +123,7 @@ function recordResults(records: Records, tokens: string[]): Section[] {
   const parties = records.parties
     .filter((party) => matches(`${party.name} ${party.code ?? ''} ${party.phone ?? ''} ${party.email ?? ''}`.toLowerCase(), tokens))
     .slice(0, RECORD_LIMIT)
-    .map<Result>((party) => ({ id: `party:${party.id}`, href: `/parties/${party.id}`, label: party.name, description: [party.phone, party.email].filter(Boolean).join(' · ') || 'Party', icon: UserRound, search: '' }));
+    .map<Result>((party) => ({ id: `party:${party.id}`, href: `/parties/${party.id}`, label: party.name, description: [party.group, party.phone, party.email].filter(Boolean).join(' · ') || 'Party', icon: UserRound, search: '' }));
   const items = records.items
     .filter((item) => matches(`${item.name} ${item.sku ?? ''}`.toLowerCase(), tokens))
     .slice(0, RECORD_LIMIT)

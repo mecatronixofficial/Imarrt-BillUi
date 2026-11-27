@@ -12,6 +12,7 @@ import { getAllPages, getApiError } from "@/lib/api";
 import { localDate } from "@/lib/business-report";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { PurchaseOrder, PurchaseOrderStatus } from "@/types";
+import { usePageState } from '@/lib/navigation';
 
 type Filter = "ALL" | "OPEN" | "OVERDUE" | PurchaseOrderStatus;
 const openStatuses: PurchaseOrderStatus[] = ["DRAFT", "SENT", "CONFIRMED", "PARTIALLY_RECEIVED"];
@@ -19,8 +20,8 @@ const FILTERS: Filter[] = ["ALL", "OPEN", "OVERDUE", "DRAFT", "SENT", "CONFIRMED
 
 export default function PurchaseOrderRegister() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("ALL");
+  const [query, setQuery] = usePageState('PurchaseOrderRegister.query', "");
+  const [filter, setFilter] = usePageState<Filter>('PurchaseOrderRegister.filter', "ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 

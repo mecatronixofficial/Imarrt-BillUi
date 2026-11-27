@@ -1,7 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import NextImage from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -9,21 +8,19 @@ import {
   Boxes,
   Building2,
   CalendarDays,
-  Check,
   CircleDollarSign,
   Factory,
-  IndianRupee,
   PackageCheck,
   Palette,
   Pencil,
   Plus,
   Search,
   ImagePlus,
-  Scissors,
+  Share2,
   Shirt,
   Trash2,
-  TrendingUp,
   Truck,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react';
@@ -36,8 +33,18 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ContentState'
 import { api, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { prepareUploads } from '@/lib/imageCompression';
+import { orderedProductionImages, productionColorRows, productionTotals, PRODUCTION_SIZES } from '@/lib/production-master';
+import ProductionQuantityTotals from '@/components/production/ProductionQuantityTotals';
+import ProductionConfirmationShare from '@/components/production/ProductionConfirmationShare';
+import ProductionMasterImages, { type PendingMasterImage } from '@/components/production/ProductionMasterImages';
+import { currentProcess, PRODUCTION_PIPELINE, sortProductionStages, type ProcessColumn } from '@/lib/production-dashboard';
+import { processLabel, STAGE_META } from './productionMeta';
+import { ProductionBoard, ProductionDashboard, ProductionViewTabs, type ProductionView } from './ProductionDashboard';
+import BackButton from '@/components/BackButton';
+import { usePageState } from '@/lib/navigation';
 import type {
   Party,
+  PrintEmbroideryEntry,
   ProductionCostCategory,
   ProductionOrder,
   ProductionOrderStatus,
@@ -46,23 +53,13 @@ import type {
   Supplier,
 } from '@/types';
 
-const STAGE_META: Record<ProductionStageType, { label: string; shortLabel: string; icon: typeof Scissors; accent: string }> = {
-  MASTER: { label: 'Master', shortLabel: 'Master', icon: Users, accent: 'text-slate-700 bg-slate-100' },
-  FABRIC_PURCHASE: { label: 'Fabric purchase', shortLabel: 'Fabric', icon: Boxes, accent: 'text-indigo-700 bg-indigo-50' },
-  WASHING_COMPACTING: { label: 'Washing / compacting', shortLabel: 'Wash', icon: Factory, accent: 'text-cyan-700 bg-cyan-50' },
-  CUTTING: { label: 'Cutting', shortLabel: 'Cut', icon: Scissors, accent: 'text-blue-600 bg-blue-50' },
-  PRINT_EMBROIDERY: { label: 'Print / Embroidery DC', shortLabel: 'Print & Emb', icon: Palette, accent: 'text-violet-600 bg-violet-50' },
-  STITCHING: { label: 'Stitching', shortLabel: 'Stitch', icon: Shirt, accent: 'text-amber-600 bg-amber-50' },
-  PACKING: { label: 'Packing', shortLabel: 'Pack', icon: PackageCheck, accent: 'text-emerald-600 bg-emerald-50' },
-  FINAL: { label: 'Final total / delivery', shortLabel: 'Final', icon: Check, accent: 'text-teal-700 bg-teal-50' },
-};
+const VIEW_STORAGE_KEY = 'production:view';
 
-const PRODUCTION_PIPELINE: ProductionStageType[] = ['MASTER', 'FABRIC_PURCHASE', 'WASHING_COMPACTING', 'CUTTING', 'PRINT_EMBROIDERY', 'STITCHING', 'PACKING', 'FINAL'];
-
-function sortProductionStages(stages: ProductionStage[]) {
-  return [...stages].sort(
-    (left, right) => left.sequence - right.sequence,
-  );
+function readStoredView(): ProductionView {
+  try {
+    const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    return stored === 'board' || stored === 'list' ? stored : 'dashboard';
+  } catch { return 'dashboard'; }
 }
 
 function getNextProductionStage(stages: ProductionStage[], currentType: ProductionStageType) {
@@ -75,7 +72,7 @@ const COST_CATEGORIES: ProductionCostCategory[] = [
   'FABRIC', 'COLLAR_RIB', 'ACCESSORIES', 'LABELS', 'TAGS', 'POLY_BAGS', 'BUTTONS', 'CARTONS', 'TRANSPORT', 'OTHER',
 ];
 
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '5XL'];
+const SIZES = PRODUCTION_SIZES;
 
 export function ProductionWorkspace({ orderId }: { orderId?: string }) {
   const router = useRouter();
@@ -88,7 +85,9 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
   const [error, setError] = useState('');
   const [showOrderForm, setShowOrderForm] = useState(false);
   const [editingMaster, setEditingMaster] = useState<ProductionOrder | null>(null);
+  const [sharingOrder, setSharingOrder] = useState<ProductionOrder | null>(null);
   const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [editingStage, setEditingStage] = useState<ProductionStage | null>(null);
   const [showCostForm, setShowCostForm] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -98,6 +97,17 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
   const [canDeleteOrder, setCanDeleteOrder] = useState(false);
   const [confirmDeleteOrder, setConfirmDeleteOrder] = useState<ProductionOrder | null>(null);
   const [confirmDeleteCostId, setConfirmDeleteCostId] = useState<string | null>(null);
+  const [view, setView] = useState<ProductionView>('dashboard');
+  const [listProcess, setListProcess] = useState<ProcessColumn | 'ALL'>('ALL');
+
+  useEffect(() => { setView(readStoredView()); }, []);
+
+  const changeView = useCallback((next: ProductionView) => {
+    setView(next);
+    try { window.localStorage.setItem(VIEW_STORAGE_KEY, next); } catch { /* storage unavailable */ }
+  }, []);
+
+  const openOrder = useCallback((id: string) => router.push(`/production/${id}`), [router]);
 
   useEffect(() => {
     let active = true;
@@ -108,6 +118,14 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
       if (active) setCanDeleteOrder(user?.role === 'OWNER' || user?.role === 'SUPER_ADMIN');
     }).catch(() => { if (active) setCanDeleteOrder(false); });
     return () => { active = false; };
+  }, []);
+
+  const addParty = useCallback((party: Party) => {
+    setParties((current) => [...current.filter(({ id }) => id !== party.id), party].sort((a, b) => a.name.localeCompare(b.name)));
+  }, []);
+
+  const addSupplier = useCallback((supplier: Supplier) => {
+    setSuppliers((current) => [...current.filter(({ id }) => id !== supplier.id), supplier].sort((a, b) => a.name.localeCompare(b.name)));
   }, []);
 
   const loadData = useCallback(async () => {
@@ -141,15 +159,15 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
   }, [orderId, router, searchParams]);
 
   const selectedOrder = orders.find(({ id }) => id === selectedId);
-  const stats = useMemo(() => {
-    const active = orders.filter(({ status }) => !['DRAFT', 'COMPLETED', 'CANCELLED'].includes(status));
-    return {
-      active: active.length,
-      pieces: active.reduce((total, order) => total + order.orderedQty, 0),
-      cost: orders.reduce((total, order) => total + order.summary.totalMakingCost, 0),
-      profit: orders.filter(({ status }) => status !== 'DRAFT').reduce((total, order) => total + order.summary.profit, 0),
-    };
-  }, [orders]);
+  useEffect(() => {
+    if (selectedOrder && searchParams.get('share') === 'confirmation') {
+      setSharingOrder(selectedOrder);
+      router.replace(`/production/${selectedOrder.id}`, { scroll: false });
+    }
+  }, [selectedOrder, searchParams, router]);
+  const stats = useMemo(() => ({
+    active: orders.filter(({ status }) => !['DRAFT', 'DISPATCHED', 'COMPLETED', 'CANCELLED'].includes(status)).length,
+  }), [orders]);
 
   function applyUpdatedOrder(updated: ProductionOrder) {
     setOrders((current) => current.map((order) => order.id === updated.id ? updated : order));
@@ -230,24 +248,20 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
           <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,0.2)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.2)_1px,transparent_1px)] [background-size:34px_34px]" />
           <div className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
             <div>
-              {orderId && <Link href="/production" className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-300 hover:text-blue-200">Back to all orders</Link>}
+              {orderId && <BackButton fallback="/production" className="mb-2" />}
               <span className="inline-flex items-center gap-2 rounded-full bg-blue-500/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300"><Factory size={13} /> Production</span>
               <h1 className="mt-2 text-xl font-extrabold tracking-tight sm:text-2xl">{orderId ? selectedOrder?.orderNumber ?? 'Order details' : 'Production orders'}</h1>
               <p className="mt-1 text-xs text-slate-400">{orderId ? 'Order information, stages and costs' : `${orders.length} total orders · ${stats.active} active`}</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {!orderId && <button type="button" onClick={() => setShowCustomerForm(true)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-4 text-xs font-bold text-white transition hover:bg-white/15"><UserPlus size={15} /> Add customer</button>}
               {!orderId && <button type="button" onClick={() => setShowSupplierForm(true)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-4 text-xs font-bold text-white transition hover:bg-white/15"><Building2 size={15} /> Add supplier</button>}
               <button type="button" onClick={() => setShowOrderForm(true)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500"><Plus size={15} /> New order</button>
             </div>
           </div>
         </section>
         {!orderId && !loading && !error && orders.length > 0 && (
-          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <MetricCard icon={TrendingUp} label="Active orders" value={String(stats.active)} tone="blue" />
-            <MetricCard icon={Boxes} label="Pieces in production" value={stats.pieces.toLocaleString('en-IN')} tone="violet" />
-            <MetricCard icon={IndianRupee} label="Total making cost" value={formatCurrency(stats.cost)} tone="amber" />
-            <MetricCard icon={CircleDollarSign} label="Projected profit" value={formatCurrency(stats.profit)} tone="emerald" />
-          </div>
+          <ProductionViewTabs view={view} onChange={changeView} counts={{ orders: orders.length, active: stats.active }} />
         )}
         {loading ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -312,13 +326,20 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
                   onUpdated={applyUpdatedOrder}
                   onConfirm={(date) => void confirmOrder(date)}
                   onEditMaster={() => setEditingMaster(selectedOrder)}
+                  onShare={() => setSharingOrder(selectedOrder)}
                   onDelete={() => requestDeleteOrder(selectedOrder)}
                   deleting={deletingId === selectedOrder.id}
                   canDelete={canDeleteOrder}
                 />
               ) : <ErrorState message="Production order not found." onRetry={loadData} />
             ) : (
-              <OrderList orders={orders} onSelect={(id) => router.push(`/production/${id}`)} onEdit={setEditingMaster} onDelete={requestDeleteOrder} deletingId={deletingId} error={actionError} canDelete={canDeleteOrder} />
+              view === 'dashboard' ? (
+                <ProductionDashboard orders={orders} onOpenOrder={openOrder} onShowProcess={(process) => { setListProcess(process); changeView('list'); }} onShowAll={() => { setListProcess('ALL'); changeView('list'); }} />
+              ) : view === 'board' ? (
+                <ProductionBoard orders={orders} onOpenOrder={openOrder} />
+              ) : (
+                <OrderList key={listProcess} initialProcess={listProcess} orders={orders} onSelect={openOrder} onEdit={setEditingMaster} onDelete={requestDeleteOrder} deletingId={deletingId} error={actionError} canDelete={canDeleteOrder} />
+              )
             )}
           </section>
         )}
@@ -332,11 +353,15 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
         masterSupported ? <MasterOrderForm
           parties={parties}
           suppliers={suppliers}
+          onPartyCreated={addParty}
+          onSupplierCreated={addSupplier}
           onClose={() => setShowOrderForm(false)}
-          onSaved={(order) => { setOrders((current) => [order, ...current]); setSelectedId(order.id); setShowOrderForm(false); router.push(`/production/${order.id}`); }}
+          onSaved={(order) => { setOrders((current) => [order, ...current]); setSelectedId(order.id); setShowOrderForm(false); router.push(`/production/${order.id}?share=confirmation`); }}
         /> : <OrderFormModal
           parties={parties}
           suppliers={suppliers}
+          onPartyCreated={addParty}
+          onSupplierCreated={addSupplier}
           onClose={() =>
             setShowOrderForm(false)
           }
@@ -357,9 +382,13 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
         parties={parties}
         suppliers={suppliers}
         initialOrder={editingMaster}
+        onPartyCreated={addParty}
+        onSupplierCreated={addSupplier}
         onClose={() => setEditingMaster(null)}
-        onSaved={(order) => { applyUpdatedOrder(order); setEditingMaster(null); }}
+        onSaved={(order) => { applyUpdatedOrder(order); setEditingMaster(null); setSharingOrder(order); }}
       />}
+
+      {sharingOrder && <ProductionConfirmationShare order={sharingOrder} onClose={() => setSharingOrder(null)} />}
 
       {showSupplierForm && (
         <SupplierFormModal
@@ -367,16 +396,18 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
             setShowSupplierForm(false)
           }
           onSaved={(supplier) => {
-            setSuppliers((current) =>
-              [...current, supplier].sort(
-                (a, b) =>
-                  a.name.localeCompare(
-                    b.name,
-                  ),
-              ),
-            );
-
+            addSupplier(supplier);
             setShowSupplierForm(false);
+          }}
+        />
+      )}
+
+      {showCustomerForm && (
+        <CustomerFormModal
+          onClose={() => setShowCustomerForm(false)}
+          onSaved={(party) => {
+            addParty(party);
+            setShowCustomerForm(false);
           }}
         />
       )}
@@ -440,38 +471,16 @@ export function ProductionWorkspace({ orderId }: { orderId?: string }) {
 
 }
 
-function MetricCard({ icon: Icon, label, value, tone }: { icon: typeof Factory; label: string; value: string; tone: string }) {
-  const tones: Record<string, string> = {
-    blue: 'bg-blue-50 text-blue-600', violet: 'bg-violet-50 text-violet-600', amber: 'bg-amber-50 text-amber-600', emerald: 'bg-emerald-50 text-emerald-600', red: 'bg-red-50 text-red-600',
-  };
-  return (
-    <article className="card flex min-w-0 items-center gap-3 p-3.5 sm:p-4">
-      <span className={clsx('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', tones[tone])}><Icon aria-hidden="true" size={19} /></span>
-      <span className="min-w-0">
-        <span className="block truncate text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
-        <span className="mt-0.5 block truncate text-base font-extrabold text-slate-950 sm:text-lg">{value}</span>
-      </span>
-    </article>
-  );
-}
-
 const ORDER_ACCENT: Record<string, string> = {
   DRAFT: 'border-l-slate-300', CONFIRMED: 'border-l-blue-400', IN_PRODUCTION: 'border-l-amber-400',
   READY: 'border-l-violet-400', DISPATCHED: 'border-l-cyan-400', COMPLETED: 'border-l-emerald-400', CANCELLED: 'border-l-slate-300',
 };
 
-function OrderList({ orders, onSelect, onEdit, onDelete, deletingId, error, canDelete }: { orders: ProductionOrder[]; onSelect: (id: string) => void; onEdit: (order: ProductionOrder) => void; onDelete: (order: ProductionOrder) => void; deletingId: string; error: string; canDelete: boolean }) {
-  const [query, setQuery] = useState('');
-  const [stageFilter, setStageFilter] = useState('ALL');
+function OrderList({ orders, initialProcess = 'ALL', onSelect, onEdit, onDelete, deletingId, error, canDelete }: { orders: ProductionOrder[]; initialProcess?: ProcessColumn | 'ALL'; onSelect: (id: string) => void; onEdit: (order: ProductionOrder) => void; onDelete: (order: ProductionOrder) => void; deletingId: string; error: string; canDelete: boolean }) {
+  const [query, setQuery] = usePageState('ProductionWorkspace.query', '');
+  const [stageFilter, setStageFilter] = useState<string>(initialProcess);
   const availableStages = PRODUCTION_PIPELINE.filter((type) => orders.some((order) => order.stages.some((stage) => stage.type === type)));
-  const currentStage = (order: ProductionOrder): ProductionStageType | 'DRAFT' | 'DELIVERED' | 'CANCELLED' => {
-    if (order.status === 'DRAFT') return 'DRAFT';
-    if (order.status === 'COMPLETED' || order.status === 'DISPATCHED') return 'DELIVERED';
-    if (order.status === 'CANCELLED') return 'CANCELLED';
-    return sortProductionStages(order.stages).find((stage) => stage.status === 'IN_PROGRESS')?.type
-      ?? sortProductionStages(order.stages).find((stage) => stage.status === 'PENDING')?.type
-      ?? 'FINAL';
-  };
+  const currentStage = currentProcess;
   const matchingOrders = orders.filter((order) => {
     const term = query.trim().toLowerCase();
     return (!term || [order.orderNumber, order.styleName, order.party?.name, order.supplier?.name].some((value) => value?.toLowerCase().includes(term)))
@@ -535,6 +544,10 @@ function OrderList({ orders, onSelect, onEdit, onDelete, deletingId, error, canD
                 {STAGE_META[type].label}
               </option>
             ))}
+
+            {orders.some((order) => order.status === "DISPATCHED" || order.status === "COMPLETED") && (
+              <option value="DELIVERED">Delivered</option>
+            )}
           </select>
         </div>
       </div>
@@ -543,7 +556,7 @@ function OrderList({ orders, onSelect, onEdit, onDelete, deletingId, error, canD
         <div className="flex flex-col gap-3">
           {matchingOrders.map((order) => {
             const stage = currentStage(order);
-            const processName = stage === 'DRAFT' ? 'Draft master' : stage === 'DELIVERED' ? 'Delivered' : stage === 'CANCELLED' ? 'Cancelled' : STAGE_META[stage].label;
+            const processName = processLabel(stage);
             return <article key={order.id} className={clsx('group min-w-0 overflow-hidden rounded-2xl border border-l-4 border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-5', ORDER_ACCENT[order.status] ?? 'border-l-slate-300')}>
               <button type="button" onClick={() => onSelect(order.id)} className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label={`View details for ${order.orderNumber}`}>
                 <div className="flex items-start justify-between gap-4">
@@ -592,6 +605,7 @@ function OrderDetail({
   onUpdated,
   onConfirm,
   onEditMaster,
+  onShare,
   onDelete,
   deleting,
   canDelete,
@@ -606,6 +620,7 @@ function OrderDetail({
   onUpdated: (order: ProductionOrder) => void;
   onConfirm: (date: string) => void;
   onEditMaster: () => void;
+  onShare: () => void;
   onDelete: () => void;
   deleting: boolean;
   canDelete: boolean;
@@ -628,6 +643,7 @@ function OrderDetail({
             <div className="flex flex-wrap items-center gap-2">
               {order.status === 'DRAFT' && <label className="text-[10px] text-slate-300">Confirm date<input type="date" aria-label="Confirmation date" value={confirmDate} onChange={(event) => setConfirmDate(event.target.value)} className="mt-1 block rounded-lg border border-white/20 bg-slate-900 px-2 py-1.5 text-xs text-white" /></label>}
               <button type="button" onClick={onEditMaster} className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/10"><Pencil aria-hidden="true" size={14} />Edit order</button>
+              <button type="button" onClick={onShare} className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/10"><Share2 aria-hidden="true" size={14} />Share for confirmation</button>
               {canDelete && <button type="button" disabled={deleting} onClick={onDelete} className="inline-flex items-center gap-2 rounded-lg border border-red-400/30 px-3.5 py-2 text-xs font-bold text-red-200 transition hover:bg-red-500/10 disabled:opacity-50"><Trash2 aria-hidden="true" size={14} />{deleting ? 'Deleting...' : 'Delete'}</button>}
               {order.status === 'DRAFT' && <button type="button" disabled={updatingStatus || !confirmDate} onClick={() => onConfirm(confirmDate)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-blue-950/40 transition hover:-translate-y-0.5 hover:bg-blue-500 disabled:opacity-60 disabled:hover:translate-y-0">Confirm order <ArrowRight aria-hidden="true" size={15} /></button>}
             </div>
@@ -641,7 +657,7 @@ function OrderDetail({
         {error && <div role="alert" className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</div>}
         <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
           <InfoCell icon={Users} label="Party" value={order.party.name} />
-          <InfoCell icon={Truck} label="Supplier" value={order.supplier?.name || 'Not assigned'} />
+          <InfoCell icon={Truck} label="Supplier" value={order.supplier?.name || 'Not assigned'} sub={order.supplier?.phone || undefined} />
           <InfoCell icon={Boxes} label="Fabric" value={[order.fabricName, order.fabricGsm].filter(Boolean).join(' · ') || '—'} />
           <InfoCell icon={Palette} label="Colour" value={order.color || '—'} />
           <InfoCell icon={PackageCheck} label="Order qty" value={`${order.orderedQty.toLocaleString('en-IN')} pcs`} />
@@ -843,8 +859,10 @@ function MasterDetails({ order }: { order: ProductionOrder }) {
     <div className="flex items-center gap-2.5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><Factory aria-hidden="true" size={15} /></span><div><h3 className="text-sm font-bold text-slate-900">Order master</h3><p className="text-xs text-slate-500">{order.status === 'DRAFT' ? 'Review this draft before confirming production.' : 'Customer and supplier order details.'}</p></div></div>
     <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4"><div><p className="text-slate-400">Order date</p><strong>{formatDate(order.orderDate)}</strong></div><div><p className="text-slate-400">Confirmed</p><strong>{order.confirmedAt ? formatDate(order.confirmedAt) : 'Pending'}</strong></div><div><p className="text-slate-400">Transport</p><strong className="break-words">{order.transport || '—'}</strong></div><div><p className="text-slate-400">Destination</p><strong className="break-words">{order.destination || '—'}</strong></div></div>
     {order.invoiceDetails && <p className="text-xs text-slate-600"><strong>Invoice details:</strong> {order.invoiceDetails}</p>}
+    <ProductionQuantityTotals rows={productionColorRows(order)} />
     <div className="grid gap-2 rounded-xl bg-blue-50 p-3 text-xs sm:grid-cols-3"><p>Customer estimate <strong className="block text-blue-900">{formatCurrency(order.summary.revenue)}</strong></p><p>Supplier estimate <strong className="block text-blue-900">{formatCurrency(supplierEstimate)}</strong></p><p>Estimated spread <strong className="block text-blue-900">{formatCurrency(order.summary.revenue - supplierEstimate)}</strong></p></div>
     {order.sizeColorBreakdown && <div><h4 className="text-xs font-bold text-slate-800">Color × size quantities</h4><div className="mt-2 space-y-2">{Object.entries(order.sizeColorBreakdown).map(([color, sizes]) => <div key={color} className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2 text-xs"><strong className="min-w-20 text-slate-800">{color}</strong>{Object.entries(sizes).filter(([, qty]) => qty > 0).map(([size, qty]) => <span key={size} className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">{size}: {qty}</span>)}<span className="ml-auto font-bold text-blue-700">{Object.values(sizes).reduce((sum, qty) => sum + qty, 0)} pcs</span></div>)}</div></div>}
+    {(order.instructions?.printEmbroidery?.length ?? 0) > 0 && <div><h4 className="flex items-center gap-2 text-xs font-bold text-slate-800"><Palette aria-hidden="true" size={13} className="text-violet-600" />Print / embroidery</h4><div className="mt-2 grid gap-2 sm:grid-cols-2">{order.instructions?.printEmbroidery?.map((entry, index) => <div key={index} className="rounded-xl border border-violet-100 bg-violet-50/50 p-3 text-xs"><div className="flex flex-wrap items-center gap-2"><span className="rounded-md bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700">{entry.method}</span><strong className="text-slate-800">{entry.placement}</strong></div>{(entry.size || entry.colors) && <p className="mt-1.5 text-[11px] text-slate-600">{[entry.size && `Size: ${entry.size}`, entry.colors && `Colours: ${entry.colors}`].filter(Boolean).join(' · ')}</p>}{entry.detail && <p className="mt-1 text-[11px] text-slate-600">{entry.detail}</p>}</div>)}</div></div>}
     {order.instructions && <div className="grid gap-3 sm:grid-cols-3">{(['product', 'accessories', 'packing'] as const).map((group) => <div key={group} className="rounded-xl bg-slate-50 p-3"><h4 className="text-xs font-bold capitalize text-slate-800">{group === 'product' ? 'Product details' : group}</h4>{(order.instructions?.[group] ?? []).map((item, index) => <p key={index} className="mt-2 text-[11px] text-slate-600"><strong>{item.item}</strong>: {item.detail}</p>)}</div>)}</div>}
   </section>;
 }
@@ -855,6 +873,7 @@ function ProductionImages({ order, onUpdated }: { order: ProductionOrder; onUpda
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [previews, setPreviews] = useState<Record<string, string>>({});
+  const orderedImages = useMemo(() => orderedProductionImages(order), [order]);
   useEffect(() => {
     let active = true;
     const urls: string[] = [];
@@ -907,19 +926,20 @@ function ProductionImages({ order, onUpdated }: { order: ProductionOrder; onUpda
     <div className="mt-3 flex flex-wrap gap-2"><select aria-label="Image process" className="input-field max-w-56" value={stageType} onChange={(event) => setStageType(event.target.value as ProductionStageType)}>{PRODUCTION_PIPELINE.map((type) => <option key={type} value={type}>{STAGE_META[type].label}</option>)}</select><label className="btn-secondary inline-flex cursor-pointer items-center gap-2"><ImagePlus aria-hidden="true" size={15} />{busy ? 'Uploading...' : 'Add image'}<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={busy} onChange={(event) => { void upload(event.target.files?.[0]); event.target.value = ''; }} /></label></div>
     {error && <p role="alert" className="mt-2 text-xs text-red-600">{error}</p>}
     <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {(order.images ?? []).map((image) => <div key={image.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200"><div className="relative aspect-square bg-slate-100">{previews[image.id] && <NextImage unoptimized fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" src={previews[image.id]} alt={image.displayName || image.fileName} className="object-cover" />}</div><div className="p-2"><p className="truncate text-[10px] font-semibold text-slate-700" title={image.fileName}>{image.displayName || image.fileName}</p><p className="text-[9px] text-slate-400">{image.stageType ? STAGE_META[image.stageType].shortLabel : 'Order'} {image.color} {image.sizeLabel}</p>{image.details && <p className="mt-1 text-[10px] text-slate-500">{image.details}</p>}<button type="button" disabled={busy} onClick={() => void remove(image.id)} className="mt-1 text-[10px] font-semibold text-red-600">Remove</button></div></div>)}
+      {orderedImages.map((image, index) => <div key={image.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200"><div className="relative aspect-square bg-slate-100">{previews[image.id] && <NextImage unoptimized fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" src={previews[image.id]} alt={image.displayName || image.fileName} className="object-cover" />}</div><div className="p-2"><p className="text-[10px] font-bold text-blue-700">Image {index + 1}</p><p className="truncate text-[10px] font-semibold text-slate-700" title={image.fileName}>{image.displayName || image.fileName}</p><p className="text-[9px] text-slate-400">{image.stageType ? STAGE_META[image.stageType].shortLabel : 'Order'} {image.color} {image.sizeLabel}</p>{image.details && <p className="mt-1 text-[10px] text-slate-500">{image.details}</p>}<button type="button" disabled={busy} onClick={() => void remove(image.id)} className="mt-1 text-[10px] font-semibold text-red-600">Remove</button></div></div>)}
     </div>
     {!order.images?.length && <p className="mt-3 text-xs text-slate-400">No images yet.</p>}
   </section>;
 }
 
-function InfoCell({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string }) {
+function InfoCell({ icon: Icon, label, value, sub }: { icon: typeof Users; label: string; value: string; sub?: string }) {
   return (
     <div className="group flex min-w-0 items-start gap-2.5 px-3.5 py-3 transition hover:bg-slate-50">
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white"><Icon aria-hidden="true" size={13} /></span>
       <span className="min-w-0">
         <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
         <span className="mt-0.5 block truncate text-xs font-semibold text-slate-800" title={value}>{value}</span>
+        {sub && <span className="mt-0.5 block truncate text-[10px] text-slate-500" title={sub}>{sub}</span>}
       </span>
     </div>
   );
@@ -993,19 +1013,79 @@ const INSTRUCTION_OPTIONS: Record<InstructionGroup, string[]> = {
   packing: ['Fold', 'Poly bag', 'Insert card', 'Carton', 'Ironing', 'Rope'],
 };
 
-function MasterOrderForm({ parties, suppliers, initialOrder, onClose, onSaved }: { parties: Party[]; suppliers: Supplier[]; initialOrder?: ProductionOrder; onClose: () => void; onSaved: (order: ProductionOrder) => void }) {
+const PRINT_METHODS = ['Screen print', 'Digital print (DTF)', 'Sublimation', 'Heat transfer', 'Puff print', 'Embroidery', '3D embroidery', 'Patch / badge', 'Applique'];
+const PRINT_PLACEMENTS = ['Front centre', 'Left chest', 'Right chest', 'Back centre', 'Back neck', 'Left sleeve', 'Right sleeve', 'Collar', 'Pocket', 'Bottom hem'];
+
+type PrintEntryDraft = { method: string; placement: string; size: string; colors: string; detail: string };
+
+function emptyPrintEntry(): PrintEntryDraft {
+  return { method: '', placement: '', size: '', colors: '', detail: '' };
+}
+
+function trimPrintEntry(entry: PrintEntryDraft): PrintEntryDraft {
+  return { method: entry.method.trim(), placement: entry.placement.trim(), size: entry.size.trim(), colors: entry.colors.trim(), detail: entry.detail.trim() };
+}
+
+function PrintEmbroiderySection({ entries, onChange }: { entries: PrintEntryDraft[]; onChange: (entries: PrintEntryDraft[]) => void }) {
+  const update = (index: number, key: keyof PrintEntryDraft, value: string) => onChange(entries.map((entry, position) => position === index ? { ...entry, [key]: value } : entry));
+  const filled = entries.filter((entry) => entry.method.trim() && entry.placement.trim()).length;
+  return (
+    <FormSection title="Print / embroidery" icon={Palette} trailing={filled > 0 ? <span className="rounded-lg bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{filled} {filled === 1 ? 'artwork' : 'artworks'}</span> : undefined}>
+      <datalist id="print-methods">{PRINT_METHODS.map((method) => <option key={method} value={method} />)}</datalist>
+      <datalist id="print-placements">{PRINT_PLACEMENTS.map((placement) => <option key={placement} value={placement} />)}</datalist>
+      {entries.length === 0 ? <p className="text-xs text-slate-500">No print or embroidery on this order.</p> : (
+        <div className="space-y-3">
+          {entries.map((entry, index) => (
+            <div key={index} className="rounded-xl border border-slate-200 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Artwork {index + 1}</span>
+                <button type="button" aria-label={`Remove artwork ${index + 1}`} className="inline-flex items-center gap-1 text-xs font-bold text-red-600" onClick={() => onChange(entries.filter((_, position) => position !== index))}><Trash2 aria-hidden="true" size={13} />Remove</button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Field label="Method *"><input list="print-methods" className="input-field" placeholder="Select or type" value={entry.method} onChange={(event) => update(index, 'method', event.target.value)} /></Field>
+                <Field label="Placement *"><input list="print-placements" className="input-field" placeholder="Select or type" value={entry.placement} onChange={(event) => update(index, 'placement', event.target.value)} /></Field>
+                <Field label="Size"><input className="input-field" placeholder="e.g. 3 × 3 in" value={entry.size} onChange={(event) => update(index, 'size', event.target.value)} /></Field>
+                <Field label="Colours"><input className="input-field" placeholder="e.g. White, Navy" value={entry.colors} onChange={(event) => update(index, 'colors', event.target.value)} /></Field>
+              </div>
+              <div className="mt-3"><Field label="Artwork details"><input className="input-field" placeholder="Logo name, thread / ink type, artwork file reference…" value={entry.detail} onChange={(event) => update(index, 'detail', event.target.value)} /></Field></div>
+            </div>
+          ))}
+        </div>
+      )}
+      <button type="button" className="mt-3 text-xs font-bold text-blue-600" onClick={() => onChange([...entries, emptyPrintEntry()])}>+ Add print / embroidery</button>
+    </FormSection>
+  );
+}
+
+function MasterOrderForm({ parties, suppliers, initialOrder, onPartyCreated, onSupplierCreated, onClose, onSaved }: { parties: Party[]; suppliers: Supplier[]; initialOrder?: ProductionOrder; onPartyCreated: (party: Party) => void; onSupplierCreated: (supplier: Supplier) => void; onClose: () => void; onSaved: (order: ProductionOrder) => void }) {
+  const [creating, setCreating] = useState<'customer' | 'supplier' | null>(null);
+  // New orders: delivery date follows order date + 7 days until the user picks a delivery date themselves.
+  const [dueDateTouched, setDueDateTouched] = useState(Boolean(initialOrder));
   const quantityLocked = Boolean(initialOrder && initialOrder.status !== 'DRAFT');
+  const sizeOptions = useMemo(() => [...new Set([...SIZES, ...Object.keys(initialOrder?.sizeBreakdown ?? {}), ...Object.values(initialOrder?.sizeColorBreakdown ?? {}).flatMap((sizes) => Object.keys(sizes))])], [initialOrder]);
   const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
   const defaultNumber = `PO-${today.replaceAll('-', '')}-${String(Date.now()).slice(-4)}`;
-  const [form, setForm] = useState({ orderNumber: initialOrder?.orderNumber ?? defaultNumber, partyId: initialOrder?.party.id ?? parties[0]?.id ?? '', supplierId: initialOrder?.supplier?.id ?? '', orderDate: initialOrder?.orderDate ? dateInput(initialOrder.orderDate) : today, dueDate: initialOrder?.dueDate ? dateInput(initialOrder.dueDate) : '', invoiceDetails: initialOrder?.invoiceDetails ?? '', transport: initialOrder?.transport ?? '', destination: initialOrder?.destination ?? '', styleName: initialOrder?.styleName ?? '', fabricName: initialOrder?.fabricName ?? '', fabricGsm: initialOrder?.fabricGsm ?? '', saleRate: String(initialOrder?.saleRate ?? ''), supplierRate: String(initialOrder?.supplierRate ?? ''), notes: initialOrder?.notes ?? '' });
+  const [form, setForm] = useState({ orderNumber: initialOrder?.orderNumber ?? defaultNumber, partyId: initialOrder?.party.id ?? parties[0]?.id ?? '', supplierId: initialOrder?.supplier?.id ?? '', orderDate: initialOrder?.orderDate ? dateInput(initialOrder.orderDate) : today, dueDate: initialOrder?.dueDate ? dateInput(initialOrder.dueDate) : initialOrder ? '' : addDaysToDateInput(today, DEFAULT_DELIVERY_DAYS), invoiceDetails: initialOrder?.invoiceDetails ?? '', transport: initialOrder?.transport ?? '', destination: initialOrder?.destination ?? '', styleName: initialOrder?.styleName ?? '', fabricName: initialOrder?.fabricName ?? '', fabricGsm: initialOrder?.fabricGsm ?? '', saleRate: String(initialOrder?.saleRate ?? ''), supplierRate: String(initialOrder?.supplierRate ?? ''), notes: initialOrder?.notes ?? '' });
   const [colors, setColors] = useState<Array<{ color: string; sizes: Record<string, string> }>>(() => {
     const breakdown = initialOrder?.sizeColorBreakdown ?? (initialOrder?.sizeBreakdown ? { [initialOrder.color || 'Unspecified']: initialOrder.sizeBreakdown } : undefined);
-    return breakdown ? Object.entries(breakdown).map(([color, sizes]) => ({ color, sizes: Object.fromEntries(SIZES.map((size) => [size, String(sizes[size] ?? '')])) })) : [{ color: '', sizes: Object.fromEntries(SIZES.map((size) => [size, ''])) }];
+    return breakdown ? Object.entries(breakdown).map(([color, sizes]) => ({ color, sizes: Object.fromEntries(sizeOptions.map((size) => [size, String(sizes[size] ?? '')])) })) : [{ color: '', sizes: Object.fromEntries(sizeOptions.map((size) => [size, ''])) }];
   });
   const [instructions, setInstructions] = useState<Record<InstructionGroup, MasterInstruction[]>>({ product: initialOrder?.instructions?.product ?? [{ item: 'Button', detail: '' }, { item: 'Collar', detail: '' }, { item: 'Pocket', detail: '' }], accessories: initialOrder?.instructions?.accessories ?? [{ item: 'Main label', detail: '' }, { item: 'Tag', detail: '' }], packing: initialOrder?.instructions?.packing ?? [{ item: 'Fold', detail: '' }, { item: 'Poly bag', detail: '' }, { item: 'Insert card', detail: '' }] });
+  const [printEntries, setPrintEntries] = useState<PrintEntryDraft[]>(() => initialOrder?.instructions?.printEmbroidery?.map((entry) => ({ method: entry.method ?? '', placement: entry.placement ?? '', size: entry.size ?? '', colors: entry.colors ?? '', detail: entry.detail ?? '' })) ?? (initialOrder ? [] : [emptyPrintEntry()]));
+  const [pendingImages, setPendingImages] = useState<PendingMasterImage[]>([]);
+  const [imageError, setImageError] = useState('');
+  const [uploadProgress, setUploadProgress] = useState('');
+  const pendingUrls = useRef(new Set<string>());
+  const uploadedImages = useRef(new Set<string>());
+  const persistedOrder = useRef<ProductionOrder | null>(initialOrder ?? null);
+  const nextImageId = useRef(0);
+  useEffect(() => {
+    const urls = pendingUrls.current;
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const total = colors.reduce((sum, row) => sum + Object.values(row.sizes).reduce((rowTotal, value) => rowTotal + (Number(value) || 0), 0), 0);
+  const total = productionTotals(colors).total;
   const customerEstimate = total * Number(form.saleRate || 0);
   const supplierEstimate = total * Number(form.supplierRate || 0);
 
@@ -1013,44 +1093,97 @@ function MasterOrderForm({ parties, suppliers, initialOrder, onClose, onSaved }:
     setInstructions((current) => ({ ...current, [group]: current[group].map((entry, position) => position === index ? { ...entry, [key]: value } : entry) }));
   }
 
+  function addImages(files: File[]) {
+    if (saving || !files.length) return;
+    if (files.some((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) {
+      setImageError('Choose JPG, PNG or WEBP images.'); return;
+    }
+    setImageError('');
+    const added = files.map((file) => {
+      const previewUrl = URL.createObjectURL(file); pendingUrls.current.add(previewUrl);
+      return { id: `master-image-${nextImageId.current++}`, file, previewUrl };
+    });
+    setPendingImages((current) => [...current, ...added]);
+  }
+
+  function removePendingImage(id: string) {
+    if (saving || uploadedImages.current.has(id)) return;
+    const image = pendingImages.find((entry) => entry.id === id);
+    if (image) { URL.revokeObjectURL(image.previewUrl); pendingUrls.current.delete(image.previewUrl); }
+    setImageError('');
+    setPendingImages((current) => current.filter((entry) => entry.id !== id));
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
     if (!form.partyId) { setError('Select a customer.'); return; }
+    if (colors.some((row) => Object.values(row.sizes).some((value) => !Number.isSafeInteger(Number(value)) || Number(value) < 0))) { setError('Quantities must be whole numbers of zero or more.'); return; }
     if (total <= 0) { setError('Enter at least one color and size quantity.'); return; }
     const usedColors = colors.filter((row) => Object.values(row.sizes).some((value) => Number(value) > 0));
     if (usedColors.some((row) => !row.color.trim()) || new Set(usedColors.map((row) => row.color.trim().toLowerCase())).size !== usedColors.length) { setError('Give each used color a unique name.'); return; }
-    const sizeBreakdown = Object.fromEntries(SIZES.map((size) => [size, usedColors.reduce((sum, row) => sum + Number(row.sizes[size] || 0), 0)]).filter(([, value]) => Number(value) > 0));
+    const sizeBreakdown = Object.fromEntries(sizeOptions.map((size) => [size, usedColors.reduce((sum, row) => sum + Number(row.sizes[size] || 0), 0)]).filter(([, value]) => Number(value) > 0));
     const sizeColorBreakdown = Object.fromEntries(usedColors.map((row) => [row.color.trim(), Object.fromEntries(Object.entries(row.sizes).filter(([, value]) => Number(value) > 0).map(([size, value]) => [size, Number(value)]))]));
-    setSaving(true); setError('');
+    const filledPrints = printEntries.map(trimPrintEntry).filter((entry) => Object.values(entry).some(Boolean));
+    if (filledPrints.some((entry) => !entry.method || !entry.placement)) { setError('Each print / embroidery entry needs a method and a placement.'); return; }
+    const payload = {
+      ...form, supplierId: form.supplierId || undefined, dueDate: form.dueDate || undefined,
+      orderedQty: total, saleRate: Number(form.saleRate), supplierRate: Number(form.supplierRate || 0),
+      sizeBreakdown, sizeColorBreakdown,
+      instructions: {
+        ...Object.fromEntries((['product', 'accessories', 'packing'] as InstructionGroup[]).map((group) => [group, instructions[group].filter((entry) => entry.item.trim() && entry.detail.trim()).map((entry) => ({ item: entry.item.trim(), detail: entry.detail.trim() }))])),
+        printEmbroidery: filledPrints.map((entry): PrintEmbroideryEntry => ({ method: entry.method, placement: entry.placement, size: entry.size || undefined, colors: entry.colors || undefined, detail: entry.detail || undefined })),
+      },
+    };
+    setSaving(true); setError(''); setImageError('');
+    let saveStage: 'order' | 'upload' | 'refresh' = 'order';
+    let imageNumber = 0;
     try {
-      const { data } = await (initialOrder ? api.patch<ProductionOrder>(`/production-orders/${initialOrder.id}/master`, {
-        ...form, supplierId: form.supplierId || undefined, dueDate: form.dueDate || undefined,
-        orderedQty: total, saleRate: Number(form.saleRate), supplierRate: Number(form.supplierRate || 0),
-        sizeBreakdown, sizeColorBreakdown,
-        instructions: Object.fromEntries((['product', 'accessories', 'packing'] as InstructionGroup[]).map((group) => [group, instructions[group].filter((entry) => entry.item.trim() && entry.detail.trim()).map((entry) => ({ item: entry.item.trim(), detail: entry.detail.trim() }))])),
-      }) : api.post<ProductionOrder>('/production-orders', {
-        ...form, supplierId: form.supplierId || undefined, dueDate: form.dueDate || undefined,
-        orderedQty: total, saleRate: Number(form.saleRate), supplierRate: Number(form.supplierRate || 0),
-        sizeBreakdown, sizeColorBreakdown,
-        instructions: Object.fromEntries((['product', 'accessories', 'packing'] as InstructionGroup[]).map((group) => [group, instructions[group].filter((entry) => entry.item.trim() && entry.detail.trim()).map((entry) => ({ item: entry.item.trim(), detail: entry.detail.trim() }))])),
-      }));
-      onSaved(data);
-    } catch (saveError) { setError(getApiError(saveError, 'Could not save production order.')); }
-    finally { setSaving(false); }
+      const remaining = pendingImages.filter((image) => !uploadedImages.current.has(image.id));
+      setUploadProgress(remaining.length ? 'Preparing images…' : '');
+      const files = await prepareUploads(remaining.map((image) => image.file));
+      if (files.some((file) => file.size > 5 * 1024 * 1024)) {
+        setImageError('Each image must be under 5 MB after compression. Remove or replace the larger image.'); return;
+      }
+      const existingOrder = persistedOrder.current;
+      const { data } = await (existingOrder
+        ? api.patch<ProductionOrder>(`/production-orders/${existingOrder.id}/master`, payload)
+        : api.post<ProductionOrder>('/production-orders', payload));
+      persistedOrder.current = data;
+      saveStage = 'upload';
+      for (const [index, image] of remaining.entries()) {
+        imageNumber = (initialOrder?.images?.length ?? 0) + pendingImages.findIndex((entry) => entry.id === image.id) + 1;
+        setUploadProgress(`Uploading Image ${imageNumber}…`);
+        const body = new FormData(); body.append('image', files[index]); body.append('stageType', 'MASTER');
+        await api.post(`/production-orders/${data.id}/images`, body, { headers: { 'Content-Type': undefined } });
+        uploadedImages.current.add(image.id);
+        setPendingImages((current) => current.map((entry) => entry.id === image.id ? { ...entry, uploaded: true } : entry));
+      }
+      saveStage = 'refresh';
+      if (pendingImages.length) {
+        setUploadProgress('Finishing order…');
+        const response = await api.get<ProductionOrder>(`/production-orders/${data.id}`);
+        persistedOrder.current = response.data;
+        onSaved(response.data);
+      } else onSaved(data);
+    } catch (saveError) {
+      const message = getApiError(saveError, 'Please try again.');
+      setError(saveStage === 'upload' ? `Order saved. Image ${imageNumber} could not upload. Save again to retry the remaining images. ${message}` : saveStage === 'refresh' ? `Order and images saved. Save again to refresh the order. ${message}` : `Could not save production order. ${message}`);
+    } finally { setSaving(false); setUploadProgress(''); }
   }
 
-  return <Modal title={initialOrder ? 'Edit production order' : 'New production order master'} onClose={onClose} size="full">
+  return <Modal title={initialOrder ? 'Edit production order' : 'New production order master'} onClose={() => { if (!saving) onClose(); }} size="full">
     <form onSubmit={submit} className="space-y-5 pb-8">
+      <fieldset disabled={saving} className="min-w-0 space-y-5">
       {error && <FormError message={error} />}
       <p className="rounded-xl bg-blue-50 px-4 py-3 text-xs text-blue-800">{quantityLocked ? 'Order quantity is locked after confirmation. You can update customer, delivery, style, prices and instructions.' : 'Save this order as a draft. Review the details and add images before confirming production.'}</p>
       <FormSection title="Order and delivery" icon={Factory}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Order number *"><input required className="input-field" value={form.orderNumber} onChange={(event) => setForm({ ...form, orderNumber: event.target.value })} /></Field>
-          <Field label="Order date *"><input required type="date" className="input-field" value={form.orderDate} onChange={(event) => setForm({ ...form, orderDate: event.target.value })} /></Field>
-          <Field label="Customer *"><select required className="input-field" value={form.partyId} onChange={(event) => setForm({ ...form, partyId: event.target.value })}><option value="">Select customer</option>{parties.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></Field>
-          <Field label="Supplier"><select className="input-field" value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Not assigned</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></Field>
-          <Field label="Delivery date"><input type="date" className="input-field" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></Field>
+          <Field label="Order date *"><input required type="date" className="input-field" value={form.orderDate} onChange={(event) => { const orderDate = event.target.value; setForm((current) => ({ ...current, orderDate, dueDate: dueDateTouched ? current.dueDate : addDaysToDateInput(orderDate, DEFAULT_DELIVERY_DAYS) })); }} /></Field>
+          <Field label="Delivery date"><input type="date" className="input-field" min={form.orderDate || undefined} value={form.dueDate} onChange={(event) => { setDueDateTouched(true); setForm({ ...form, dueDate: event.target.value }); }} />{!dueDateTouched && form.dueDate && <span className="mt-1 block text-[11px] text-slate-500">Auto: {DEFAULT_DELIVERY_DAYS} days after order date</span>}</Field>
+          <PickerField label="Customer *" actionLabel="New customer" onAction={() => setCreating('customer')}><select required aria-label="Customer" className="input-field" value={form.partyId} onChange={(event) => setForm({ ...form, partyId: event.target.value })}><option value="">Select customer</option>{parties.map((party) => <option key={party.id} value={party.id}>{party.name}{party.group ? ` · ${party.group}` : ""}</option>)}</select></PickerField>
+          <PickerField label="Supplier" actionLabel="New supplier" onAction={() => setCreating('supplier')}><select aria-label="Supplier" className="input-field" value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })}><option value="">Not assigned</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></PickerField>
           <Field label="Transport"><input className="input-field" value={form.transport} onChange={(event) => setForm({ ...form, transport: event.target.value })} /></Field>
           <Field label="Destination"><input className="input-field" value={form.destination} onChange={(event) => setForm({ ...form, destination: event.target.value })} /></Field>
           <Field label="Invoice details"><input className="input-field" value={form.invoiceDetails} onChange={(event) => setForm({ ...form, invoiceDetails: event.target.value })} /></Field>
@@ -1066,19 +1199,28 @@ function MasterOrderForm({ parties, suppliers, initialOrder, onClose, onSaved }:
         </div>
       </FormSection>
       <FormSection title="Color and size quantities" icon={Palette} trailing={<span className="rounded-lg bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{total} pieces</span>}>
-        <div className="space-y-3">{colors.map((row, index) => <div key={index} className="rounded-xl border border-slate-200 p-3"><div className="mb-3 flex items-center gap-2"><input aria-label={`Color ${index + 1}`} className="input-field max-w-52" placeholder="Color, e.g. White" value={row.color} onChange={(event) => setColors((current) => current.map((entry, position) => position === index ? { ...entry, color: event.target.value } : entry))} /><span className="text-xs font-bold text-slate-600">{Object.values(row.sizes).reduce((sum, value) => sum + Number(value || 0), 0)} pcs</span>{colors.length > 1 && <button type="button" className="ml-auto text-xs font-bold text-red-600" onClick={() => setColors((current) => current.filter((_, position) => position !== index))}>Remove</button>}</div><div className="grid grid-cols-2 gap-2 min-[400px]:grid-cols-4 md:grid-cols-7">{SIZES.map((size) => <Field key={size} label={size}><input type="number" min="0" step="1" className="input-field px-2 text-center" value={row.sizes[size]} onChange={(event) => setColors((current) => current.map((entry, position) => position === index ? { ...entry, sizes: { ...entry.sizes, [size]: event.target.value } } : entry))} /></Field>)}</div></div>)}</div>
-        <button type="button" className="btn-secondary mt-3 text-xs" onClick={() => setColors((current) => [...current, { color: '', sizes: Object.fromEntries(SIZES.map((size) => [size, ''])) }])}>Add color</button>
+        <fieldset disabled={quantityLocked} className="space-y-3">{colors.map((row, index) => <div key={index} className="rounded-xl border border-slate-200 p-3"><div className="mb-3 flex items-center gap-2"><input aria-label={`Color ${index + 1}`} className="input-field max-w-52" placeholder="Color, e.g. White" value={row.color} onChange={(event) => setColors((current) => current.map((entry, position) => position === index ? { ...entry, color: event.target.value } : entry))} /><span className="text-xs font-bold text-slate-600">{Object.values(row.sizes).reduce((sum, value) => sum + Number(value || 0), 0)} pcs</span>{colors.length > 1 && <button type="button" className="ml-auto text-xs font-bold text-red-600" onClick={() => setColors((current) => current.filter((_, position) => position !== index))}>Remove</button>}</div><div className="grid grid-cols-2 gap-2 min-[400px]:grid-cols-4 md:grid-cols-7">{sizeOptions.map((size) => <Field key={size} label={size}><input type="number" min="0" step="1" className="input-field px-2 text-center" value={row.sizes[size]} onChange={(event) => setColors((current) => current.map((entry, position) => position === index ? { ...entry, sizes: { ...entry.sizes, [size]: event.target.value } } : entry))} /></Field>)}</div></div>)}</fieldset>
+        <button type="button" disabled={quantityLocked} className="btn-secondary mt-3 text-xs" onClick={() => setColors((current) => [...current, { color: '', sizes: Object.fromEntries(sizeOptions.map((size) => [size, ''])) }])}>Add color</button>
       </FormSection>
+      <ProductionQuantityTotals rows={colors} />
+      <PrintEmbroiderySection entries={printEntries} onChange={setPrintEntries} />
       <div className="grid gap-3 sm:grid-cols-3">{(['product', 'accessories', 'packing'] as InstructionGroup[]).map((group) => <FormSection key={group} title={group === 'product' ? 'Product details' : group === 'accessories' ? 'Accessories' : 'Packing'} icon={group === 'product' ? Shirt : group === 'accessories' ? PackageCheck : Boxes}><datalist id={`options-${group}`}>{INSTRUCTION_OPTIONS[group].map((item) => <option key={item} value={item} />)}</datalist><div className="space-y-2">{instructions[group].map((entry, index) => <div key={index} className="flex gap-2"><div className="min-w-0 flex-1 space-y-1"><input list={`options-${group}`} aria-label={`${group} item ${index + 1}`} className="input-field" placeholder="Select or enter item" value={entry.item} onChange={(event) => updateInstruction(group, index, 'item', event.target.value)} /><input aria-label={`${group} details ${index + 1}`} className="input-field" placeholder="Details" value={entry.detail} onChange={(event) => updateInstruction(group, index, 'detail', event.target.value)} /></div><button type="button" aria-label={`Remove ${group} item`} className="self-start text-red-600" onClick={() => setInstructions((current) => ({ ...current, [group]: current[group].filter((_, position) => position !== index) }))}><Trash2 size={15} /></button></div>)}</div><button type="button" className="mt-2 text-xs font-bold text-blue-600" onClick={() => setInstructions((current) => ({ ...current, [group]: [...current[group], { item: '', detail: '' }] }))}>+ Add item</button></FormSection>)}</div>
-      <Field label="Additional notes"><textarea rows={2} className="input-field" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></Field>
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2" data-master-notes-images>
+        <Field label="Additional notes"><textarea rows={7} className="input-field resize-y" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Add any extra instructions for this order" /></Field>
+        <div className="min-w-0"><ProductionMasterImages order={initialOrder} pending={pendingImages} disabled={saving} progress={uploadProgress} onAdd={addImages} onRemove={removePendingImage} />{imageError && <p role="alert" className="mt-2 text-xs text-red-600">{imageError}</p>}</div>
+      </div>
       <div className="grid gap-3 rounded-xl bg-slate-950 p-4 text-xs text-white sm:grid-cols-3"><p>Customer estimate <strong className="block text-base">{formatCurrency(customerEstimate)}</strong></p><p>Supplier estimate <strong className="block text-base">{formatCurrency(supplierEstimate)}</strong></p><p>Estimated spread <strong className="block text-base">{formatCurrency(customerEstimate - supplierEstimate)}</strong></p></div>
       <FormActions saving={saving} onClose={onClose} submitLabel={initialOrder ? 'Save changes' : 'Save draft order'} />
+      </fieldset>
     </form>
+    {creating === 'customer' && <CustomerFormModal onClose={() => setCreating(null)} onSaved={(party) => { onPartyCreated(party); setForm((current) => ({ ...current, partyId: party.id })); setCreating(null); }} />}
+    {creating === 'supplier' && <SupplierFormModal onClose={() => setCreating(null)} onSaved={(supplier) => { onSupplierCreated(supplier); setForm((current) => ({ ...current, supplierId: supplier.id })); setCreating(null); }} />}
   </Modal>;
 }
 
 
-function OrderFormModal({ parties, suppliers, onClose, onSaved }: { parties: Party[]; suppliers: Supplier[]; onClose: () => void; onSaved: (order: ProductionOrder) => void }) {
+function OrderFormModal({ parties, suppliers, onPartyCreated, onSupplierCreated, onClose, onSaved }: { parties: Party[]; suppliers: Supplier[]; onPartyCreated: (party: Party) => void; onSupplierCreated: (supplier: Supplier) => void; onClose: () => void; onSaved: (order: ProductionOrder) => void }) {
+  const [creating, setCreating] = useState<'customer' | 'supplier' | null>(null);
   const now = new Date();
   const defaultNumber = `PO-${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getTime()).slice(-4)}`;
   const [form, setForm] = useState({ orderNumber: defaultNumber, partyId: parties[0]?.id ?? '', supplierId: '', styleName: '', fabricName: '', fabricGsm: '', color: '', saleRate: '', dueDate: '', notes: '' });
@@ -1118,12 +1260,12 @@ function OrderFormModal({ parties, suppliers, onClose, onSaved }: { parties: Par
     <Modal title="New production order" onClose={onClose} size="lg">
       <form onSubmit={submit} className="space-y-4">
         {error && <FormError message={error} />}
-        {parties.length === 0 && <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">Create a party before adding an order. <Link href="/parties" className="font-bold underline">Go to parties</Link></div>}
+        {parties.length === 0 && <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">Create a customer before adding an order. <button type="button" onClick={() => setCreating('customer')} className="font-bold underline">Add customer</button></div>}
         <FormSection title="Order master" icon={Factory}>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Order number *"><input required className="input-field" value={form.orderNumber} onChange={(e) => setForm({ ...form, orderNumber: e.target.value })} /></Field>
-            <Field label="Party *"><select required className="input-field" value={form.partyId} onChange={(e) => setForm({ ...form, partyId: e.target.value })}><option value="">Select party</option>{parties.map((party) => <option key={party.id} value={party.id}>{party.name}</option>)}</select></Field>
-            <Field label="Primary supplier"><select className="input-field" value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}><option value="">Not assigned</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></Field>
+            <PickerField label="Party *" actionLabel="New customer" onAction={() => setCreating('customer')}><select required aria-label="Party" className="input-field" value={form.partyId} onChange={(e) => setForm({ ...form, partyId: e.target.value })}><option value="">Select party</option>{parties.map((party) => <option key={party.id} value={party.id}>{party.name}{party.group ? ` · ${party.group}` : ""}</option>)}</select></PickerField>
+            <PickerField label="Primary supplier" actionLabel="New supplier" onAction={() => setCreating('supplier')}><select aria-label="Primary supplier" className="input-field" value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}><option value="">Not assigned</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></PickerField>
             <Field label="Style / product *"><input required className="input-field" placeholder="Mens polo T-shirt" value={form.styleName} onChange={(e) => setForm({ ...form, styleName: e.target.value })} /></Field>
             <Field label="Fabric"><input className="input-field" placeholder="Airtex / cotton" value={form.fabricName} onChange={(e) => setForm({ ...form, fabricName: e.target.value })} /></Field>
             <Field label="GSM / finish"><input className="input-field" placeholder="240 GSM bio wash" value={form.fabricGsm} onChange={(e) => setForm({ ...form, fabricGsm: e.target.value })} /></Field>
@@ -1138,12 +1280,14 @@ function OrderFormModal({ parties, suppliers, onClose, onSaved }: { parties: Par
         <Field label="Production notes"><textarea rows={2} className="input-field resize-none" placeholder="Artwork, labels, packing or quality instructions" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
         <FormActions saving={saving} onClose={onClose} submitLabel="Create order" />
       </form>
+      {creating === 'customer' && <CustomerFormModal onClose={() => setCreating(null)} onSaved={(party) => { onPartyCreated(party); setForm((current) => ({ ...current, partyId: party.id })); setCreating(null); }} />}
+      {creating === 'supplier' && <SupplierFormModal onClose={() => setCreating(null)} onSaved={(supplier) => { onSupplierCreated(supplier); setForm((current) => ({ ...current, supplierId: supplier.id })); setCreating(null); }} />}
     </Modal>
   );
 }
 
 function SupplierFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: (supplier: Supplier) => void }) {
-  const [form, setForm] = useState({ name: '', contactName: '', phone: '', email: '', gstin: '', address: '' });
+  const [form, setForm] = useState({ name: '', contactName: '', phone: '', email: '', gstin: '', address: '', notes: '' });
   const [saving, setSaving] = useState(false); const [error, setError] = useState('');
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (saving) return; setSaving(true); setError('');
@@ -1160,7 +1304,49 @@ function SupplierFormModal({ onClose, onSaved }: { onClose: () => void; onSaved:
         <div className="grid gap-3 sm:grid-cols-2"><Field label="Contact person"><input className="input-field" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} /></Field><Field label="Phone"><input type="tel" className="input-field" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field></div>
         <div className="grid gap-3 sm:grid-cols-2"><Field label="Email"><input type="email" className="input-field" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field><Field label="GSTIN"><input maxLength={15} className="input-field uppercase" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} /></Field></div>
         <Field label="Address"><textarea rows={2} className="input-field resize-none" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
+        <Field label="Description (what they supply)"><textarea rows={3} className="input-field resize-none" placeholder="e.g. Supplies fabric, handles stitching for polo T-shirts, specialises in bulk printing…" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
         <FormActions saving={saving} onClose={onClose} submitLabel="Save supplier" />
+      </form>
+    </Modal>
+  );
+}
+
+const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+
+function CustomerFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: (party: Party) => void }) {
+  const [form, setForm] = useState({ name: '', phone: '', email: '', gstin: '', billingAddr: '', notes: '' });
+  const [saving, setSaving] = useState(false); const [error, setError] = useState('');
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (saving) return;
+    const gstin = form.gstin.trim().toUpperCase();
+    if (!form.name.trim()) { setError('Enter the customer name.'); return; }
+    if (gstin && !GSTIN_PATTERN.test(gstin)) { setError('Enter a valid 15-character GSTIN.'); return; }
+    setSaving(true); setError('');
+    try {
+      const phone = form.phone.trim() || undefined;
+      const { data } = await api.post<Party>('/parties', {
+        name: form.name.trim(),
+        phone,
+        whatsappNumber: phone,
+        email: form.email.trim().toLowerCase() || undefined,
+        gstType: gstin ? 'REGISTERED_REGULAR' : 'UNREGISTERED',
+        gstin: gstin || undefined,
+        billingAddr: form.billingAddr.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+      });
+      onSaved(data);
+    } catch (saveError: unknown) { setError(getApiError(saveError, 'Could not add customer.')); } finally { setSaving(false); }
+  }
+  return (
+    <Modal title="Add customer" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3.5">
+        {error && <FormError message={error} />}
+        <Field label="Customer name *"><input required autoFocus className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <div className="grid gap-3 sm:grid-cols-2"><Field label="Phone"><input type="tel" className="input-field" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field><Field label="Email"><input type="email" className="input-field" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field></div>
+        <Field label="GSTIN"><input maxLength={15} className="input-field uppercase" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} /></Field>
+        <Field label="Billing address"><textarea rows={2} className="input-field resize-none" value={form.billingAddr} onChange={(e) => setForm({ ...form, billingAddr: e.target.value })} /></Field>
+        <Field label="Notes"><textarea rows={2} className="input-field resize-none" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
+        <FormActions saving={saving} onClose={onClose} submitLabel="Save customer" />
       </form>
     </Modal>
   );
@@ -1275,6 +1461,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block"><span className="label">{label}</span>{children}</label>;
 }
 
+function PickerField({ label, actionLabel, onAction, children }: { label: string; actionLabel: string; onAction: () => void; children: React.ReactNode }) {
+  return <div><div className="flex items-center justify-between gap-2"><span className="label">{label}</span><button type="button" onClick={onAction} className="mb-1 inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-bold text-blue-600 hover:text-blue-700"><Plus aria-hidden="true" size={12} />{actionLabel}</button></div>{children}</div>;
+}
+
 function NumberField({ label, value, step = '1', onChange }: { label: string; value: string; step?: string; onChange: (value: string) => void }) {
   return <Field label={label}><input type="number" min="0" step={step} required className="input-field" value={value} onChange={(event) => onChange(event.target.value)} /></Field>;
 }
@@ -1289,6 +1479,15 @@ function FormError({ message }: { message: string }) {
 
 function labelize(value: string) {
   return value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+const DEFAULT_DELIVERY_DAYS = 7;
+
+/** Adds whole days to a yyyy-mm-dd value without timezone drift; returns '' for an empty or invalid date. */
+function addDaysToDateInput(value: string, days: number) {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return '';
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
 
 function dateInput(value?: string) {
