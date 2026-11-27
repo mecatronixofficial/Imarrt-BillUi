@@ -1,11 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import DocumentModal from './DocumentModal';
-import { DOCUMENT_CONFIG } from '@/lib/documents';
 import type { BusinessDocumentType } from '@/types';
 
+/** Full-page create screen for one document type. Closing returns to the page it was opened from (fallback: that type's list). */
 export default function DocumentCreatePage({ type }: { type: BusinessDocumentType }) {
-  const router = useRouter();
-  return <DocumentModal type={type} onClose={() => router.push(DOCUMENT_CONFIG[type].registerPath)} />;
+  return <DocumentModal type={type} />;
 }

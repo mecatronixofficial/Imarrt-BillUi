@@ -3,16 +3,18 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowDownLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, CircleDollarSign, FileText, Package, Plus, RefreshCw, TriangleAlert, Wallet } from 'lucide-react';
+import CounterpartyOverview from './CounterpartyOverview';
 import DashboardTrend from './DashboardTrend';
 import StatusBadge from './StatusBadge';
 import { formatCurrency, formatDate, formatQuantity } from '@/lib/format';
 import { multiplyMoney, sumMoney } from '@/lib/billing';
 import { buildDashboardSeries, invoiceBalance } from '@/lib/dashboard';
+import { buildCustomerSummary, buildSupplierSummary } from '@/lib/counterparty-dashboard';
 import { inDateRange, localDate, type buildBusinessReport, type ReportDates } from '@/lib/business-report';
-import type { BusinessDocument, Expense, Invoice, Item, Party } from '@/types';
+import type { BusinessDocument, Expense, Invoice, Item, Party, Supplier } from '@/types';
 
 type Props = {
-  invoices: Invoice[]; documents: BusinessDocument[]; expenses: Expense[]; items: Item[]; parties: Party[];
+  invoices: Invoice[]; documents: BusinessDocument[]; expenses: Expense[]; items: Item[]; parties: Party[]; suppliers: Supplier[];
   report: ReturnType<typeof buildBusinessReport>; dates: ReportDates; range: string; from: string; to: string;
   onRange: (value: string) => void; onFrom: (value: string) => void; onTo: (value: string) => void;
   onRefresh: () => void; lowStockThreshold: number;
@@ -20,8 +22,10 @@ type Props = {
 
 const expenseColors = ['#2348c8', '#f5b700', '#7c9cf0', '#0f1a3a'];
 
-export default function ReferenceHome({ invoices, documents, expenses, items, parties, report, dates, range, from, to, onRange, onFrom, onTo, onRefresh, lowStockThreshold }: Props) {
+export default function ReferenceHome({ invoices, documents, expenses, items, parties, suppliers, report, dates, range, from, to, onRange, onFrom, onTo, onRefresh, lowStockThreshold }: Props) {
   const points = useMemo(() => buildDashboardSeries(invoices, documents, dates), [invoices, documents, dates]);
+  const customerSummary = useMemo(() => buildCustomerSummary(parties, invoices, dates), [parties, invoices, dates]);
+  const supplierSummary = useMemo(() => buildSupplierSummary(suppliers, documents, dates), [suppliers, documents, dates]);
   const active = invoices.filter(invoice => !['DRAFT', 'CANCELLED'].includes(invoice.status));
   const periodInvoices = active.filter(invoice => inDateRange(invoice.issueDate, dates));
   const recent = [...periodInvoices].sort((a, b) => b.issueDate.localeCompare(a.issueDate) || (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, 5);
@@ -43,7 +47,7 @@ export default function ReferenceHome({ invoices, documents, expenses, items, pa
   return (
     <div className="brand-dashboard">
       <header className="brand-dashboard-heading">
-        <div><p className="brand-eyebrow"><span /> YOUR BUSINESS, AT A GLANCE</p><h1>Business overview<span>.</span></h1><p>A clear view of your sales, spending, and what needs attention.</p></div>
+        <div><h1>Business overview<span>.</span></h1></div>
         <div className="brand-dashboard-actions"><button type="button" className="brand-refresh" aria-label="Refresh dashboard" onClick={onRefresh}><RefreshCw size={17} /></button><Link href="/invoices/new" className="brand-primary"><Plus size={17} /> Create invoice</Link></div>
       </header>
 
@@ -54,10 +58,12 @@ export default function ReferenceHome({ invoices, documents, expenses, items, pa
 
       <section className="brand-kpis" aria-label="Business summary">
         <article className="brand-kpi featured"><div><span>Net sales</span><span className="brand-kpi-icon"><ChartNoAxesCombined size={20} /></span></div><strong>{formatCurrency(report.sales)}</strong><p><span className="brand-mini-dot" />{periodInvoices.length} issued invoice{periodInvoices.length === 1 ? '' : 's'} in this period</p><Link href="/invoices" aria-label="View sales invoices"><ArrowUpRight size={19} /></Link></article>
-        <article className="brand-kpi"><div><span>Receivables</span><span className="brand-kpi-icon"><ArrowDownLeft size={20} /></span></div><strong>{formatCurrency(receivable)}</strong><p>Current balance · {parties.filter(party => Number(party.balanceDue) > 0).length} customers</p><Link href="/parties" aria-label="View customer balances"><ArrowUpRight size={19} /></Link></article>
+        <article className="brand-kpi"><div><span>Receivables</span><span className="brand-kpi-icon"><ArrowDownLeft size={20} /></span></div><strong>{formatCurrency(receivable)}</strong><p>Current balance · {parties.filter(party => Number(party.balanceDue) > 0).length} customers</p><Link href="/parties/details" aria-label="View customer balances"><ArrowUpRight size={19} /></Link></article>
         <article className="brand-kpi"><div><span>Supplier payables</span><span className="brand-kpi-icon"><Wallet size={19} /></span></div><strong>{formatCurrency(report.payable)}</strong><p>Outstanding bills in this period</p><Link href="/purchases/bills" aria-label="View supplier bills"><ArrowUpRight size={19} /></Link></article>
         <article className="brand-kpi"><div><span>Operating expenses</span><span className="brand-kpi-icon"><CircleDollarSign size={20} /></span></div><strong>{formatCurrency(sumMoney([report.expenses, report.productionCost]))}</strong><p>General expenses + production costs</p><Link href="/purchases/expenses" aria-label="View expenses"><ArrowUpRight size={19} /></Link></article>
       </section>
+
+      <CounterpartyOverview customers={customerSummary} suppliers={supplierSummary} />
 
       <div className="brand-analytics-grid">
         <DashboardTrend points={points} />

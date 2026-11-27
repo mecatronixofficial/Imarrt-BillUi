@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, LoadingState } from '../ContentState';
 import { toast } from '../ToastProvider';
 import { api, getAllPages, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { usePageState } from '@/lib/navigation';
 
 type Account = { id: string; bankName: string; accountNumber: string };
 type ChequeEvent = { id: string; action: string; createdAt: string; accountId?: string | null };
@@ -36,8 +37,8 @@ export default function ChequeRegister() {
   const [error, setError] = useState('');
   const [canWrite, setCanWrite] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
-  const [status, setStatus] = useState<Status>('ALL');
-  const [search, setSearch] = useState('');
+  const [status, setStatus] = usePageState<Status>('ChequeRegister.status', 'ALL');
+  const [search, setSearch] = usePageState('ChequeRegister.search', '');
   const [depositing, setDepositing] = useState<Cheque | null>(null);
   const [reopening, setReopening] = useState<Cheque | null>(null);
   const [deleting, setDeleting] = useState<Cheque | null>(null);

@@ -55,7 +55,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
-  { href: '/parties', label: 'Parties', icon: Users, children: [{ href: '/parties', label: 'Party Details' }] },
+  { href: '/parties', label: 'Parties', icon: Users, children: [{ href: '/parties/details', label: 'Party Details' }, { href: '/parties/groups', label: 'Party Groups' }] },
   { href: '/items', label: 'Items', icon: Package, children: [{ href: '/items', label: 'Item Details' }, { href: '/inventory', label: 'Godown Management' }, { href: '/inventory/godowns', label: 'Godowns' }, { href: '/inventory/adjustments', label: 'Adjustments & Transfers' }] },
 
   {
@@ -79,6 +79,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Purchase & Expense',
     icon: ShoppingCart,
     children: [
+      { href: '/purchases/suppliers', label: 'Suppliers' },
       { href: '/purchases/bills', label: 'Purchase Bills' },
       { href: '/purchases/payment-out', label: 'Payment-Out' },
       { href: '/purchases/expenses', label: 'Expenses' },
@@ -144,6 +145,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
     setBusinessMenuOpen(false);
     setOpenGroups((current) => ({
       ...current,
+      '/parties': current['/parties'] || pathname?.startsWith('/parties') || false,
       '/sales': current['/sales'] || pathname?.startsWith('/sales') || pathname?.startsWith('/invoices') || false,
       '/purchases': current['/purchases'] || pathname?.startsWith('/purchases') || false,
       '/settings': current['/settings'] || pathname?.startsWith('/settings') || false,
@@ -435,6 +437,11 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
                         router.push(href);
                         return;
                       }
+                      if (href === '/parties' && pathname !== href) {
+                        setGroupOpen(true);
+                        router.push(href);
+                        return;
+                      }
                       if (groupOpen) {
                         setGroupOpen(false);
                       } else {
@@ -458,7 +465,7 @@ export default function Sidebar({ open = false, onClose, onHide, desktopHidden =
                     <div className="overflow-hidden">
                       <div className="ml-5 mt-1 space-y-0.5 border-l border-white/10 pb-1 pl-3">
                         {children.map((child) => {
-                          const childActive = pathname === child.href || (child.href !== href && pathname?.startsWith(`${child.href}/`));
+                          const childActive = pathname === child.href || (child.href !== href && pathname?.startsWith(`${child.href}/`)) || (child.href === '/parties/details' && /^\/parties\/(?!groups(?:\/|$))[^/]+/.test(pathname ?? ''));
                           return <Link key={child.href} href={child.href} aria-current={childActive ? 'page' : undefined} className={clsx('flex min-h-8 items-center rounded-md px-2 text-[11px] font-semibold transition', childActive ? 'reference-nav-active text-white' : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200')}><span className={clsx('mr-2 h-1.5 w-1.5 shrink-0 rounded-full', childActive ? 'bg-blue-300' : 'bg-slate-600')} />{child.label}</Link>;
                         })}
                       </div>

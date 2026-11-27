@@ -1,25 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useBackNavigation } from '@/lib/navigation';
 import InvoiceForm from './InvoiceForm';
 import { useEmbeddedForm } from '@/components/EmbeddedFormContext';
 
 export default function InvoiceModal({ onClose }: { onClose?: () => void }) {
-  const router = useRouter();
   const busyRef = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   const { embedded } = useEmbeddedForm();
 
+  // Closing goes back to wherever the editor was opened from (fallback: the invoice list), asking first
+  // when the form has unsaved changes. An embedding page's own close handler is guarded the same way.
+  const { goBack, confirmLeave } = useBackNavigation('/invoices');
   const handleClose = useCallback(() => {
-    if (onCloseRef.current) {
-      onCloseRef.current();
-    } else {
-      router.push('/invoices');
-    }
-  }, [router]);
+    const parentClose = onCloseRef.current;
+    if (parentClose) void confirmLeave().then((leave) => { if (leave) parentClose(); });
+    else void goBack();
+  }, [confirmLeave, goBack]);
 
   useEffect(() => {
     if (embedded) return;

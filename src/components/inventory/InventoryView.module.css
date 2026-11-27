@@ -1,0 +1,110 @@
+.inventoryPage .metrics { grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(0, 1fr)); }
+.inventoryPage .valueMetric strong { font-size: clamp(20px, 1.9vw, 27px); overflow-wrap: anywhere; line-height: 1.2; }
+.inventoryPage .valueMetric > div { min-width: 0; }
+.inventoryPage .valueMetric > small { white-space: nowrap; }
+.stockPanel { margin-bottom: 23px; }
+.stockToolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 23px 21px; }
+.filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.filters button { min-height: 34px; padding: 7px 12px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #8a95a8; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; }
+.filters button[aria-pressed='true'] { background: #edf2ff; border-color: #dde6ff; color: #284ec9; }
+.tableScroll { scrollbar-width: thin; scrollbar-color: #d1daed #f8faff; }
+.scrollHint { display: none; }
+.tableScroll:focus-visible { outline: 2px solid #96b2ff; outline-offset: -2px; }
+.inventoryPage .stockPanel .stockTable { min-width: 780px; }
+.inventoryPage .stockPanel .stockTable th { padding: 14px 17px; }
+.inventoryPage .stockPanel .stockTable th:first-child { width: 25%; padding-left: 23px; }
+.inventoryPage .stockPanel .stockTable th:nth-child(2) { width: 16%; }
+.inventoryPage .stockPanel .stockTable th:nth-child(3) { width: 14%; }
+.inventoryPage .stockPanel .stockTable th:last-child { width: 18%; padding-right: 23px; text-align: right; }
+.inventoryPage .stockPanel .stockTable td { padding: 19px 17px; }
+.inventoryPage .stockPanel .stockTable td:first-child { padding-left: 23px; }
+.inventoryPage .stockPanel .stockTable td:last-child { padding-right: 23px; text-align: right; }
+.itemLink { display: flex; align-items: center; gap: 11px; color: #2d3d5b; min-width: 0; transition: color 160ms ease; }
+.itemLink > div { min-width: 0; }
+.itemLink strong { display: block; font-size: 12px; line-height: 1.6; font-weight: 650; overflow-wrap: anywhere; }
+.itemLink small { display: block; margin-top: 3px; font-size: 10px; color: #9aa3b4; }
+.itemArrow { flex-shrink: 0; margin-left: auto; opacity: 0; transform: translate(-3px, 3px); transition: opacity 160ms ease, transform 160ms ease; color: #5479ce; }
+.itemLink:focus-visible .itemArrow { opacity: 1; transform: none; }
+.totalQuantity { color: #384a6b; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.zeroQuantity { color: #b6656d; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.unit { color: #9aa3b4; font-size: 10px; white-space: nowrap; }
+.unallocated, .allocated { display: inline-flex; align-items: center; justify-content: center; min-width: 49px; padding: 5px 9px; border-radius: 6px; background: #fff6df; color: #a17c27; font-size: 11px; font-weight: 600; }
+.allocated { background: #f3f5f9; color: #99a3b6; }
+.godownChips { display: flex; flex-wrap: wrap; gap: 6px; }
+.godownChips > span { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 5px 7px; border: 1px solid #e7edf7; border-radius: 5px; background: #f8faff; color: #7e8eab; font-size: 10px; line-height: 1.5; }
+.godownChips svg { flex-shrink: 0; }
+.godownChips > span > span { overflow-wrap: anywhere; }
+.godownChips strong { flex-shrink: 0; padding-left: 5px; border-left: 1px solid #dfe6f3; color: #58709e; font-weight: 600; }
+.godownChips .noLocation { padding: 0; border: 0; background: transparent; color: #a0aabc; }
+.money { color: #3d4e6e; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.movementPanel { margin-top: 23px; }
+.activityIcon { display: grid; place-items: center; width: 37px; height: 37px; flex-shrink: 0; border: 1px solid #e5ebf8; border-radius: 10px; color: #7892c1; background: #f7f9ff; }
+.inventoryPage .movementPanel .movementTable { min-width: 660px; }
+.inventoryPage .movementPanel .movementTable th:first-child { width: 17%; }
+.inventoryPage .movementPanel .movementTable th:nth-child(2) { width: 27%; }
+.inventoryPage .movementPanel .movementTable th:nth-child(3) { width: 25%; }
+.inventoryPage .movementPanel .movementTable th:last-child { width: 16%; text-align: right; }
+.inventoryPage .movementPanel .movementTable td:last-child { text-align: right; }
+.date { color: #8c97ab; font-size: 11px; white-space: nowrap; }
+.movementItem { color: #465978; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.movementLocation { display: inline-flex; align-items: center; gap: 5px; color: #8b98ad; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.movementLocation svg { flex-shrink: 0; color: #a0acc0; }
+.operationBadge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid #e0e7fb; border-radius: 6px; background: #f0f4ff; color: #6f88bf; font-size: 9px; font-weight: 600; white-space: nowrap; }
+.inward { color: #29977d; background: #edfaf5; border-color: #dcf0e8; }
+.outward { color: #c1787d; background: #fff3f3; border-color: #f4e3e5; }
+.emptyMovements { min-height: 260px; }
+.operationLayout { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(255px, 1fr); align-items: start; gap: 23px; }
+.operationForm { padding: 24px; }
+.operationFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; gap: 23px 22px; padding: 0; margin: 0; border: 0; }
+.operationFields label { display: block; min-width: 0; font-size: 12px; font-weight: 600; color: #44526d; }
+.operationFields :is(select, input, textarea) { width: 100%; min-width: 0; min-height: 44px; padding: 11px 12px; border: 1px solid #dce2eb; border-radius: 8px; background: #fff; color: #52627f; font-size: 12px; line-height: 1.6; outline: none; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.operationFields :is(select, textarea), .quantityField { margin-top: 9px; }
+.operationFields :is(input, textarea)::placeholder { color: #a0aabc; }
+.operationFields :is(select, input, textarea):hover:not(:disabled) { border-color: #a6b5d2; }
+.operationFields :is(select, input, textarea):focus { border-color: #597ee0; box-shadow: 0 0 0 3px #284ec911; }
+.operationFields :is(select, input, textarea):disabled { background: #f7f8fb; cursor: not-allowed; }
+.operationFields textarea { resize: vertical; min-height: 93px; }
+.quantityField { display: flex; align-items: center; gap: 8px; position: relative; }
+.quantityField > span { position: absolute; right: 12px; pointer-events: none; color: #9ca7bb; font-size: 11px; }
+.quantityField input { padding-right: 66px; }
+.notesField { grid-column: 1 / -1; }
+.optional { padding-left: 5px; color: #a3adbd; font-size: 10px; font-weight: 400; }
+.operationFooter { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; padding-top: 21px; border-top: 1px solid #edf0f5; }
+.operationFooter > span { display: flex; align-items: center; gap: 6px; color: #99a3b4; font-size: 10px; line-height: 1.6; }
+.operationFooter > span svg { flex-shrink: 0; }
+.operationGuide { padding: 25px; }
+.operationGuide h2 { margin: 17px 0 9px; overflow-wrap: anywhere; }
+.operationGuide > p { margin: 0; color: #91a0b6; font-size: 12px; line-height: 1.8; }
+.operationGuide dl { display: grid; gap: 18px; margin: 20px 0; }
+.operationGuide dt { margin-bottom: 6px; color: #97a2b4; font-size: 11px; }
+.operationGuide dd { margin: 0; color: #465b7b; font-size: 21px; font-weight: 650; }
+.operationGuide dd small { color: #a0aabc; font-size: 11px; font-weight: 400; }
+.guideNote { display: flex; align-items: flex-start; gap: 9px; margin: 21px 0; padding: 14px; border: 1px solid #e7edf9; border-radius: 8px; background: #f6f9ff; color: #899abb; }
+.guideNote svg { flex-shrink: 0; margin-top: 2px; }
+.guideNote p { margin: 0; font-size: 11px; line-height: 1.8; }
+.textLink { display: inline-flex; align-items: center; gap: 8px; color: #4469bd; font-size: 11px; font-weight: 600; transition: gap 160ms ease, color 160ms ease; }
+@media (hover: hover) { .filters button:hover { background: #f4f7ff; border-color: #e0e7f7; color: #4062ae; } .itemLink:hover { color: #284ec9; } .itemLink:hover .itemArrow { opacity: 1; transform: none; } .textLink:hover { gap: 12px; color: #284ec9; } }
+@media (max-width: 1200px) { .stockToolbar { flex-wrap: wrap; gap: 12px; } .operationLayout { grid-template-columns: minmax(0, 1fr); gap: 18px; } .operationGuide dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .scrollHint { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0 16px 12px; color: #8c9bb5; font-size: 10px; }
+  .inventoryPage .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventoryPage .valueMetric { grid-column: 1 / -1; flex-direction: row; align-items: center; padding: 17px; gap: 13px; }
+  .inventoryPage .valueMetric > div > span { min-height: 0; }
+  .inventoryPage .valueMetric strong { font-size: 25px; }
+  .inventoryPage .metrics > div:not(:first-child) { flex-direction: row; align-items: center; gap: 12px; }
+  .inventoryPage .metrics > div:not(:first-child) > div > span { min-height: 0; }
+  .stockToolbar { padding: 0 16px 18px; }
+  .filters { width: 100%; gap: 4px; }
+  .filters button { flex: 1; padding: 7px; font-size: 10px; }
+  .inventoryPage .stockPanel .stockTable th, .inventoryPage .stockPanel .stockTable td { padding: 16px 12px; }
+  .inventoryPage .stockPanel .stockTable th:first-child, .inventoryPage .stockPanel .stockTable td:first-child { width: 25%; padding-left: 16px; }
+  .inventoryPage .stockPanel .stockTable th:last-child, .inventoryPage .stockPanel .stockTable td:last-child { padding-right: 16px; }
+  .inventoryPage .movementPanel .movementTable th:first-child { width: 17%; }
+  .inventoryPage .movementPanel .movementTable th:last-child { width: 16%; }
+  .inventoryPage .stockPanel footer > span:last-child { display: flex; }
+  .operationForm, .operationGuide { padding: 20px 17px; }
+  .operationFields { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .operationFooter { flex-direction: column; align-items: stretch; }
+  .operationFooter > span { justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) { .inventoryPage *, .inventoryPage *::before, .inventoryPage *::after { animation: none !important; transition: none !important; } }

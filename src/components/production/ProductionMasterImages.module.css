@@ -1,0 +1,24 @@
+.panel { min-width: 0; padding: 14px; border: 1px solid #dce4ef; border-radius: 9px; background: #fff; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.heading h3 { display: flex; align-items: center; gap: 7px; color: #34557f; font-size: 12px; font-weight: 700; }
+.heading > span { padding: 4px 7px; border: 1px solid #e4eaf4; border-radius: 4px; color: #8898af; background: #f6f9fd; font-size: 10px; }
+.help { margin-top: 7px; font-size: 11px; color: #8b9ab0; line-height: 1.7; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.grid article { min-width: 0; overflow: hidden; border: 1px solid #dce4ef; border-radius: 6px; }
+.preview { position: relative; display: grid; place-items: center; height: 105px; color: #aab8cc; background: #f5f8fc; border-bottom: 1px solid #e7edf4; }
+.preview img { object-fit: contain; }
+.caption { padding: 8px; }
+.caption strong { color: #3c659d; font-size: 11px; font-weight: 700; }
+.caption p { margin-top: 3px; color: #8392a8; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caption button, .caption small { display: flex; align-items: center; gap: 4px; margin-top: 7px; font-size: 10px; }
+.caption button { color: #b66868; }
+.caption small { color: #6a9a7f; }
+.add { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-height: 170px; padding: 10px; border: 1px dashed #bccfe6; border-radius: 6px; color: #7898bf; background: #f8fbff; cursor: pointer; text-align: center; }
+.add strong { color: #5176a6; font-size: 11px; font-weight: 600; }
+.add span { font-size: 9px; color: #a0b0c5; }
+.add input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.add:focus-within { outline: 2px solid #739bcf; outline-offset: 2px; }
+.add[aria-disabled=true] { opacity: .5; cursor: default; }
+.progress { margin-top: 10px; font-size: 11px; color: #507ba9; }
+.error { margin-top: 10px; font-size: 11px; color: #b56e6e; }
+@media (max-width: 420px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -10,6 +10,8 @@ type Group = 'Preferences' | 'Workspace' | 'Access';
 type SettingsEntry = { href: string; icon: LucideIcon; title: string; description: string; group: Group };
 
 const SETTINGS: SettingsEntry[] = [
+  { href: '/settings/passcode', icon: KeyRound, title: 'Add & edit passcode', description: 'Require a passcode for saving additions, edits, and deletions across the project.', group: 'Access' },
+  { href: '/parties/groups', icon: Users, title: 'Party groups', description: 'Create groups, assign parties, and manage group membership.', group: 'Workspace' },
   { href: '/settings/general', icon: SlidersHorizontal, title: 'General', description: 'Business behaviour, number precision, date format, and language.', group: 'Preferences' },
   { href: '/settings/transaction', icon: Repeat, title: 'Transactions', description: 'Invoice behaviour, stock rules, numbering, and timestamps.', group: 'Preferences' },
   { href: '/settings/print', icon: Printer, title: 'Print & thermal', description: 'Invoice layouts, company header, columns, totals, QR, and receipts.', group: 'Preferences' },
@@ -18,7 +20,7 @@ const SETTINGS: SettingsEntry[] = [
   { href: '/settings/party', icon: Users, title: 'Party defaults', description: 'Opening balances, categories, reminders, credit terms, and loyalty.', group: 'Preferences' },
   { href: '/settings/item', icon: Package, title: 'Item & inventory', description: 'Categories, batches, serial numbers, units, pricing, and stock alerts.', group: 'Preferences' },
   { href: '/profile', icon: Building2, title: 'Business profile', description: 'Legal name, GST registration, contact details, branches, and active company.', group: 'Workspace' },
-  { href: '/parties', icon: MessageCircle, title: 'Invoice delivery', description: 'Configure email, WhatsApp consent, and automatic delivery per party.', group: 'Workspace' },
+  { href: '/parties/details', icon: MessageCircle, title: 'Invoice delivery', description: 'Configure email, WhatsApp consent, and automatic delivery per party.', group: 'Workspace' },
   { href: '/team', icon: UserCog, title: 'Team & permissions', description: 'Invite members and control billing access by role.', group: 'Access' },
   { href: '/security', icon: ShieldCheck, title: 'Security & MFA', description: 'Authenticator setup, recovery codes, sessions, and account protection.', group: 'Access' },
 ];

@@ -1,4 +1,4 @@
-﻿import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -34,6 +34,7 @@ function responseFor(endpoint, url) {
   if(endpoint.endsWith('/members'))return [user];
   if(endpoint==='/branches')return [branch];
   if(endpoint==='/workspace-branches')return [{id:ids.group,name:'Test workspace',code:'TEST',isActive:true,createdAt:date,businesses:[business]}];
+  if(endpoint==='/party-groups')return [];
   if(endpoint==='/parties')return [party];
   if(endpoint==='/parties/next-code')return {code:'P-0002'};
   if(endpoint===`/parties/${ids.party}`)return party;
@@ -83,7 +84,7 @@ try {
  page.on('response',(response)=>{if(response.status()>=400)errors.push({kind:'http',status:response.status(),url:response.url()});});
  return page;
  }
- const routes=['/dashboard','/parties',`/parties/${ids.party}`,'/items',`/items/${ids.item}`,'/invoices',`/invoices/${ids.invoice}`,'/invoices/new','/documents',`/documents/${ids.quote}`,'/sales','/sales/quotations','/sales/proforma','/sales/orders','/sales/orders/new','/sales/delivery-challans','/sales/returns','/sales/payment-in','/purchases','/purchases/bills','/purchases/bills/new','/purchases/orders','/purchases/returns','/purchases/returns/new','/purchases/payment-out','/purchases/expenses','/inventory','/inventory/godowns','/inventory/adjustments','/cash-banks','/reports','/settings','/settings/general','/settings/party','/settings/item','/settings/transaction','/settings/taxes-gst','/settings/transaction-message','/settings/print','/team','/security','/businesses'];
+ const routes=['/dashboard','/parties','/parties/details',`/parties/${ids.party}`,'/items',`/items/${ids.item}`,'/invoices',`/invoices/${ids.invoice}`,'/invoices/new','/documents',`/documents/${ids.quote}`,'/sales','/sales/quotations','/sales/proforma','/sales/orders','/sales/orders/new','/sales/delivery-challans','/sales/returns','/sales/payment-in','/purchases','/purchases/bills','/purchases/bills/new','/purchases/orders','/purchases/returns','/purchases/returns/new','/purchases/payment-out','/purchases/expenses','/inventory','/inventory/godowns','/inventory/adjustments','/cash-banks','/reports','/settings','/settings/general','/settings/party','/settings/item','/settings/transaction','/settings/taxes-gst','/settings/transaction-message','/settings/print','/team','/security','/businesses'];
  for(const route of routes){const page=await makePage({width:1440,height:1000});const response=await page.goto(origin+route,{waitUntil:'networkidle0',timeout:30000});assert.ok(response && response.status()<400,`Broken page: ${route}`);const text=await page.evaluate(()=>document.body.innerText);assert.ok(!text.includes('Application error:'),route);checks.push({route,viewport:'desktop',passed:true});await page.close();if(checks.length%5===0)console.log(`Rendered ${checks.length} desktop routes`);}
  for(const viewport of [{name:'tablet',width:768,height:1024},{name:'mobile',width:390,height:844}]){
   for(const route of ['/dashboard','/invoices/new','/purchases/bills/new','/parties','/items','/inventory','/inventory/adjustments','/reports','/cash-banks']){

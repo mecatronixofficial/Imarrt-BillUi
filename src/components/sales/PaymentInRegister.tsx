@@ -20,11 +20,13 @@ import { invoiceOutstanding } from '@/lib/outstanding';
 import { api, getAllPages, getApiError, getCurrentUser } from "@/lib/api";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import type { Invoice, PaymentInRecord } from "@/types";
+import { usePageState } from '@/lib/navigation';
 
 export default function PaymentInRegister() {
   const [rows, setRows] = useState<PaymentInRecord[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = usePageState('PaymentInRegister.query', "");
+  const [customer, setCustomer] = usePageState('PaymentInRegister.customer', "ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
@@ -96,16 +98,20 @@ export default function PaymentInRegister() {
     void load();
   }, [load]);
 
+  const customerList = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of rows) { const n = r.invoice.party.name; map.set(n, (map.get(n) ?? 0) + 1); }
+    return [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows]);
+
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return term
-      ? rows.filter(({ invoice, method, reference }) =>
-        [invoice.invoiceNumber, invoice.party.name, method, reference].some(
-          (value) => value?.toLowerCase().includes(term),
-        ),
-      )
-      : rows;
-  }, [query, rows]);
+    return rows.filter(({ invoice, method, reference }) => {
+      const matchQuery = !term || [invoice.invoiceNumber, invoice.party.name, method, reference].some((v) => v?.toLowerCase().includes(term));
+      const matchCustomer = customer === "ALL" || invoice.party.name === customer;
+      return matchQuery && matchCustomer;
+    });
+  }, [query, rows, customer]);
   const total = rows.reduce((sum, row) => sum + Number(row.amount), 0);
   const methods = new Set(rows.map(({ method }) => method)).size;
 
@@ -125,142 +131,80 @@ export default function PaymentInRegister() {
           </button>
         }
       />
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-3">
         <Metric label="Receipts" value={rows.length.toLocaleString("en-IN")} />
-        <Metric
-          label="Payment methods"
-          value={methods.toLocaleString("en-IN")}
-        />
-        <Metric label="Total received" value={formatCurrency(total)} wide />
+        <Metric label="Payment methods" value={methods.toLocaleString("en-IN")} />
+        <Metric label="Total received" value={formatCurrency(total)} />
       </div>
       <section className="card reference-payment-register overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">
-              Payment In register
-            </h2>
-
-            <p className="mt-0.5 text-[10px] text-slate-400">
-              Company and branch-specific customer receipts
-            </p>
-          </div>
-
-          <div className="relative w-full sm:w-80">
-            {!query && (
-              <Search
-                aria-hidden="true"
-                size={15}
-                className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-400"
-              />
-            )}
-
-            <input
-              type="text"
-              aria-label="Search payment in"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Invoice, party, method, reference..."
-              className={`input-field w-full pr-10 ${query ? "!pl-4" : "!pl-12"
-                }`}
-            />
-
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X aria-hidden="true" size={14} />
+        <div style={{display:'flex',gap:0,minHeight:400}}>
+          {/* Customer sidebar */}
+          <div style={{width:200,flexShrink:0,borderRight:'1px solid #e9eaf0',display:'flex',flexDirection:'column',background:'#f8fafc'}}>
+            <div style={{padding:'10px 12px',borderBottom:'1px solid #e9eaf0',fontSize:'11px',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#94a3b8'}}>Customers</div>
+            <div style={{overflowY:'auto',flex:1}}>
+              <button type="button" onClick={()=>setCustomer('ALL')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',width:'100%',padding:'9px 12px',fontSize:'12px',fontWeight:customer==='ALL'?700:500,background:customer==='ALL'?'#1d4ed8':'transparent',color:customer==='ALL'?'#fff':'#374151',borderBottom:'1px solid #f1f5f9',textAlign:'left',cursor:'pointer',transition:'background .12s'}}>
+                <span>All</span><span style={{fontSize:'11px',opacity:.8,background:customer==='ALL'?'rgba(255,255,255,.2)':'#e2e8f0',color:customer==='ALL'?'#fff':'#64748b',borderRadius:10,padding:'1px 6px'}}>{rows.length}</span>
               </button>
+              {customerList.map(c=><button key={c.name} type="button" onClick={()=>setCustomer(c.name===customer?'ALL':c.name)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',width:'100%',padding:'9px 12px',fontSize:'12px',fontWeight:customer===c.name?700:400,background:customer===c.name?'#1d4ed8':'transparent',color:customer===c.name?'#fff':'#374151',borderBottom:'1px solid #f1f5f9',textAlign:'left',cursor:'pointer',transition:'background .12s'}} title={c.name}>
+                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,marginRight:6}}>{c.name}</span>
+                <span style={{fontSize:'11px',flexShrink:0,background:customer===c.name?'rgba(255,255,255,.2)':'#e2e8f0',color:customer===c.name?'#fff':'#64748b',borderRadius:10,padding:'1px 6px'}}>{c.count}</span>
+              </button>)}
+            </div>
+          </div>
+          {/* Right: header + table */}
+          <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column'}}>
+            <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-sm font-bold text-slate-900">
+                Payment In register{customer!=='ALL'&&<span style={{marginLeft:8,fontSize:'12px',fontWeight:500,color:'#1d4ed8'}}>· {customer}</span>}
+              </h2>
+              <div className="relative w-full sm:w-80">
+                {!query&&<Search aria-hidden="true" size={15} className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-slate-400"/>}
+                <input type="text" aria-label="Search payment in" value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Invoice, party, method, reference..." className={`input-field w-full pr-10 ${query?"!pl-4":"!pl-12"}`}/>
+                {query&&<button type="button" onClick={()=>setQuery("")} aria-label="Clear search" className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"><X aria-hidden="true" size={14}/></button>}
+              </div>
+            </div>
+            {loading?<LoadingState label="Loading payments..."/>:error?<ErrorState message={error} onRetry={load}/>:filtered.length===0?<EmptyState icon={CircleDollarSign} title="No payments received" description={query?"Try a different search.":"Record a customer payment to begin this register."}/>:(
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px] text-sm">
+                  <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="px-5 py-3">Invoice</th>
+                      <th className="px-5 py-3">Party</th>
+                      <th className="px-5 py-3">Method</th>
+                      <th className="px-5 py-3">Reference</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3 text-right">Amount</th>
+                      <th className="px-3 py-3"><span className="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filtered.map((row)=>{
+                      const paid=invoiceOutstanding(row.invoice)===0;
+                      return <tr key={row.id} className="hover:bg-slate-50">
+                        <td className="px-5 py-3.5"><Link href={`/invoices/${row.invoice.id}`} className="font-bold text-blue-700 hover:underline">{row.invoice.invoiceNumber}</Link></td>
+                        <td className="px-5 py-3.5 font-semibold text-slate-700">{row.invoice.party.name}</td>
+                        <td className="px-5 py-3.5 capitalize text-slate-600">{row.method.replaceAll("_"," ")}</td>
+                        <td className="px-5 py-3.5 text-slate-500">{row.reference||"—"}</td>
+                        <td className="px-5 py-3.5"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${paid?"bg-emerald-50 text-emerald-700":"bg-amber-50 text-amber-700"}`}>{paid?"Paid":"Partially paid"}</span></td>
+                        <td className="px-5 py-3.5 text-right font-bold text-emerald-700">{formatCurrency(row.amount)}</td>
+                        <td className="px-3 py-3.5 text-right">
+                          <RowActions label={`Actions for payment on ${row.invoice.invoiceNumber}`} actions={[
+                            {label:"View invoice",icon:"view",href:`/invoices/${row.invoice.id}`},
+                            {label:"Edit payment",icon:"edit",onClick:()=>setEditing(row)},
+                            {label:"Print invoice",icon:"print",onClick:()=>void printInvoice(row.invoice.id)},
+                            {label:"Share receipt on WhatsApp",icon:"whatsapp",href:whatsappLink(row.invoice.party.phone,receiptText(row)),external:true},
+                            !!row.invoice.party.email&&{label:"Email receipt",icon:"email",href:`mailto:${encodeURIComponent(row.invoice.party.email??"")}?subject=${encodeURIComponent(`Payment received · ${row.invoice.invoiceNumber}`)}&body=${encodeURIComponent(receiptText(row))}`,external:true},
+                            canDelete&&{label:"Delete",icon:"delete",danger:true,onClick:()=>setDeleting(row)},
+                          ]}/>
+                        </td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
-        {loading ? (
-          <LoadingState label="Loading payments..." />
-        ) : error ? (
-          <ErrorState message={error} onRetry={load} />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={CircleDollarSign}
-            title="No payments received"
-            description={
-              query
-                ? "Try a different search."
-                : "Record a customer payment to begin this register."
-            }
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="px-5 py-3">Paid date and time</th>
-                  <th className="px-5 py-3">Invoice</th>
-                  <th className="px-5 py-3">Party</th>
-                  <th className="px-5 py-3">Method</th>
-                  <th className="px-5 py-3">Reference</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3 text-right">Amount</th>
-                  <th className="px-3 py-3"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((row) => {
-                  const paid =
-                    invoiceOutstanding(row.invoice) === 0;
-                  return (
-                    <tr key={row.id} className="hover:bg-slate-50">
-                      <td className="px-5 py-3.5 text-slate-500">
-                        {formatDateTime(row.paidAt)}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <Link
-                          href={`/invoices/${row.invoice.id}`}
-                          className="font-bold text-blue-700 hover:underline"
-                        >
-                          {row.invoice.invoiceNumber}
-                        </Link>
-                      </td>
-                      <td className="px-5 py-3.5 font-semibold text-slate-700">
-                        {row.invoice.party.name}
-                      </td>
-                      <td className="px-5 py-3.5 capitalize text-slate-600">
-                        {row.method.replaceAll("_", " ")}
-                      </td>
-                      <td className="px-5 py-3.5 text-slate-500">
-                        {row.reference || "—"}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span
-                          className={`rounded-full px-2 py-1 text-[10px] font-bold ${paid ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
-                        >
-                          {paid ? "Paid" : "Partially paid"}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-right font-bold text-emerald-700">
-                        {formatCurrency(row.amount)}
-                      </td>
-                      <td className="px-3 py-3.5 text-right">
-                        <RowActions
-                          label={`Actions for payment on ${row.invoice.invoiceNumber}`}
-                          actions={[
-                            { label: "View invoice", icon: "view", href: `/invoices/${row.invoice.id}` },
-                            { label: "Edit payment", icon: "edit", onClick: () => setEditing(row) },
-                            { label: "Print invoice", icon: "print", onClick: () => void printInvoice(row.invoice.id) },
-                            { label: "Share receipt on WhatsApp", icon: "whatsapp", href: whatsappLink(row.invoice.party.phone, receiptText(row)), external: true },
-                            !!row.invoice.party.email && { label: "Email receipt", icon: "email", href: `mailto:${encodeURIComponent(row.invoice.party.email ?? "")}?subject=${encodeURIComponent(`Payment received · ${row.invoice.invoiceNumber}`)}&body=${encodeURIComponent(receiptText(row))}`, external: true },
-                            canDelete && { label: "Delete", icon: "delete", danger: true, onClick: () => setDeleting(row) },
-                          ]}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
       </section>
       {open && (
         <PaymentInModal
@@ -378,33 +322,60 @@ export function EditPaymentModal({ payment, onClose, onSaved }: { payment: Payme
 
 function PaymentInModal({ invoices, onClose, onSaved }: { invoices: Invoice[]; onClose: () => void; onSaved: () => void }) {
   const [invoiceId, setInvoiceId] = useState('');
+  const [partyId, setPartyId] = useState('');
   const [saving, setSaving] = useState(false);
-  const selected = invoices.find(({ id }) => id === invoiceId);
+
+  const parties = useMemo(() => {
+    const seen = new Set<string>();
+    const result: { id: string; name: string }[] = [];
+    for (const inv of invoices) {
+      const key = inv.party.id;
+      if (!seen.has(key)) { seen.add(key); result.push({ id: key, name: inv.party.name }); }
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [invoices]);
+
+  const filteredInvoices = partyId ? invoices.filter((inv) => inv.party.id === partyId) : invoices;
+  const selected = filteredInvoices.find(({ id }) => id === invoiceId);
+
   return <Modal title="Payment-In" onClose={() => { if (!saving) onClose(); }} size="lg">
     <div className="space-y-4">
-      <label className="block"><span className="label">Sale invoice *</span>
-        <select aria-label="Sale invoice" disabled={saving} className="input-field" value={invoiceId} onChange={(event) => setInvoiceId(event.target.value)}>
-          <option value="">Select unpaid invoice</option>
-          {invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoiceNumber} · {invoice.party.name} · Due {formatCurrency(invoiceOutstanding(invoice))}</option>)}
+      <div className="-mx-5 -mt-5 mb-1 flex items-center gap-3 border-b border-emerald-100 bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-4">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20">
+          <CircleDollarSign size={22} className="text-white" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-white">Record Payment Received</p>
+          <p className="text-[11px] text-emerald-100">Select customer and invoice to record payment</p>
+        </div>
+      </div>
+      <label className="block">
+        <span className="label">Select Customer</span>
+        <select className="input-field" value={partyId} onChange={(e) => { setPartyId(e.target.value); setInvoiceId(''); }}>
+          <option value="">All customers</option>
+          {parties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </label>
+      <label className="block">
+        <span className="label">Sale invoice *</span>
+        <select aria-label="Sale invoice" disabled={saving} className="input-field" value={invoiceId} onChange={(event) => setInvoiceId(event.target.value)}>
+          <option value="">{partyId ? 'Select invoice' : 'Select unpaid invoice'}</option>
+          {filteredInvoices.map((invoice) => (
+            <option key={invoice.id} value={invoice.id}>{invoice.invoiceNumber} · {invoice.party.name} · Due {formatCurrency(invoiceOutstanding(invoice))}</option>
+          ))}
+        </select>
+        {partyId && !filteredInvoices.length && <p className="mt-1 text-xs text-slate-500">No outstanding invoices for this customer.</p>}
+      </label>
       {!invoices.length && <p className="text-sm text-slate-500">No outstanding invoices to receive payment against.</p>}
+      {partyId && !filteredInvoices.length && <p className="text-sm text-slate-500">No outstanding invoices for this customer.</p>}
       {selected && <InvoicePaymentForm key={selected.id} invoice={selected} onSavingChange={setSaving} onSaved={onSaved} />}
     </div>
   </Modal>;
 }
 
-function Metric({
-  label,
-  value,
-  wide = false,
-}: {
-  label: string;
-  value: string;
-  wide?: boolean;
-}) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`card p-4 ${wide ? "col-span-2 lg:col-span-1" : ""}`}>
+    <div className="card p-4">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
         {label}
       </p>

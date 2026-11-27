@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowDown, ArrowUp, Eye, FileSpreadsheet, Printer, Search, Share2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowDown, ArrowUp, Eye, FileSpreadsheet, FileText, Loader2, Search, Share2 } from 'lucide-react';
 import RowActions, { type RowAction } from '../RowActions';
 import { EmptyState, ErrorState, LoadingState } from '../ContentState';
 import { toast } from '../ToastProvider';
@@ -13,6 +14,8 @@ import { sumMoney } from '@/lib/billing';
 import { downloadCsv } from '@/lib/export';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Business } from '@/types';
+import styles from './TransactionReport.module.css';
+import { usePageState } from '@/lib/navigation';
 
 /** One row of GET /reports/transactions. */
 type ReportRow = {
@@ -89,10 +92,18 @@ function statusOf(row: ReportRow, today = localDate()): { label: string; tone: '
 }
 const TONE = { paid: 'text-emerald-600', open: 'text-amber-600', late: 'text-rose-600', muted: 'text-slate-400' };
 
+function invoiceDetailHref(row: ReportRow) {
+  if (!['SALE', 'PURCHASE'].includes(row.kind) || !row.firmId || row.firmId === 'ALL') return row.href;
+  const url = new URL(row.href, window.location.origin);
+  url.searchParams.set('companyId', row.firmId);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 /** All Transactions, Sale, Purchase and Day Book reports: one server-built list, filtered like Vyapar. */
 export default function TransactionReport({ preset = 'all' }: { preset?: string }) {
+  const router = useRouter();
   const config = TRANSACTION_REPORT_PRESETS[preset] ?? TRANSACTION_REPORT_PRESETS.all;
-  const [period, setPeriod] = useState<Period>(config.period);
+  const [period, setPeriod] = usePageState<Period>('TransactionReport.period', config.period);
   const [dates, setDates] = useState(() => periodDates(config.period));
   const [firms, setFirms] = useState<Business[]>([]);
   const [firm, setFirm] = useState(() => getActiveBusinessId() ?? 'ALL');
@@ -101,13 +112,14 @@ export default function TransactionReport({ preset = 'all' }: { preset?: string 
   const [godowns, setGodowns] = useState<Array<{ id: string; name: string }>>([]);
   const [godown, setGodown] = useState('ALL');
   const [payment, setPayment] = useState('ALL');
-  const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<{ key: SortKey; asc: boolean }>({ key: 'date', asc: false });
+  const [query, setQuery] = usePageState('TransactionReport.query', '');
+  const [sort, setSort] = usePageState<{ key: SortKey; asc: boolean }>('TransactionReport.sort', { key: 'date', asc: false });
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState('');
-  const [busy, setBusy] = useState('');
+  const [selectedParty, setSelectedParty] = useState('ALL');
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     void getAllPages<Business>('/businesses').then(({ data }) => setFirms(data)).catch(() => undefined);
@@ -135,6 +147,7 @@ export default function TransactionReport({ preset = 'all' }: { preset?: string 
   const { actionsFor, dialogs } = useTransactionActions(() => void load());
 
   const users = useMemo(() => [...new Map(rows.filter((row) => row.createdById).map((row) => [row.createdById!, row.createdByName ?? 'Unknown'])).entries()], [rows]);
+  const partyList = useMemo(() => { const map = new Map<string, number>(); for (const r of rows) { if (r.partyName) map.set(r.partyName, (map.get(r.partyName) ?? 0) + 1); } return [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name)); }, [rows]);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const value = (row: ReportRow, key: SortKey) => (key === 'total' || key === 'paid' || key === 'balance' ? row[key] : key === 'status' ? statusOf(row).label : (row[key] ?? '').toString().toLowerCase());
@@ -149,9 +162,10 @@ export default function TransactionReport({ preset = 'all' }: { preset?: string 
         return (x < y ? -1 : x > y ? 1 : 0) * (sort.asc ? 1 : -1) || (b.date < a.date ? -1 : 1);
       });
   }, [rows, kind, user, godown, payment, query, sort]);
+  const displayRows = useMemo(() => selectedParty === 'ALL' ? visible : visible.filter((r) => r.partyName === selectedParty), [visible, selectedParty]);
 
   const totals = useMemo(() => {
-    const live = visible.filter((row) => !['CANCELLED', 'VOIDED', 'DRAFT', 'REJECTED'].includes(row.status));
+    const live = displayRows.filter((row) => !['CANCELLED', 'VOIDED', 'DRAFT', 'REJECTED'].includes(row.status));
     const sum = (list: ReportRow[]) => sumMoney(list.map((row) => row.total));
     return {
       sale: sum(live.filter((row) => row.kind === 'SALE')),
@@ -161,7 +175,7 @@ export default function TransactionReport({ preset = 'all' }: { preset?: string 
       receivable: sumMoney(live.filter((row) => row.kind === 'SALE').map((row) => row.balance)),
       payable: sumMoney(live.filter((row) => row.kind === 'PURCHASE').map((row) => row.balance)),
     };
-  }, [visible]);
+  }, [displayRows]);
 
   function choosePeriod(next: Period) {
     setPeriod(next);
@@ -171,10 +185,40 @@ export default function TransactionReport({ preset = 'all' }: { preset?: string 
   function csvRows() {
     return [
       ['#', 'Date', 'Ref No.', 'Party Name', 'Category', 'Type', 'Total', 'Received / Paid', 'Balance', 'Due Date', 'Status', 'Payment Type', ...(firm === 'ALL' ? ['Firm'] : [])],
-      ...visible.map((row, index) => [index + 1, formatDate(row.date), row.number, row.partyName, row.category, row.type, row.total, row.paid, row.balance, row.dueDate ? formatDate(row.dueDate) : '', statusOf(row).label, PAYMENTS.find(([key]) => key === row.paymentType)?.[1] ?? row.paymentType, ...(firm === 'ALL' ? [row.firmName ?? ''] : [])]),
+      ...displayRows.map((row, index) => [index + 1, formatDate(row.date), row.number, row.partyName, row.category, row.type, row.total, row.paid, row.balance, row.dueDate ? formatDate(row.dueDate) : '', statusOf(row).label, PAYMENTS.find(([key]) => key === row.paymentType)?.[1] ?? row.paymentType, ...(firm === 'ALL' ? [row.firmName ?? ''] : [])]),
     ];
   }
-  const fileName = `${config.title} ${dates.from} to ${dates.to}`;
+  const fileName = `${config.title}${selectedParty === 'ALL' ? '' : ` - ${selectedParty}`} - ${dates.from} to ${dates.to}`.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_');
+
+  async function exportPdf() {
+    if (downloadingPdf || loading || error || !displayRows.length || !dates.from || !dates.to || dates.from > dates.to) return;
+    const [headers, ...data] = csvRows();
+    const options = {
+      title: config.title,
+      customer: selectedParty === 'ALL' ? 'All customers' : selectedParty,
+      company: firm === 'ALL' ? 'All firms' : firms.find(({ id }) => id === firm)?.name,
+      period: `${formatDate(dates.from)} to ${formatDate(dates.to)}`,
+      headers: headers.map(String),
+      rows: data.map((row) => row.map((value, index) => [6, 7, 8].includes(index) ? formatCurrency(Number(value)) : value)),
+      summary: [
+        ['Total Sale', formatCurrency(totals.sale)],
+        ['Total Purchase', formatCurrency(totals.purchase)],
+        ['Money In', formatCurrency(totals.moneyIn)],
+        ['Money Out', formatCurrency(totals.moneyOut)],
+        ['Receivable', formatCurrency(totals.receivable)],
+        ['Payable', formatCurrency(totals.payable)],
+      ] as Array<[string, string]>,
+    };
+    setDownloadingPdf(true);
+    try {
+      const { downloadReportPdf } = await import('@/lib/report-pdf');
+      await downloadReportPdf(fileName, options);
+    } catch (failure) {
+      toast.error(getApiError(failure, 'Could not download the PDF report. Please try again.'));
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   async function shareWithAccountant() {
     const csv = csvRows().map((row) => row.map((cell) => `"${String(cell ?? '').replace(/^[=+@-]/, "'$&").replaceAll('"', '""')}"`).join(',')).join('\r\n');
@@ -198,7 +242,6 @@ export default function TransactionReport({ preset = 'all' }: { preset?: string 
     const tab = window.open('about:blank', '_blank');
     if (!tab) return toast.error('Allow pop-ups to view this PDF.');
     tab.opener = null;
-    setBusy(row.id);
     try {
       const { data } = await api.get<Blob>(`/${resource}/${row.id}/pdf`, { responseType: 'blob', headers: row.firmId ? { 'X-Business-Id': row.firmId } : undefined });
       const url = URL.createObjectURL(data);
@@ -207,18 +250,17 @@ export default function TransactionReport({ preset = 'all' }: { preset?: string 
     } catch (failure) {
       tab.close();
       toast.error(getApiError(failure, 'Could not open PDF.'));
-    } finally {
-      setBusy('');
     }
   }
 
   function rowActions(row: ReportRow): Array<RowAction | false | null | undefined> {
-    if (row.record) return [{ label: 'View/Edit', icon: 'view', href: row.href }, ...actionsFor(row.record, { onPrint: () => void openPdf(row), includeView: false })];
-    return [{ label: 'View', icon: 'view', href: row.href }];
+    const href = invoiceDetailHref(row);
+    if (row.record) return [{ label: 'View/Edit', icon: 'view', href }, ...actionsFor(row.record, { onPrint: () => void openPdf(row), includeView: false })];
+    return [{ label: 'View', icon: 'view', href }];
   }
 
   const header = (key: SortKey, label: string, align?: 'right') => (
-    <th className={align === 'right' ? 'text-right' : undefined}>
+    <th scope="col" aria-label={label} className={align === 'right' ? styles.money : undefined}>
       <button type="button" onClick={() => setSort({ key, asc: sort.key === key ? !sort.asc : key !== 'date' })} className={align === 'right' ? 'justify-end' : undefined}>
         <span>{label}</span>
         {sort.key === key && (sort.asc ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
@@ -227,7 +269,7 @@ export default function TransactionReport({ preset = 'all' }: { preset?: string 
   );
 
   return (
-    <div className="transaction-report">
+    <div className={`transaction-report ${styles.report}`}>
       <div className="transaction-report-bar">
         <div className="flex flex-wrap items-center gap-3">
           <select aria-label="Report period" className="transaction-report-period" value={period} onChange={(e) => choosePeriod(e.target.value as Period)}>
@@ -239,102 +281,113 @@ export default function TransactionReport({ preset = 'all' }: { preset?: string 
             <small>To</small>
             <input type="date" aria-label="To date" value={dates.to} min={dates.from} onChange={(e) => { setPeriod('CUSTOM'); setDates({ ...dates, to: e.target.value }); }} />
           </div>
-          <select aria-label="Firm" value={firm} onChange={(e) => setFirm(e.target.value)}>
-            <option value="ALL">ALL FIRMS</option>
-            {firms.map((business) => <option key={business.id} value={business.id}>{business.name}</option>)}
-          </select>
-          <select aria-label="User" value={user} onChange={(e) => setUser(e.target.value)}>
-            <option value="ALL">ALL USERS</option>
-            {users.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </select>
-        </div>
-        <div className="flex items-center gap-5">
-          <button type="button" className="transaction-report-share" onClick={() => void shareWithAccountant()} disabled={!visible.length}>Share With Accountant</button>
-          <button type="button" className="transaction-report-icon" onClick={() => downloadCsv(fileName, csvRows())} disabled={!visible.length}><FileSpreadsheet size={22} color="#1d7a46" /><span>Excel Report</span></button>
-          <button type="button" className="transaction-report-icon" onClick={() => window.print()}><Printer size={22} /><span>Print</span></button>
+          <label style={{display:'flex',alignItems:'center',gap:6,height:28,border:'1px solid #cfd6de',borderRadius:20,padding:'0 10px',background:'#fff',flex:1,minWidth:120,maxWidth:200}}>
+            <Search size={13} className="text-slate-400" style={{flexShrink:0}}/>
+            <input aria-label="Search transactions" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} style={{border:0,outline:0,background:'transparent',fontSize:12,width:'100%'}}/>
+          </label>
+          <button
+            type="button"
+            className={styles.download}
+            aria-label={`Download PDF report for ${selectedParty === 'ALL' ? 'all customers' : selectedParty}`}
+            disabled={downloadingPdf || loading || Boolean(error) || !displayRows.length || !dates.from || !dates.to || dates.from > dates.to}
+            onClick={() => void exportPdf()}
+          >
+            {downloadingPdf ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <FileText size={16} aria-hidden="true" />}
+            {downloadingPdf ? 'Preparing PDF...' : 'Download PDF'}
+          </button>
+          <button
+            type="button"
+            className={styles.download}
+            aria-label={`Download report for ${selectedParty === 'ALL' ? 'all customers' : selectedParty}`}
+            title="Download all matching transactions as a CSV spreadsheet"
+            disabled={loading || Boolean(error) || !displayRows.length || !dates.from || !dates.to || dates.from > dates.to}
+            onClick={() => downloadCsv(fileName, csvRows())}
+          >
+            <FileSpreadsheet size={16} aria-hidden="true" />
+            {selectedParty === 'ALL' ? 'Download report' : 'Download customer report'}
+          </button>
         </div>
       </div>
 
-      <div className="transaction-report-filters">
-        <select aria-label="Transaction type" value={kind} onChange={(e) => setKind(e.target.value)}>{KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-        <select aria-label="Godown" value={godown} onChange={(e) => setGodown(e.target.value)}>
-          <option value="ALL">All Godown</option>
-          {godowns.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-        </select>
-        <select aria-label="Payment type" value={payment} onChange={(e) => setPayment(e.target.value)}>{PAYMENTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-        {(kind !== config.kind || user !== 'ALL' || godown !== 'ALL' || payment !== 'ALL' || query) && (
-          <button type="button" className="text-xs font-semibold text-blue-600" onClick={() => { setKind(config.kind); setUser('ALL'); setGodown('ALL'); setPayment('ALL'); setQuery(''); }}>Clear filters</button>
-        )}
-      </div>
-
-      <section className="reference-register transaction-report-table">
-        <label className="transaction-report-search">
-          <Search size={16} className="text-slate-400" />
-          <input aria-label="Search transactions" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
-        </label>
-        {loading ? <LoadingState label="Preparing report..." /> : error ? <ErrorState message={error} onRetry={() => void load()} /> : (
-          <div className="reference-table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ width: 44 }}>#</th>
-                  {header('date', 'DATE')}
-                  {header('number', 'REF NO.')}
-                  {header('partyName', 'PARTY NAME')}
-                  {header('category', 'CATEGORY')}
-                  {header('type', 'TYPE')}
-                  {header('total', 'TOTAL', 'right')}
-                  {header('paid', 'RECEIVED / PAID', 'right')}
-                  {header('balance', 'BALANCE', 'right')}
-                  {header('dueDate', 'DUE DATE')}
-                  {header('status', 'STATUS')}
-                  <th style={{ width: 120 }}>PRINT / SHARE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((row, index) => {
-                  const status = statusOf(row);
-                  return (
-                    <tr key={`${row.firmId}-${row.kind}-${row.id}`} data-selected={selected === `${row.kind}-${row.id}` || undefined} onClick={() => setSelected(`${row.kind}-${row.id}`)}>
-                      <td>{index + 1}</td>
-                      <td>{formatDate(row.date)}</td>
-                      <td title={row.number}>{row.number}</td>
-                      <td title={row.partyName}><Link href={row.href} className="hover:text-blue-700" onClick={(e) => e.stopPropagation()}>{row.partyName || '—'}</Link>{firm === 'ALL' && row.firmName && <small className="block text-[11px] text-slate-400">{row.firmName}</small>}</td>
-                      <td title={row.category}>{row.category}</td>
-                      <td>{row.type}</td>
-                      <td className="money">{formatCurrency(row.total)}</td>
-                      <td className="money">{formatCurrency(row.paid)}</td>
-                      <td className="money">{formatCurrency(row.balance)}</td>
-                      <td>{row.dueDate && ['SALE', 'PURCHASE'].includes(row.kind) ? formatDate(row.dueDate) : ''}</td>
-                      <td className={TONE[status.tone]} title={status.label}>{status.label}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <div data-row-actions className="reference-row-actions">
-                          {row.record
-                            ? <button type="button" aria-label={`Print ${row.number}`} disabled={busy === row.id} onClick={() => void openPdf(row)}><Printer size={17} /></button>
-                            : <Link href={row.href} aria-label={`Open ${row.type} ${row.number}`}><Eye size={17} /></Link>}
-                          <Link href={row.href} aria-label={`Share ${row.type} ${row.number}`}><Share2 size={17} /></Link>
-                          <RowActions label={`Actions for ${row.type} ${row.number}`} actions={rowActions(row)} />
-                        </div>
-                      </td>
+      <div className={styles.layout}>
+        <div className={styles.customers}>
+          <div className={styles.customersHeading}>Customers</div>
+          <button className={styles.customerButton} type="button" onClick={()=>setSelectedParty('ALL')} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 12px',fontSize:12,fontWeight:selectedParty==='ALL'?700:500,background:selectedParty==='ALL'?'#1d4ed8':'transparent',color:selectedParty==='ALL'?'#fff':'#334155',border:'none',cursor:'pointer',textAlign:'left'}}>
+            <span>All</span><span style={{fontSize:10,fontWeight:700,background:selectedParty==='ALL'?'rgba(255,255,255,0.25)':'#e2e8f0',color:selectedParty==='ALL'?'#fff':'#64748b',borderRadius:999,padding:'1px 6px'}}>{rows.length}</span>
+          </button>
+          {partyList.map((p)=>(
+            <button className={styles.customerButton} key={p.name} type="button" onClick={()=>setSelectedParty(p.name===selectedParty?'ALL':p.name)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',fontSize:12,fontWeight:selectedParty===p.name?700:400,background:selectedParty===p.name?'#1d4ed8':'transparent',color:selectedParty===p.name?'#fff':'#475569',border:'none',cursor:'pointer',textAlign:'left'}}>
+              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,marginRight:6}}>{p.name}</span>
+              <span style={{fontSize:10,fontWeight:700,background:selectedParty===p.name?'rgba(255,255,255,0.25)':'#e2e8f0',color:selectedParty===p.name?'#fff':'#64748b',borderRadius:999,padding:'1px 6px',flexShrink:0}}>{p.count}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <section className="reference-register transaction-report-table">
+            {loading ? <LoadingState label="Preparing report..." /> : error ? <ErrorState message={error} onRetry={() => void load()} /> : (
+              <div className={styles.scroll} role="region" aria-label={`${config.title} transactions`} tabIndex={0}>
+                <table className={styles.table} aria-label={config.title}>
+                  <colgroup>
+                    <col className={styles.invoiceColumn} />
+                    <col className={styles.partyColumn} />
+                    <col className={styles.typeColumn} />
+                    <col className={styles.moneyColumn} span={3} />
+                    <col className={styles.statusColumn} />
+                    <col className={styles.actionsColumn} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      {header('number', 'INV NO.')}
+                      {header('partyName', 'PARTY')}
+                      {header('type', 'TYPE')}
+                      {header('total', 'TOTAL', 'right')}
+                      {header('paid', 'PAID', 'right')}
+                      {header('balance', 'BAL', 'right')}
+                      {header('status', 'STATUS')}
+                      <th scope="col" className={styles.actions}>ACT</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {!visible.length && <EmptyState icon={FileSpreadsheet} title="No transactions" description={rows.length ? 'Nothing matches these filters. Try another type, user or payment.' : 'Nothing was recorded in this period. Pick another period above.'} />}
-          </div>
-        )}
-        {!loading && !error && visible.length > 0 && (
-          <dl className="transaction-report-totals">
-            <div><dt>Total Sale</dt><dd className="text-emerald-700">{formatCurrency(totals.sale)}</dd></div>
-            <div><dt>Total Purchase</dt><dd className="text-rose-700">{formatCurrency(totals.purchase)}</dd></div>
-            <div><dt>Money In</dt><dd className="text-emerald-700">{formatCurrency(totals.moneyIn)}</dd></div>
-            <div><dt>Money Out</dt><dd className="text-rose-700">{formatCurrency(totals.moneyOut)}</dd></div>
-            <div><dt>Receivable</dt><dd>{formatCurrency(totals.receivable)}</dd></div>
-            <div><dt>Payable</dt><dd>{formatCurrency(totals.payable)}</dd></div>
-          </dl>
-        )}
-      </section>
+                  </thead>
+                  <tbody>
+                    {displayRows.map((row) => {
+                      const status = statusOf(row);
+                      const isInvoice = ['SALE', 'PURCHASE'].includes(row.kind);
+                      const href = invoiceDetailHref(row);
+                      return (
+                        <tr key={`${row.firmId}-${row.kind}-${row.id}`} data-selected={selected === `${row.kind}-${row.id}` || undefined} onClick={() => { setSelected(`${row.kind}-${row.id}`); if (isInvoice) router.push(href); }}>
+                          <td data-label="INV NO.">{isInvoice ? <Link href={href} aria-label={`View full details for ${row.number}`} className="font-semibold text-blue-700 hover:underline" onClick={(e) => e.stopPropagation()}>{row.number}</Link> : row.number}</td>
+                          <td data-label="PARTY"><Link href={href} className="hover:text-blue-700" onClick={(e) => e.stopPropagation()}>{row.partyName || '—'}</Link></td>
+                          <td data-label="TYPE">{row.type}</td>
+                          <td data-label="TOTAL" className={styles.money}>{formatCurrency(row.total)}</td>
+                          <td data-label="PAID" className={styles.money}>{formatCurrency(row.paid)}</td>
+                          <td data-label="BAL" className={styles.money}>{formatCurrency(row.balance)}</td>
+                          <td data-label="STATUS" className={TONE[status.tone]}>{status.label}</td>
+                          <td data-label="ACTIONS" className={styles.actions} onClick={(e) => e.stopPropagation()}>
+                            <div data-row-actions className="reference-row-actions">
+                              {!row.record && <Link href={href} aria-label={`Open ${row.type} ${row.number}`}><Eye size={14} /></Link>}
+                              <RowActions label={`Actions for ${row.type} ${row.number}`} actions={rowActions(row)} />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {!displayRows.length && <EmptyState icon={FileSpreadsheet} title="No transactions" description={rows.length ? 'No transactions for this customer in the selected period.' : 'Nothing was recorded in this period. Pick another period above.'} />}
+              </div>
+            )}
+            {!loading && !error && displayRows.length > 0 && (
+              <div className={`transaction-report-totals ${styles.totals}`}>
+                <div className="tr-total-card tr-total-sale"><span>Total Sale</span><strong>{formatCurrency(totals.sale)}</strong></div>
+                <div className="tr-total-card tr-total-purchase"><span>Total Purchase</span><strong>{formatCurrency(totals.purchase)}</strong></div>
+                <div className="tr-total-card tr-total-moneyin"><span>Money In</span><strong>{formatCurrency(totals.moneyIn)}</strong></div>
+                <div className="tr-total-card tr-total-moneyout"><span>Money Out</span><strong>{formatCurrency(totals.moneyOut)}</strong></div>
+                <div className="tr-total-card tr-total-receivable"><span>Receivable</span><strong>{formatCurrency(totals.receivable)}</strong></div>
+                <div className="tr-total-card tr-total-payable"><span>Payable</span><strong>{formatCurrency(totals.payable)}</strong></div>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
       {dialogs}
     </div>
   );

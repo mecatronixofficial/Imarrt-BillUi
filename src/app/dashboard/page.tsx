@@ -33,7 +33,8 @@ import { sumMoney } from '@/lib/billing';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { getPreferences } from '@/lib/preferences';
 import { usePreferences } from '@/lib/useGeneralPreferences';
-import type { Branch, BusinessDocument, Expense, Party, Invoice, Item, ProductionOrder, ProductionStageType } from '@/types';
+import type { Branch, BusinessDocument, Expense, Party, Invoice, Item, ProductionOrder, ProductionStageType, Supplier } from '@/types';
+import { usePageState } from '@/lib/navigation';
 
 const STAGES: Array<{ type: ProductionStageType; label: string; icon: typeof Scissors; color: string }> = [
   { type: 'MASTER', label: 'Master', icon: Users, color: 'bg-slate-600' },
@@ -53,18 +54,19 @@ type DashboardData = {
   production: ProductionOrder[];
   parties: Party[];
   items: Item[];
+  suppliers: Supplier[];
 };
 
-const EMPTY_DATA: DashboardData = { invoices: [], documents: [], expenses: [], production: [], parties: [], items: [] };
+const EMPTY_DATA: DashboardData = { invoices: [], documents: [], expenses: [], production: [], parties: [], items: [], suppliers: [] };
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [partialWarning, setPartialWarning] = useState('');
-  const [range, setRange] = useState('MONTH');
-  const [from, setFrom] = useState(localDate);
-  const [to, setTo] = useState(localDate);
+  const [range, setRange] = usePageState('dashboard.range', 'MONTH');
+  const [from, setFrom] = usePageState('dashboard.from', localDate);
+  const [to, setTo] = usePageState('dashboard.to', localDate);
   const itemPreferences = usePreferences('item');
 
   const loadDashboard = useCallback(async () => {
@@ -101,6 +103,7 @@ export default function DashboardPage() {
       getAllPages<Item>('/items', masterDataConfig),
       getAllPages<BusinessDocument>('/documents'),
       getAllPages<Expense>('/expenses'),
+      getAllPages<Supplier>('/suppliers'),
     ]);
 
     const failed = results.filter((result) => result.status === 'rejected');
@@ -118,9 +121,10 @@ export default function DashboardPage() {
       items: results[3].status === 'fulfilled' ? results[3].value.data : [],
       documents: results[4].status === 'fulfilled' ? results[4].value.data : [],
       expenses: results[5].status === 'fulfilled' ? results[5].value.data : [],
+      suppliers: results[6].status === 'fulfilled' ? results[6].value.data : [],
     });
     if (failed.length > 0) {
-      const sectionNames = ['Invoices', 'Production', 'Parties', 'Items', 'Purchases', 'Expenses'];
+      const sectionNames = ['Invoices', 'Production', 'Parties', 'Items', 'Purchases', 'Expenses', 'Suppliers'];
       const unavailable = results.flatMap((result, index) => result.status === 'rejected' ? [sectionNames[index]] : []);
       const branchHint = !hasSpecificBranch && unavailable.some((name) => name === 'Parties' || name === 'Items')
         ? ' Select or create an active branch.'
@@ -142,7 +146,7 @@ export default function DashboardPage() {
       {loading && <section className="brand-dashboard-state"><LoadingState label="Preparing your business overview..." /></section>}
       {!loading && error && <section className="brand-dashboard-state"><ErrorState message={error} onRetry={loadDashboard} /></section>}
       {!loading && !error && partialWarning && <div role="status" className="m-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{partialWarning}<button type="button" className="ml-3 underline" onClick={() => void loadDashboard()}>Retry</button></div>}
-      {!loading && !error && <ReferenceHome invoices={data.invoices} documents={data.documents} expenses={data.expenses} items={data.items} parties={data.parties} report={insights.report} dates={dates} range={range} from={from} to={to} onRange={setRange} onFrom={setFrom} onTo={setTo} onRefresh={() => void loadDashboard()} lowStockThreshold={itemPreferences.lowStockThreshold} />}
+      {!loading && !error && <ReferenceHome invoices={data.invoices} documents={data.documents} expenses={data.expenses} items={data.items} parties={data.parties} suppliers={data.suppliers} report={insights.report} dates={dates} range={range} from={from} to={to} onRange={setRange} onFrom={setFrom} onTo={setTo} onRefresh={() => void loadDashboard()} lowStockThreshold={itemPreferences.lowStockThreshold} />}
       <details className="reference-dashboard-details"><summary>Production & detailed overview</summary>
       <HeroHeader insights={!loading && !error ? insights : undefined} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -1343,7 +1347,7 @@ function BusinessPulse({ data, insights }: { data: DashboardData; insights: Retu
   <div className="grid gap-2.5 sm:grid-cols-3">
     {/* Add Party */}
     <Link
-      href="/parties?create=1"
+      href="/parties/details?create=1"
       className="
         group
         relative

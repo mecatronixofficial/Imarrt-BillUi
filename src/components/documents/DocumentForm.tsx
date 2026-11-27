@@ -30,15 +30,16 @@ import {
 } from 'lucide-react';
 import Modal from '@/components/Modal';
 import { api, getActiveBusinessId, getAllPages, getApiError, setActiveBusinessId } from '@/lib/api';
+import { useFormDirty, useUnsavedChanges } from '@/lib/navigation';
 import { DOCUMENT_CONFIG, DOCUMENT_TYPES, type DocumentConfig } from '@/lib/documents';
 import { formatCurrency } from '@/lib/format';
 import { prepareUploads } from '@/lib/imageCompression';
 import { takePendingBillUploads } from '@/lib/pendingBillUploads';
 import type { Business, BusinessDocument, BusinessDocumentItem, BusinessDocumentType, Invoice, Item, Party, Supplier } from '@/types';
 import { useEmbeddedForm } from '@/components/EmbeddedFormContext';
-import { CHARGES, CompanyChip, EditorTabBar, GodownPill, GST_RATES, MetaRow, noCharges, PAYMENT_TERMS, SUPPLY_STATES, addDays, today } from '@/components/transactions/EditorParts';
+import { CHARGES, CompanyChip, EditorTabBar, GodownPill, MetaRow, noCharges, PAYMENT_TERMS, SUPPLY_STATES, TaxPercentInput, addDays, today } from '@/components/transactions/EditorParts';
 import { calculateDocument, type DocumentDraftLine } from './documentTotals';
-import { totalsOptionsFor } from '../invoices/invoiceTotals';
+import { savedRoundOff, totalsOptionsFor } from '../invoices/invoiceTotals';
 import { normalizePreferences, type CompanyPreferences, type Preferences } from '@/lib/preferences';
 import { usePreferences } from '@/lib/useGeneralPreferences';
 import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
@@ -135,7 +136,6 @@ export default function DocumentForm({
   // Registers only list the active company, so saving into another one must be called out.
   const [activeBusinessId] = useState(() => getActiveBusinessId() ?? '');
   const [documentPreferences, setDocumentPreferences] = useState<CompanyPreferences | null>(null);
-  const [gstRegistered, setGstRegistered] = useState(true);
 
   const [partyId, setPartyId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
@@ -156,6 +156,9 @@ export default function DocumentForm({
   const [referenceNumber, setReferenceNumber] = useState('');
   const [placeOfSupply, setPlaceOfSupply] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
+  const [hideRate, setHideRate] = useState(() => {
+    try { return localStorage.getItem('dc_hide_rate') === '1'; } catch { return false; }
+  });
   const [reason, setReason] = useState('');
   const [returnStock, setReturnStock] = useState(false);
   const [terms, setTerms] = useState('Thanks for doing business with us!');
@@ -220,6 +223,8 @@ export default function DocumentForm({
     setReferenceInvoiceId(source.referenceInvoiceId ?? '');
     setSourceDocumentId(source.type === 'DEBIT_NOTE' ? source.sourceDocumentId ?? '' : '');
     setDiscount(Number(source.discount) || 0);
+    // Editing keeps the saved Round Off choice; a duplicate starts from the company default.
+    if (edit) setRoundOffChoice(savedRoundOff(source));
     setPlaceOfSupply(source.placeOfSupply ?? '');
     setVehicleNumber(source.vehicleNumber ?? '');
     setReason(source.reason ?? '');
@@ -320,7 +325,6 @@ export default function DocumentForm({
         const business = (businessRes.data || []).find(({ id }) => id === selectedId) ?? businessRes.data?.[0];
         if (business) {
           setBusinessId(business.id);
-          setGstRegistered(Boolean(business.gstRegistered));
           const { data: preferences } = await api.get(`/businesses/${business.id}/preferences`, { signal });
           if (signal.aborted) return;
           setDocumentPreferences(normalizePreferences(preferences));
@@ -430,7 +434,7 @@ export default function DocumentForm({
       taxInclusive: (isSupplierDocument ? item.purchasePriceTaxMode : item.salePriceTaxMode) === 'WITH_TAX',
       unit: item.unit || 'pcs',
       unitPrice: Number.isFinite(itemPrice) ? itemPrice : 0,
-      taxRate: isSupplierDocument || gstRegistered ? (Number.isFinite(itemTaxRate) ? itemTaxRate : 0) : 0,
+      taxRate: Number.isFinite(itemTaxRate) ? itemTaxRate : 0,
     });
   }
 
@@ -537,8 +541,17 @@ export default function DocumentForm({
   // A negative adjustment cannot be a line (prices must be >= 0), so it is applied as extra discount.
   const adjustmentDiscount = Math.max(0, -(Number(charges.adjustment) || 0));
   const roundOff = roundOffChoice ?? Boolean(transactionPrefs.autoRoundOff);
+  // Unsaved-changes protection: compare what the user can change with the values the form loaded with.
+  const hasUnsavedChanges = useFormDirty({
+    businessId, docType, partyId, warehouseId, transactionInfo, referenceInvoiceId, sourceDocumentId, issueDate, validUntil, termDays, dueDate,
+    discount, charges, roundOffChoice, referenceNumber, placeOfSupply, vehicleNumber, reason, returnStock, terms, notes, payments,
+    attachments: attachments.length,
+    lines: lines.filter((line) => line.description?.trim() || line.itemId || line.unitPrice).map(({ key: _key, ...line }) => line),
+  }, !loading && !loadError);
+  useUnsavedChanges(hasUnsavedChanges && !savedId && !saving);
   const totalOptions = useMemo(() => ({ ...totalsOptionsFor(transactionPrefs, taxPrefs, !isSupplierDocument), roundOff }), [transactionPrefs, taxPrefs, isSupplierDocument, roundOff]);
-  const taxAllowed = isSupplierDocument || gstRegistered;
+  // Every company can charge tax (GST-registered or not); only the composition scheme turns it off for sales.
+  const taxAllowed = true;
   const totals = useMemo(() => calculateDocument([...lines, ...chargeLines], discount + adjustmentDiscount, taxAllowed, totalOptions), [adjustmentDiscount, chargeLines, discount, lines, taxAllowed, totalOptions]);
   const itemTotals = useMemo(() => calculateDocument(lines, 0, taxAllowed, { noTax: totalOptions.noTax }), [lines, taxAllowed, totalOptions.noTax]);
   const discountBase = totals.subtotal + totals.tax;
@@ -697,7 +710,8 @@ export default function DocumentForm({
         validUntil: hasValidity ? validUntil || undefined : undefined,
         dueDate: hasDueDate ? dueDate || undefined : undefined,
         discount: safeDiscount,
-        roundOff: roundOffChoice ?? undefined,
+        // Always send the choice shown on screen so the saved total matches the form exactly.
+        roundOff,
         referenceNumber: referenceNumber.trim() || undefined,
         placeOfSupply: placeOfSupply.trim() || undefined,
         vehicleNumber: isChallan ? vehicleNumber.trim().toUpperCase() || undefined : undefined,
@@ -747,7 +761,8 @@ export default function DocumentForm({
       } else {
         toast.success(shareTarget ? `${config.label} saved and shared` : `${config.label} ${editingId ? 'updated' : 'saved'}`, { description: data.documentNumber });
       }
-      router.push(`/documents/${data.id}?companyId=${encodeURIComponent(businessId)}${!shareTarget && status === 'ISSUED' && messagePrefs.autoShareOnSave && !isSupplierDocument ? '&share=whatsapp' : ''}`);
+      // Replace the editor in history: Back from the saved document returns to where the editor was opened from.
+      router.replace(`/documents/${data.id}?companyId=${encodeURIComponent(businessId)}${!shareTarget && status === 'ISSUED' && messagePrefs.autoShareOnSave && !isSupplierDocument ? '&share=whatsapp' : ''}`);
     } catch (saveError: unknown) {
       const message = createdId
           ? `${config.label} saved, but an upload, payment or sharing step could not be completed. Open the saved ${config.label.toLowerCase()} to review it.`
@@ -794,7 +809,6 @@ export default function DocumentForm({
             onChange={(nextId) => {
               setDocumentPreferences(null); setLoading(true); setPartyId(''); setWarehouseId('');
               setBusinessId(nextId);
-              setGstRegistered(Boolean(businesses.find(({ id }) => id === nextId)?.gstRegistered));
             }}
           />
         </div>
@@ -837,7 +851,7 @@ export default function DocumentForm({
                   <span>{isSupplierDocument ? 'Search by Name/Phone' : partyLabel} <b>*</b></span>
                   <select value={partyId} disabled={partyLocked} onChange={(e) => setPartyId(e.target.value)}>
                     <option value="">{loading ? 'Loading…' : ''}</option>
-                    {availableParties.map((p) => <option key={p.id} value={p.id}>{p.name}{p.phone ? ` · ${p.phone}` : ''}</option>)}
+                    {availableParties.map((p) => <option key={p.id} value={p.id}>{p.name}{"group" in p && p.group ? ` · ${p.group}` : ""}{p.phone ? ` · ${p.phone}` : ''}</option>)}
                   </select>
                   <ChevronDown size={18} aria-hidden="true" />
                 </label>
@@ -945,6 +959,18 @@ export default function DocumentForm({
           </section>
 
           <section className={styles.itemsSection}>
+            {isChallan && (
+              <div style={{display:'flex',justifyContent:'flex-end',padding:'4px 8px 0'}}>
+                <button
+                  type="button"
+                  onClick={() => setHideRate((v) => { const next=!v; try{localStorage.setItem('dc_hide_rate',next?'1':'0');}catch{} return next; })}
+                  style={{fontSize:'11px',fontWeight:600,padding:'3px 10px',borderRadius:6,border:'1px solid #1d4ed8',background:hideRate?'#1d4ed8':'#dbeafe',color:hideRate?'#fff':'#1d4ed8',cursor:'pointer',transition:'all .15s'}}
+                  aria-pressed={hideRate}
+                >
+                  {hideRate ? 'Rate Hidden' : 'Hide Rate'}
+                </button>
+              </div>
+            )}
             <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Line items; scroll horizontally to view all columns">
               <table className={styles.table}>
                 <caption className="sr-only">Items, quantities, prices and amounts</caption>
@@ -956,8 +982,8 @@ export default function DocumentForm({
                     <TrackingHeaders preferences={trackingColumns} />
                     <th scope="col">Qty</th>
                     <th scope="col">Unit</th>
-                    <th scope="col" className={styles.right}>Price/Unit</th>
-                    <th scope="col" className={styles.right}>Amount</th>
+                    {!(isChallan && hideRate) && <th scope="col" className={styles.right}>Price/Unit</th>}
+                    {!(isChallan && hideRate) && <th scope="col" className={styles.right}>Amount</th>}
                     <th scope="col" className={styles.addCol}>
                       <button type="button" aria-label="Add row" disabled={lines.length >= 200} onClick={() => setLines((current) => [...current, newLine()])}><PlusCircle size={18} /></button>
                     </th>
@@ -989,20 +1015,22 @@ export default function DocumentForm({
                           {optionsWithCurrent(UNIT_OPTIONS, line.unit).map((unit) => <option key={unit} value={unit}>{String(unit).toUpperCase()}</option>)}
                         </select>
                       </td>
-                      <td>
-                        <input
-                          aria-label={`Rate ${index + 1}`}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className={styles.cellInput}
-                          value={isNaN(line.unitPrice) ? '' : line.unitPrice}
-                          readOnly={!isSupplierDocument && !transactionPrefs.editPriceOnInvoice && Boolean(line.itemId)}
-                          title={!isSupplierDocument && !transactionPrefs.editPriceOnInvoice && line.itemId ? 'Price editing is turned off in Transaction settings' : undefined}
-                          onChange={(e) => updateLine(line.key, { unitPrice: parseFloat(e.target.value) || 0 })}
-                        />
-                      </td>
-                      <td className={styles.amount}>{totals.lines[index]?.active ? formatCurrency(totals.lines[index].total) : ''}</td>
+                      {!(isChallan && hideRate) && (
+                        <td>
+                          <input
+                            aria-label={`Rate ${index + 1}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className={styles.cellInput}
+                            value={isNaN(line.unitPrice) ? '' : line.unitPrice}
+                            readOnly={!isSupplierDocument && !transactionPrefs.editPriceOnInvoice && Boolean(line.itemId)}
+                            title={!isSupplierDocument && !transactionPrefs.editPriceOnInvoice && line.itemId ? 'Price editing is turned off in Transaction settings' : undefined}
+                            onChange={(e) => updateLine(line.key, { unitPrice: parseFloat(e.target.value) || 0 })}
+                          />
+                        </td>
+                      )}
+                      {!(isChallan && hideRate) && <td className={styles.amount}>{totals.lines[index]?.active ? formatCurrency(totals.lines[index].total) : ''}</td>}
                       <td aria-hidden="true" />
                     </tr>
                   ))}
@@ -1146,20 +1174,18 @@ export default function DocumentForm({
               </div>
               <div className={styles.totalsRow}>
                 <span>Tax</span>
-                <select
-                  aria-label="Tax for all items"
+                <TaxPercentInput
+                  ariaLabel="Tax for all items"
                   disabled={!showTax}
-                  value={!showTax ? '' : activeRates.length === 1 ? String(activeRates[0]) : activeRates.length === 0 && taxChoice !== null ? String(taxChoice) : ''}
-                  onChange={(e) => { const rate = Number(e.target.value); setTaxChoice(rate); setLines((current) => current.map((line) => ({ ...line, taxRate: rate }))); }}
-                >
-                  {(!showTax || activeRates.length !== 1) && <option value="">{!showTax ? 'NONE' : activeRates.length > 1 ? 'Mixed' : 'NONE'}</option>}
-                  {GST_RATES.map((rate) => <option key={rate} value={rate}>{rate === 0 ? 'None' : `GST@${rate}%`}</option>)}
-                </select>
+                  placeholder={showTax && activeRates.length > 1 ? 'Mixed' : '0'}
+                  value={!showTax ? null : activeRates.length === 1 ? activeRates[0] : activeRates.length === 0 ? taxChoice : null}
+                  onChange={(rate) => { setTaxChoice(rate); setLines((current) => current.map((line) => ({ ...line, taxRate: rate }))); }}
+                />
                 <output>{formatCurrency(totals.tax)}</output>
               </div>
               {!showTax && !loading && (
                 <p className={styles.taxHint}>
-                  {totalOptions.noTax ? 'Composition scheme is on, so sales carry no tax.' : 'This company is not GST-registered, so tax is not applied.'}
+                  Composition scheme is on, so sales carry no tax.
                 </p>
               )}
               {CHARGES.map(([key, label]) => (

@@ -32,6 +32,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
+    ".work/godowns-check/next/types/**/*.ts",
+    ".work/party-passcode-build/types/**/*.ts",
+    ".work/report-details/responsive-next/types/**/*.ts",
     "next-env.d.ts"
   ],
   "exclude": [

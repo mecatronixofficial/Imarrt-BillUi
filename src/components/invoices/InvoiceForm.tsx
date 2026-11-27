@@ -9,13 +9,14 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { AlertCircle, ArrowRight, CalendarDays, Camera, ChevronDown, Download, File as FileIcon, FileCheck2, FilePlus2, FileSpreadsheet, FileText, ListChecks, Loader2, Mail, MessageCircle, PlusCircle, Trash2, TrendingUp, X } from 'lucide-react';
 import { api, getActiveBusinessId, getAllPages, getApiError } from '@/lib/api';
+import { useFormDirty, useUnsavedChanges } from '@/lib/navigation';
 import { formatCurrency } from '@/lib/format';
 import { prepareUploads } from '@/lib/imageCompression';
 import type { Business, Invoice, Item, Party } from '@/types';
 import { useEmbeddedForm } from '@/components/EmbeddedFormContext';
-import { CHARGES, CompanyChip, EditorTabBar, GodownPill, GST_RATES, MetaRow, noCharges, PAYMENT_TERMS, SUPPLY_STATES, addDays, today } from '@/components/transactions/EditorParts';
+import { CHARGES, CompanyChip, EditorTabBar, GodownPill, MetaRow, noCharges, PAYMENT_TERMS, SUPPLY_STATES, TaxPercentInput, addDays, today } from '@/components/transactions/EditorParts';
 import { toast } from '@/components/ToastProvider';
-import { calculateInvoice, totalsOptionsFor, type InvoiceDraftLine } from './invoiceTotals';
+import { calculateInvoice, savedRoundOff, totalsOptionsFor, type InvoiceDraftLine } from './invoiceTotals';
 import { normalizePreferences, type CompanyPreferences, type Preferences } from '@/lib/preferences';
 import { usePreferences } from '@/lib/useGeneralPreferences';
 import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
@@ -71,7 +72,6 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [businessId, setBusinessId] = useState(() => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('companyId') : null) || getActiveBusinessId() || '');
   const [documentPreferences, setDocumentPreferences] = useState<CompanyPreferences | null>(null);
-  const [gstRegistered, setGstRegistered] = useState(false);
   const [partyId, setPartyId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
   const [transactionInfo,setTransactionInfo]=useState(emptyTransactionDetails);
@@ -101,6 +101,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState<'SAVE' | `SHARE_${InvoiceShareTarget}` | ''>('');
+  const [addingItem, setAddingItem] = useState(false);
   const [error, setError] = useState('');
   const [savedId, setSavedId] = useState('');
   const [editingId,setEditingId]=useState('');
@@ -148,7 +149,6 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
       const business = (businessResponse.data || []).find(({ id }) => id === selectedId) ?? businessResponse.data?.[0];
       if (business) {
         setBusinessId(business.id);
-        setGstRegistered(Boolean(business.gstRegistered));
         const { data: preferences } = await api.get(`/businesses/${business.id}/preferences`, { signal });
         if (signal.aborted) return;
         setDocumentPreferences(normalizePreferences(preferences));
@@ -162,7 +162,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
         if (signal.aborted) return;
         setWarehouseId(source.warehouseId||'');
         setNotes(source.notes||'');
-        if(editId){setSourceDraft(source.status==='DRAFT');setInvoiceNumber(source.invoiceNumber);setManualNumber(source.invoiceNumber);setManualNumberMode(!normalizePreferences(source.business?.preferences).transaction.autoNumbering);setInvoiceDate(source.issueDate.slice(0,10));termTouched.current=true;setTermDays(null);setDueDate(source.dueDate?.slice(0,10)||'');}
+        if(editId){setRoundOffChoice(savedRoundOff(source));setSourceDraft(source.status==='DRAFT');setInvoiceNumber(source.invoiceNumber);setManualNumber(source.invoiceNumber);setManualNumberMode(!normalizePreferences(source.business?.preferences).transaction.autoNumbering);setInvoiceDate(source.issueDate.slice(0,10));termTouched.current=true;setTermDays(null);setDueDate(source.dueDate?.slice(0,10)||'');}
         setPartyId(source.party.id); setCustomerPhone(source.party.phone || ''); setDiscount(Number(source.discount));
         setTransactionInfo({...emptyTransactionDetails,...Object.fromEntries(Object.keys(emptyTransactionDetails).map(key=>[key,String((source as unknown as Record<string,unknown>)[key]??'')]))});
         setPlaceOfSupply(source.placeOfSupply || '');
@@ -194,19 +194,23 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
     return () => controller.abort();
   }, [loadData, loadVersion]);
 
+  // Preview of the selected company's next number (its own prefix and sequence). It follows the
+  // company and invoice date; the server assigns the final number when the invoice is saved.
   useEffect(() => {
     if(new URLSearchParams(window.location.search).get('editId'))return;
     const controller = new AbortController();
-    void api.get<{ invoiceNumber: string; manual?: boolean }>('/invoices/next-number', { signal: controller.signal, headers: businessId ? { 'X-Business-Id': businessId } : undefined })
+    setInvoiceNumber('Loading…');
+    void api.get<{ invoiceNumber: string; manual?: boolean }>('/invoices/next-number', { signal: controller.signal, params: invoiceDate ? { date: invoiceDate } : undefined, headers: businessId ? { 'X-Business-Id': businessId } : undefined })
       .then(({ data }) => {
         if (!controller.signal.aborted && data?.invoiceNumber) {
           setInvoiceNumber(data.invoiceNumber);
           setManualNumberMode(Boolean(data.manual));
         }
       })
-      .catch(() => undefined);
+      // The number is still assigned on save; the preview just could not be loaded.
+      .catch(() => { if (!controller.signal.aborted) setInvoiceNumber('Assigned on save'); });
     return () => controller.abort();
-  }, [businessId]);
+  }, [businessId, invoiceDate]);
 
   useEffect(() => {
     if (error) errorRef.current?.focus();
@@ -245,7 +249,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
             unit: item.unit,
             hsnSac: item.hsnSac,
             unitPrice: Number(item.salePrice || 0),
-            taxRate: gstRegistered ? Number(item.taxRate || 0) : 0,
+            taxRate: Number(item.taxRate || 0),
             taxInclusive: item.salePriceTaxMode === 'WITH_TAX',
           }
         : { itemId: undefined },
@@ -257,6 +261,46 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
     const match = catalog.find(({ name }) => name.toLowerCase() === text.trim().toLowerCase());
     if (match && match.id !== line.itemId) pickItem(line.key, match.id);
     else updateLine(line.key, text.trim() ? { description: text } : { description: '', itemId: undefined });
+  }
+
+  async function quickCreateItem(line: InvoiceDraftLine) {
+    if (!line.description.trim()) return;
+    try {
+      const { data: newItem } = await api.post<Item>('/items', { name: line.description.trim(), salePrice: line.unitPrice || 0, taxRate: line.taxRate || 0 }, { headers: { 'X-Business-Id': businessId } });
+      setCatalog((current) => [...current, newItem]);
+      updateLine(line.key, { itemId: newItem.id });
+      toast.success(`Item "${newItem.name}" created`);
+    } catch (err) {
+      toast.error(getApiError(err, 'Could not create item.'));
+    }
+  }
+
+  async function quickAddItem() {
+    const unlinked = lines.filter(
+      (l) => l.description.trim() && !l.itemId &&
+        !catalog.find((c) => c.name.toLowerCase() === l.description.trim().toLowerCase()),
+    );
+    if (!unlinked.length) {
+      toast.error('Type a new item name in the item column first.');
+      return;
+    }
+    setAddingItem(true);
+    try {
+      for (const line of unlinked) {
+        const { data: newItem } = await api.post<Item>(
+          '/items',
+          { name: line.description.trim(), salePrice: line.unitPrice || 0, taxRate: line.taxRate || 0 },
+          { headers: { 'X-Business-Id': businessId } },
+        );
+        setCatalog((current) => [...current, newItem]);
+        updateLine(line.key, { itemId: newItem.id });
+        toast.success(`Item "${newItem.name}" saved to catalog`);
+      }
+    } catch (err) {
+      toast.error(getApiError(err, 'Could not save item.'));
+    } finally {
+      setAddingItem(false);
+    }
   }
 
   function selectParty(nextPartyId: string) {
@@ -300,6 +344,13 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   }
 
   const roundOff = roundOffChoice ?? Boolean(transactionPrefs.autoRoundOff);
+  // Unsaved-changes protection: compare what the user can change with the values the form loaded with.
+  const hasUnsavedChanges = useFormDirty({
+    businessId, partyId, warehouseId, transactionInfo, placeOfSupply, customerPhone, saleMode, invoiceDate, manualNumber, termDays, dueDate,
+    paymentMethod, terms, notes, attachments: attachments.length, discount, charges, roundOffChoice,
+    lines: lines.filter((line) => line.description?.trim() || line.itemId || line.unitPrice).map(({ key: _key, ...line }) => line),
+  }, !loading && !loadError);
+  useUnsavedChanges(hasUnsavedChanges && !savedId && !saving);
   const totalOptions = useMemo(() => ({ ...totalsOptionsFor(transactionPrefs, taxPrefs), roundOff }), [transactionPrefs, taxPrefs, roundOff]);
   const newLine = () => ({ ...emptyLine(), taxRate: taxChoice ?? 0 });
   const chargeLines = useMemo(() => CHARGES.flatMap(([key, , description]): InvoiceDraftLine[] => {
@@ -308,12 +359,17 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
   }), [charges]);
   // A negative adjustment cannot be a line (prices must be >= 0), so it is applied as extra discount.
   const adjustmentDiscount = Math.max(0, -(Number(charges.adjustment) || 0));
-  const totals = useMemo(() => calculateInvoice([...lines, ...chargeLines], discount + adjustmentDiscount, gstRegistered, totalOptions), [lines, chargeLines, discount, adjustmentDiscount, gstRegistered, totalOptions]);
-  const itemTotals = useMemo(() => calculateInvoice(lines, 0, gstRegistered, { noTax: totalOptions.noTax }), [lines, gstRegistered, totalOptions.noTax]);
+  const totals = useMemo(() => calculateInvoice([...lines, ...chargeLines], discount + adjustmentDiscount, true, totalOptions), [lines, chargeLines, discount, adjustmentDiscount, totalOptions]);
+  const itemTotals = useMemo(() => calculateInvoice(lines, 0, true, { noTax: totalOptions.noTax }), [lines, totalOptions.noTax]);
   const discountBase = totals.subtotal + totals.tax;
-  const showTax = gstRegistered && !totalOptions.noTax;
+  // Every company can charge tax (GST-registered or not); only the composition scheme turns it off.
+  const showTax = !totalOptions.noTax;
   // The sale screen always shows every tracking column, matching the reference layout.
   const trackingColumns: Preferences<'item'> = useMemo(() => ({ ...(documentPreferences?.item ?? global_itemPrefs), showSerial: true, showCount: true, showBatch: true, showBarcode: true, showMrp: true, showBrand: true }), [documentPreferences?.item, global_itemPrefs]);
+  // Columns keep readable fixed widths and Item takes any spare room; below this width the table scrolls
+  // sideways with # and Item pinned on the left and Amount on the right (see .invoiceTable).
+  const trackingCount = (['showSerial', 'showCount', 'showBatch', 'showBarcode', 'showMrp', 'showBrand'] as const).filter((key) => trackingColumns[key]).length;
+  const tableMinWidth = 52 + 220 + trackingCount * 96 + 84 + 96 + 112 + (showTax ? 84 : 0) + 128 + 40;
   const countTotal = lines.reduce((sum, line) => sum + (Number(line.count) || 0), 0);
   const activeRates = [...new Set(lines.filter((_, index) => totals.lines[index]?.active).map(({ taxRate }) => taxRate))];
   const termOptions = termDays !== null && !PAYMENT_TERMS.includes(termDays) ? [...PAYMENT_TERMS, termDays].sort((a, b) => a - b) : PAYMENT_TERMS;
@@ -363,7 +419,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
           <td>${escapeMarkup(line.quantity)}</td>
           <td>${escapeMarkup(line.unitPrice)}</td>
           <td>${escapeMarkup(line.taxRate)}%</td>
-          <td>${escapeMarkup(calculateInvoice([line], 0, gstRegistered, { noTax: totalOptions.noTax }).total)}</td>
+          <td>${escapeMarkup(calculateInvoice([line], 0, true, { noTax: totalOptions.noTax }).total)}</td>
         </tr>`).join('');
     return `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#172033}h1{font-size:22px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccd3dc;padding:8px;text-align:left}th{background:#eef3f8}.total{text-align:right;font-size:18px;font-weight:700;margin-top:16px}</style></head><body><h1>Sale Invoice</h1><p><strong>Invoice:</strong> ${escapeMarkup(invoice.invoiceNumber)}</p><p><strong>Customer:</strong> ${escapeMarkup(selectedParty?.name || '')}</p><p><strong>Date:</strong> ${escapeMarkup(invoiceDate)}</p><table><thead><tr><th>#</th><th>Item details</th><th>Qty</th><th>Price / unit</th><th>Tax</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table><p class="total">Total: ${escapeMarkup(invoice.grandTotal)}</p></body></html>`;
   }
@@ -442,7 +498,8 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
         phone:customerPhone,
         ...transactionDetailsPayload(transactionInfo),
         placeOfSupply: placeOfSupply || undefined,
-        roundOff: roundOffChoice ?? undefined,
+        // Always send the choice shown on screen so the saved total matches the form exactly.
+        roundOff,
         requestId:saveRequestId.current,
         status: asDraft?'DRAFT':'UNPAID',
         warehouseId: warehouseId || undefined,
@@ -477,8 +534,9 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
       }
 
       if (action !== 'SAVE') await runInvoiceShare(action, data, enteredLines);
-      toast.success(action === 'SAVE' ? 'Invoice saved' : 'Invoice saved and shared', { description: `${data.invoiceNumber} Â· ${formatCurrency(data.grandTotal)}` });
-      router.push(`/invoices/${data.id}?companyId=${encodeURIComponent(businessId)}${action === 'SAVE' && messagePrefs.autoShareOnSave ? '&share=whatsapp' : ''}`);
+      toast.success(action === 'SAVE' ? 'Invoice saved' : 'Invoice saved and shared', { description: `${data.invoiceNumber} · ${formatCurrency(data.grandTotal)}` });
+      // Replace the editor in history: Back from the saved invoice returns to where the editor was opened from.
+      router.replace(`/invoices/${data.id}?companyId=${encodeURIComponent(businessId)}${action === 'SAVE' && messagePrefs.autoShareOnSave ? '&share=whatsapp' : ''}`);
     } catch (saveFailure) {
       const message = createdId
           ? 'Invoice saved, but an attachment, payment, or sharing step could not be completed. Open the saved invoice to review it.'
@@ -493,7 +551,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
 
   return (
     <div className={styles.editor}>
-      <EditorTabBar label={`${editingId ? 'Edit Sale' : 'Sale'} #${manualNumberMode ? manualNumber || 'â€”' : invoiceNumber}`} newHref="/invoices/new" onClose={onClose} closeDisabled={Boolean(saving)} />
+      <EditorTabBar label={`${editingId ? 'Edit Sale' : 'Sale'} #${manualNumberMode ? manualNumber || '—' : invoiceNumber}`} newHref="/invoices/new" onClose={onClose} closeDisabled={Boolean(saving)} />
 
       <header className={styles.header}>
         <div className={styles.headerStart}>
@@ -522,9 +580,8 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
             value={businessId}
             disabled={Boolean(saving) || Boolean(savedId) || Boolean(editingId)}
             onChange={(nextId) => {
-              setDocumentPreferences(null); setLoading(true); setPartyId(''); setWarehouseId('');
+              setDocumentPreferences(null); setLoading(true); setPartyId(''); setWarehouseId(''); setInvoiceNumber('Assigned on save'); setManualNumber('');
               setBusinessId(nextId);
-              setGstRegistered(Boolean(businesses.find(({ id }) => id === nextId)?.gstRegistered));
             }}
           />
         </div>
@@ -556,7 +613,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                   <span>Customer <b>*</b></span>
                   <select value={partyId} onChange={(event) => selectParty(event.target.value)}>
                     <option value="">{loading ? 'Loading customersâ€¦' : ''}</option>
-                    {parties.map((party) => <option key={party.id} value={party.id}>{party.name}{party.phone ? ` Â· ${party.phone}` : ''}</option>)}
+                    {parties.map((party) => <option key={party.id} value={party.id}>{party.name}{party.group ? ` · ${party.group}` : ""}{party.phone ? ` · ${party.phone}` : ''}</option>)}
                   </select>
                   <ChevronDown size={18} aria-hidden="true" />
                 </label>
@@ -647,17 +704,18 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
 
           <section className={styles.itemsSection}>
             <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Invoice items; scroll horizontally to view all columns">
-              <table className={styles.table}>
+              <table className={`${styles.table} ${styles.invoiceTable}`} style={{ minWidth: tableMinWidth }}>
                 <caption className="sr-only">Invoice items, quantities, prices, taxes and amounts</caption>
                 <thead>
                   <tr>
                     <th scope="col" className={styles.numberCol}>#</th>
                     <th scope="col" className={styles.itemCol}>Item</th>
                     <TrackingHeaders preferences={trackingColumns} />
-                    <th scope="col">Qty</th>
-                    <th scope="col">Unit</th>
-                    <th scope="col" className={styles.right}>Price/Unit</th>
-                    <th scope="col" className={styles.right}>Amount</th>
+                    <th scope="col" className={`${styles.qtyCol} ${styles.right}`}>Qty</th>
+                    <th scope="col" className={styles.unitCol}>Unit</th>
+                    <th scope="col" className={`${styles.priceCol} ${styles.right}`}>Price/Unit</th>
+                    {showTax && <th scope="col" className={`${styles.taxCol} ${styles.right}`}>Tax%</th>}
+                    <th scope="col" className={`${styles.amountCol} ${styles.right}`}>Amount</th>
                     <th scope="col" className={styles.addCol}>
                       <button type="button" aria-label="Add row" disabled={lines.length >= 200} onClick={() => setLines((current) => [...current, newLine()])}><PlusCircle size={18} /></button>
                     </th>
@@ -676,7 +734,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                           <Trash2 size={15} />
                         </button>
                       </td>
-                      <td>
+                      <td className={styles.itemCell}>
                         <input
                           aria-label={`Item ${index + 1}`}
                           list="invoice-catalog"
@@ -717,6 +775,16 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                           onChange={(event) => updateLine(line.key, { unitPrice: parseFloat(event.target.value) || 0 })}
                         />
                       </td>
+                      {showTax && (
+                        <td>
+                          <TaxPercentInput
+                            ariaLabel={`Tax rate ${index + 1}`}
+                            className={`${styles.cellInput} ${styles.right}`}
+                            value={line.taxRate ?? 0}
+                            onChange={(taxRate) => updateLine(line.key, { taxRate })}
+                          />
+                        </td>
+                      )}
                       <td className={styles.amount}>{totals.lines[index]?.active ? formatCurrency(totals.lines[index].total) : ''}</td>
                       <td aria-hidden="true" />
                     </tr>
@@ -724,18 +792,19 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td />
-                    <td>
+                    <td className={styles.totalCell}>Total</td>
+                    <td className={styles.itemCell}>
                       <div className={styles.totalLabel}>
                         <button type="button" className={styles.addRow} disabled={lines.length >= 200} onClick={() => setLines((current) => [...current, newLine()])}>ADD ROW</button>
-                        <span>TOTAL</span>
+                        <button type="button" className={styles.addRow} disabled={addingItem} onClick={() => void quickAddItem()}>{addingItem ? '...' : 'NEW ITEM'}</button>
                       </div>
                     </td>
                     <TrackingBlanks preferences={trackingColumns} values={{ count: countTotal }} />
                     <td className={styles.right}>{itemTotals.quantity}</td>
                     <td />
                     <td />
-                    <td className={styles.right}>{formatCurrency(itemTotals.total)}</td>
+                    {showTax && <td />}
+                    <td className={styles.amount}>{formatCurrency(itemTotals.total)}</td>
                     <td />
                   </tr>
                 </tfoot>
@@ -820,27 +889,23 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
                         setDiscountPercent(amount && discountBase ? String(Math.round((amount / discountBase) * 10000) / 100) : '');
                       }}
                     />
-                    <small>(â‚¹)</small>
+                    <small>(₹)</small>
                   </label>
                 </div>
               </div>
               <div className={styles.totalsRow}>
                 <span>Tax</span>
-                <select
-                  aria-label="Tax for all items"
+                <TaxPercentInput
+                  ariaLabel="Tax for all items"
                   disabled={!showTax}
-                  value={!showTax ? '' : activeRates.length === 1 ? String(activeRates[0]) : activeRates.length === 0 && taxChoice !== null ? String(taxChoice) : ''}
-                  onChange={(event) => { const rate = Number(event.target.value); setTaxChoice(rate); setLines((current) => current.map((line) => ({ ...line, taxRate: rate }))); }}
-                >
-                  {(!showTax || activeRates.length !== 1) && <option value="">{!showTax ? 'None' : activeRates.length > 1 ? 'Mixed' : 'Select'}</option>}
-                  {GST_RATES.map((rate) => <option key={rate} value={rate}>{rate === 0 ? 'None' : `GST@${rate}%`}</option>)}
-                </select>
+                  placeholder={showTax && activeRates.length > 1 ? 'Mixed' : '0'}
+                  value={!showTax ? null : activeRates.length === 1 ? activeRates[0] : activeRates.length === 0 ? taxChoice : null}
+                  onChange={(rate) => { setTaxChoice(rate); setLines((current) => current.map((line) => ({ ...line, taxRate: rate }))); }}
+                />
                 <output>{formatCurrency(totals.tax)}</output>
               </div>
               {!showTax && !loading && (
-                <p className={styles.taxHint}>
-                  {totalOptions.noTax ? 'Composition scheme is on, so sales carry no tax.' : 'This company is not GST-registered. Turn on GST registration in company settings to charge tax.'}
-                </p>
+                <p className={styles.taxHint}>Composition scheme is on, so sales carry no tax.</p>
               )}
               {CHARGES.map(([key, label]) => (
                 <div key={key} className={styles.totalsRow}>
@@ -908,7 +973,7 @@ export default function InvoiceForm({ onClose, onBusyChange }: { onClose: () => 
         <button type="button" disabled={disabled || Boolean(editingId && !sourceDraft)} onClick={() => void submit('SAVE', true)} className={styles.secondaryButton}>Save Draft</button>
         <button type="button" disabled={disabled} onClick={() => void submit('SAVE')} className={styles.saveButton}>
           {saving === 'SAVE' && <Loader2 size={17} className="animate-spin" />}
-          <span>{saving === 'SAVE' ? 'Savingâ€¦' : 'Save'}</span>
+          <span>{saving === 'SAVE' ? 'Saving…' : 'Save'}</span>
         </button>
       </footer>
     </div>

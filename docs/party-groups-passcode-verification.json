@@ -1,0 +1,87 @@
+﻿{
+    "date":  "2026-11-21",
+    "changes":  [
+                    "Removed both requested dashboard text lines",
+                    "Reusable Party Groups with create, rename, delete, and bulk party membership",
+                    "Party form selection and inline group creation",
+                    "Party group list filtering, details, transaction selectors, and reports",
+                    "Account passcode settings and global backend write enforcement",
+                    "Parties dashboard with separate Party Details and Party Groups routes, summary metrics, group counts, and outstanding balances"
+                ],
+    "locations":  {
+                      "groupManagement":  "/parties/groups",
+                      "partyForms":  "/parties/details (Add Party or Edit Party \u003e Party Group)",
+                      "partyDefaults":  "/settings/party",
+                      "partyGroupReport":  "/reports?report=party-groups",
+                      "passcodeSettings":  "/settings/passcode",
+                      "groupCreation":  "/parties or /parties/details \u003e Add Party Group (first yellow header button)",
+                      "partyCreation":  "/parties or /parties/details \u003e Add Party (second yellow header button)",
+                      "partiesDashboard":  "/parties",
+                      "partyDetails":  "/parties/details"
+                  },
+    "passcode":  {
+                     "scope":  "Signed-in account across companies",
+                     "format":  "6-12 digits",
+                     "enforcement":  "Every authenticated POST/PUT/PATCH/DELETE after enabling protection, except session login/refresh/logout/recovery and MFA",
+                     "storage":  "bcrypt hash on server",
+                     "lockout":  "5 incorrect attempts lock action passcodes for 5 minutes",
+                     "enabledByDefault":  false
+                 },
+    "validation":  {
+                       "frontendTests":  30,
+                       "backendTests":  218,
+                       "frontendProductionBuild":  "passed",
+                       "frontendLintAndTypecheck":  "passed",
+                       "backendCompilation":  "passed",
+                       "prismaSchemaValidation":  "passed",
+                       "browser":  {
+                                       "passed":  true,
+                                       "checks":  [
+                                                      "Removed dashboard copy",
+                                                      "Parties dashboard loads real party and group summaries with separate workspaces",
+                                                      "Party Details opens separately and highlights its sidebar item",
+                                                      "Party Groups opens separately and highlights only its own sidebar item",
+                                                      "Parties parent menu returns to the dashboard from a child page",
+                                                      "Create group requires correct passcode after wrong-passcode retry",
+                                                      "Cancelling passcode keeps the form and saves nothing",
+                                                      "Add multiple parties to a group",
+                                                      "Legacy party group links redirect to Party Details",
+                                                      "Party group filtering clears an out-of-filter detail",
+                                                      "Parties primary button creates a Party Group and the separate group header button is removed",
+                                                      "Party form provides managed group selector and inline creation",
+                                                      "Party group summary report renders",
+                                                      "Changing passcode requires the existing passcode",
+                                                      "Disabling protection requires the current passcode",
+                                                      "A group request failure keeps party data and both workspaces available",
+                                                      "Empty Parties dashboard provides useful creation actions",
+                                                      "Create-party links open the form on the separate Party Details page",
+                                                      "Mobile layout /parties",
+                                                      "Mobile layout /parties/details",
+                                                      "Mobile layout /parties/groups",
+                                                      "Mobile layout /settings/passcode"
+                                                  ],
+                                       "successfulSyntheticWrites":  5,
+                                       "errors":  [
+
+                                                  ]
+                                   }
+                   },
+    "backend":  {
+                    "repository":  "../../Imarrt Bill Server/Imarrt-BillServer",
+                    "migration":  "20261121120000_party_groups_action_passcode",
+                    "databaseMigrationApplied":  true,
+                    "activation":  [
+                                       "Migration 20261121120000_party_groups_action_passcode applied successfully to the configured database",
+                                       "Read-only database checks passed for parties, invoices with parties, purchase bills with parties/suppliers, party groups, and action security"
+                                   ],
+                    "migrationBehavior":  "Creates reusable groups from legacy group names and preserves their party assignments",
+                    "databaseIntegrationTestsRun":  true,
+                    "databaseReadChecks":  [
+                                               "parties",
+                                               "invoicesWithParties",
+                                               "purchasesWithParties",
+                                               "partyGroups",
+                                               "actionSecurity"
+                                           ]
+                }
+}

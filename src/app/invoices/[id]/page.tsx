@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock3, Download, FileImage, FileText, IndianRupee, Loader2, Mail, MessageCircle, Paperclip, ReceiptText, Send, Share2, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, Download, FileImage, FileText, IndianRupee, Loader2, Mail, MessageCircle, Paperclip, ReceiptText, Send, Share2, Trash2, XCircle } from 'lucide-react';
 import DocumentConversionDialog from '@/components/documents/DocumentConversionDialog';
 import { conversionReversal } from '@/lib/document-conversion';
 import DocumentActions from '@/components/documents/DocumentActions';
@@ -16,9 +16,11 @@ import { toast } from '@/components/ToastProvider';
 import { invoiceOutstanding } from '@/lib/outstanding';
 import { api, getApiError, getCurrentUser } from '@/lib/api';
 import { formatCurrency, formatDate, formatQuantity, formatTransactionDate } from '@/lib/format';
+import { roundOffAmount } from '@/components/invoices/invoiceTotals';
 import { getPreferences, normalizePreferences } from '@/lib/preferences';
 import { renderMessage, whatsappLink } from '@/lib/messageTemplates';
 import type { Invoice, InvoiceDelivery, InvoiceDeliveryChannel } from '@/types';
+import BackButton from '@/components/BackButton';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -236,9 +238,7 @@ export default function InvoiceDetailPage() {
       )}
 
       <div className="mb-5 flex flex-wrap gap-2">
-        <Link href="/invoices" className="btn-secondary inline-flex items-center gap-2">
-          <ArrowLeft aria-hidden="true" size={15} /> Back
-        </Link>
+        <BackButton fallback="/invoices" />
         <button type="button" onClick={() => setShowPayment(true)} className="btn-secondary inline-flex items-center gap-2">
           <IndianRupee aria-hidden="true" size={15} /> Record payment
         </button>
@@ -322,6 +322,7 @@ export default function InvoiceDetailPage() {
             <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span>{formatCurrency(invoice.subTotal)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Tax</span><span>{formatCurrency(invoice.taxTotal)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Discount</span><span>-{formatCurrency(invoice.discount)}</span></div>
+            {roundOffAmount(invoice) !== 0 && <div className="flex justify-between"><span className="text-slate-500">Round off</span><span>{roundOffAmount(invoice) < 0 ? '-' : ''}{formatCurrency(Math.abs(roundOffAmount(invoice)))}</span></div>}
             <div className="flex justify-between border-t border-slate-100 pt-3 text-base font-bold"><span>Total</span><span>{formatCurrency(invoice.grandTotal)}</span></div>
             <div className="flex justify-between text-emerald-600"><span>Paid</span><span>{formatCurrency(invoice.amountPaid)}</span></div>
             <div className={`flex justify-between rounded-lg px-3 py-2 font-bold ${balanceDue > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}><span>Balance due</span><span>{formatCurrency(balanceDue)}</span></div>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Pencil, Printer } from 'lucide-react';
+import { Pencil, Printer } from 'lucide-react';
 import { ErrorState, LoadingState } from '@/components/ContentState';
 import RowActions from '@/components/RowActions';
 import StatusBadge from '@/components/StatusBadge';
@@ -11,7 +11,9 @@ import { toast } from '@/components/ToastProvider';
 import { OPEN_ORDER, printPurchaseOrder, usePurchaseOrderActions } from '@/components/purchases/purchaseOrderActions';
 import { api, getApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { roundOffAmount } from '@/components/invoices/invoiceTotals';
 import type { PurchaseOrder } from '@/types';
+import BackButton from '@/components/BackButton';
 
 export default function PurchaseOrderPage() {
   const { id } = useParams<{ id: string }>();
@@ -40,7 +42,7 @@ export default function PurchaseOrderPage() {
     <>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link href="/purchases/orders" className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-blue-700"><ArrowLeft size={14} /> Purchase orders</Link>
+          <BackButton fallback="/purchases/orders" className="mb-2" />
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-extrabold text-slate-950">{order.orderNumber}</h1>
             <StatusBadge status={order.status} />
@@ -86,6 +88,7 @@ export default function PurchaseOrderPage() {
             <div className="flex justify-between"><dt className="text-slate-500">Subtotal</dt><dd>{formatCurrency(order.subTotal)}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-500">Tax</dt><dd>{formatCurrency(order.taxTotal)}</dd></div>
             {Number(order.discount) > 0 && <div className="flex justify-between"><dt className="text-slate-500">Discount</dt><dd>- {formatCurrency(order.discount)}</dd></div>}
+            {roundOffAmount(order) !== 0 && <div className="flex justify-between"><dt className="text-slate-500">Round off</dt><dd>{roundOffAmount(order) < 0 ? '- ' : ''}{formatCurrency(Math.abs(roundOffAmount(order)))}</dd></div>}
             <div className="flex justify-between border-t border-slate-100 pt-2 text-base font-extrabold"><dt>Total</dt><dd>{formatCurrency(order.grandTotal)}</dd></div>
           </dl>
         </section>

@@ -3,6 +3,8 @@ import AppFrame from '@/components/AppFrame';
 import './globals.css';
 import './reference.css';
 import './brand-theme.css';
+// Loaded last: shows every text colour as black (white only on dark or filled backgrounds).
+import './text-black.css';
 
 export const metadata: Metadata = {
   title: 'iMarrt Billing — Billing & Invoicing',

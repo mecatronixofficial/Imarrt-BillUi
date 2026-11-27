@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useBackNavigation } from '@/lib/navigation';
 import DocumentForm from './DocumentForm';
 import { useEmbeddedForm } from '@/components/EmbeddedFormContext';
 import type { BusinessDocumentType } from '@/types';
@@ -20,7 +20,6 @@ export default function DocumentModal({
   allowTypeSwitch = false,
   onTypeChange,
 }: DocumentModalProps) {
-  const router = useRouter();
   const busyRef = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -28,13 +27,14 @@ export default function DocumentModal({
   const { embedded } = useEmbeddedForm();
   const config = DOCUMENT_CONFIG[type];
 
+  // Closing goes back to wherever the editor was opened from (fallback: this document type's list),
+  // asking first when the form has unsaved changes. An embedding page's own close is guarded the same way.
+  const { goBack, confirmLeave } = useBackNavigation(config.registerPath);
   const handleClose = useCallback(() => {
-    if (onCloseRef.current) {
-      onCloseRef.current();
-    } else {
-      router.push('/documents');
-    }
-  }, [router]);
+    const parentClose = onCloseRef.current;
+    if (parentClose) void confirmLeave().then((leave) => { if (leave) parentClose(); });
+    else void goBack();
+  }, [confirmLeave, goBack]);
 
   useEffect(() => {
     if (embedded) return;

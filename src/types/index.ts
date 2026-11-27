@@ -43,12 +43,20 @@ export interface User {
   createdAt: string;
 }
 
+export interface PartyGroup {
+  id: string;
+  name: string;
+  code?: string | null;
+  partyCount?: number;
+}
+
 export interface Party {
   id: string;
   code?: string;
   name: string;
   billingName?: string;
   group?: string;
+  groupId?: string | null;
   email?: string;
   phone?: string;
   whatsappNumber?: string;
@@ -157,6 +165,8 @@ export interface Invoice {
   taxTotal: string;
   discount: string;
   grandTotal: string;
+  /** Whether the grand total was rounded off (older records may not have it). */
+  roundOff?: boolean;
   amountPaid: string;
   items: InvoiceLineItem[];
   business?: Business;
@@ -270,6 +280,8 @@ export interface BusinessDocument {
   taxTotal: string;
   discount: string;
   grandTotal: string;
+  /** Whether the grand total was rounded off (older records may not have it). */
+  roundOff?: boolean;
   paidAmount?: string;
     stockAdjusted?: boolean;
   createdAt: string;
@@ -420,6 +432,15 @@ export interface ProductionSummary {
   progressPercent: number;
 }
 
+/** One print or embroidery artwork on a production order master (stored inside `instructions`). */
+export interface PrintEmbroideryEntry {
+  method: string;
+  placement: string;
+  size?: string;
+  colors?: string;
+  detail?: string;
+}
+
 export interface ProductionOrder {
   id: string;
   branchId?: string;
@@ -433,7 +454,7 @@ export interface ProductionOrder {
   color?: string;
   sizeBreakdown?: Record<string, number>;
   sizeColorBreakdown?: Record<string, Record<string, number>>;
-  instructions?: { product?: Array<{ item: string; detail: string }>; accessories?: Array<{ item: string; detail: string }>; packing?: Array<{ item: string; detail: string }> };
+  instructions?: { product?: Array<{ item: string; detail: string }>; accessories?: Array<{ item: string; detail: string }>; packing?: Array<{ item: string; detail: string }>; printEmbroidery?: PrintEmbroideryEntry[] };
   orderedQty: number;
   saleRate: string;
   supplierRate?: string;
